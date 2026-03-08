@@ -35,6 +35,28 @@ const (
 	ProtocolVersion2 ProtocolVersion = "2.0"
 )
 
+// 调度者类型
+type DispatcherType string
+
+const (
+	DispatcherTypeHuman DispatcherType = "human"
+	DispatcherTypeAI    DispatcherType = "ai_agent"
+)
+
+// 地面站位置信息
+type GroundStationInfo struct {
+	Name     string          `json:"name"`
+	ID       string          `json:"id"`
+	Position Drones.Position `json:"position"`
+}
+
+// 调度者信息
+type DispatcherInfo struct {
+	Type     DispatcherType `json:"type"`
+	Username string         `json:"username"`
+	Email    string         `json:"email,omitempty"`
+}
+
 // Mavlink协议处理handler
 type MAVLinkHandler struct {
 	handlerID string
@@ -47,11 +69,15 @@ type MAVLinkHandler struct {
 	stopped  bool
 	stopChan chan bool
 
-	messageChan   chan *IncomingMessage
-	heartbeatChan chan *HeartbeatData
-	GPSChan       chan *GPSData
-	attitudeChan  chan *AttitudeData
-	batteryChan   chan *BatteryData
+	groundStation *GroundStationInfo
+	dispatcher    *DispatcherInfo
+
+	messageChan      chan *IncomingMessage
+	heartbeatChan    chan *HeartbeatData
+	GPSChan          chan *GPSData
+	attitudeChan     chan *AttitudeData
+	batteryChan      chan *BatteryData
+	timestampHistory []time.Time
 }
 
 // MAVLink 配置
@@ -738,4 +764,71 @@ func (h *MAVLinkHandler) SendHeartbeat() error {
 		CustomMode:   0,
 	}
 	return h.SendMessage(msg)
+}
+
+func (h *MAVLinkHandler) SetGroundStation(info *GroundStationInfo) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.groundStation = info
+}
+
+func (h *MAVLinkHandler) GetGroundStation() *GroundStationInfo {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.groundStation
+}
+
+func (h *MAVLinkHandler) SetDispatcher(info *DispatcherInfo) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.dispatcher = info
+}
+
+func (h *MAVLinkHandler) GetDispatcher() *DispatcherInfo {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.dispatcher
+}
+
+func (h *MAVLinkHandler) SetDispatcherByUser(username, email string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.dispatcher = &DispatcherInfo{
+		Type:     DispatcherTypeHuman,
+		Username: username,
+		Email:    email,
+	}
+}
+
+func (h *MAVLinkHandler) SetDispatcherByAI() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.dispatcher = &DispatcherInfo{
+		Type:     DispatcherTypeAI,
+		Username: "AI-Agent",
+		Email:    "",
+	}
+}
+
+func (h *MAVLinkHandler) RecordTimestamp() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.timestampHistory = append(h.timestampHistory, time.Now())
+	if len(h.timestampHistory) > 1000 {
+		h.timestampHistory = h.timestampHistory[len(h.timestampHistory)-1000:]
+	}
+}
+
+func (h *MAVLinkHandler) GetTimestampHistory() []time.Time {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	result := make([]time.Time, len(h.timestampHistory))
+	copy(result, h.timestampHistory)
+	return result
+}
+
+func (h *MAVLinkHandler) ClearTimestampHistory() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.timestampHistory = nil
 }
