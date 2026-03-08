@@ -51,6 +51,7 @@ func NewLandNode(id, name string, config LandNodeConfig) *LandNode {
 	}
 }
 
+// 无人机 容器操作-内部方法
 func (ln *LandNode) GetID() string {
 	ln.mu.RLock()
 	defer ln.mu.RUnlock()
@@ -81,6 +82,7 @@ func (ln *LandNode) SetConfig(config LandNodeConfig) {
 	ln.Config = config
 }
 
+// 无人机 外部方法
 func (ln *LandNode) AddDrone(drone *Drones.Drone) error {
 	ln.mu.Lock()
 	defer ln.mu.Unlock()

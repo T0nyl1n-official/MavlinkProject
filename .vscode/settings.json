@@ -1,7 +1,11 @@
 {
     "cSpell.words": [
         "edrypqkdchkncffi",
+        "gomavlib",
         "gorm",
-        "Mavlink"
+        "Mavlink",
+        "Pitchspeed",
+        "Rollspeed",
+        "Yawspeed"
     ]
 }
