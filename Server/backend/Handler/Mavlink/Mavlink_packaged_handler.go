@@ -1,6 +1,7 @@
 package Mavlink
 
 import (
+	Drones "MavlinkProject/Server/backend/Shared/Drones"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -10,15 +11,27 @@ import (
 )
 
 type PackageHandler struct {
-	handler      *MAVLinkHandler
+	handler      *MAVLinkHandlerV1
 	chainManager *ChainManager
+	drone        *Drones.Drone
 	mu           sync.RWMutex
 }
 
-func NewPackageHandler(handler *MAVLinkHandler) *PackageHandler {
+func NewPackageHandler(handler *MAVLinkHandlerV1) *PackageHandler {
+	// 创建默认的无人机配置
+	droneConfig := Drones.DroneConfig{
+		SystemID:        1,
+		ComponentID:     1,
+		ProtocolVersion: "2.0",
+		HeartbeatRate:   1 * time.Second,
+		Timeout:         30 * time.Second,
+	}
+
 	return &PackageHandler{
 		handler:      handler,
 		chainManager: GetChainManager(),
+		drone:        Drones.NewDrone("default", "Default Drone", "Generic", droneConfig),
+		mu:           sync.RWMutex{},
 	}
 }
 
@@ -95,20 +108,19 @@ func (p *PackageHandler) Takeoff(req TakeoffRequest) TakeoffResponse {
 
 	// 发送起飞命令
 	msg := &common.MessageCommandLong{
-		Command:   common.MAV_CMD_NAV_TAKEOFF,
-		Param1:    0,
-		Param2:    0,
-		Param3:    0,
-		Param4:    0,
-		Param5:    0,
-		Param6:    0,
-		Param7:    req.Altitude,
-		Target:    1,
+		Command:      common.MAV_CMD_NAV_TAKEOFF,
+		Param1:       0,
+		Param2:       0,
+		Param3:       0,
+		Param4:       0,
+		Param5:       0,
+		Param6:       0,
+		Param7:       req.Altitude,
 		Confirmation: 0,
 	}
 
 	err := p.handler.SendMessage(msg)
-	
+
 	// 记录调度
 	params, _ := json.Marshal(req)
 	var result string
@@ -117,7 +129,7 @@ func (p *PackageHandler) Takeoff(req TakeoffRequest) TakeoffResponse {
 	} else {
 		result = "起飞命令已发送"
 	}
-	
+
 	p.chainManager.AddRecordToCurrentChain(
 		handlerID,
 		"/mavlink/v2/api/takeoff",
@@ -162,20 +174,19 @@ func (p *PackageHandler) Land(req LandRequest) LandResponse {
 
 	// 发送降落命令
 	msg := &common.MessageCommandLong{
-		Command:   common.MAV_CMD_NAV_LAND,
-		Param1:    0,
-		Param2:    0,
-		Param3:    0,
-		Param4:    0,
-		Param5:    float32(req.Latitude),
-		Param6:    float32(req.Longitude),
-		Param7:    float32(req.Altitude),
-		Target:    1,
+		Command:      common.MAV_CMD_NAV_LAND,
+		Param1:       0,
+		Param2:       0,
+		Param3:       0,
+		Param4:       0,
+		Param5:       float32(req.Latitude),
+		Param6:       float32(req.Longitude),
+		Param7:       float32(req.Altitude),
 		Confirmation: 0,
 	}
 
 	err := p.handler.SendMessage(msg)
-	
+
 	// 记录调度
 	params, _ := json.Marshal(req)
 	var result string
@@ -184,7 +195,7 @@ func (p *PackageHandler) Land(req LandRequest) LandResponse {
 	} else {
 		result = "降落命令已发送"
 	}
-	
+
 	p.chainManager.AddRecordToCurrentChain(
 		handlerID,
 		"/mavlink/v2/api/land",
@@ -229,24 +240,24 @@ func (p *PackageHandler) Move(req MoveRequest) MoveResponse {
 
 	// 发送移动命令
 	msg := &common.MessageSetPositionTargetGlobalInt{
-		TimeBootMs:     uint32(time.Now().UnixMilli()),
+		TimeBootMs:      uint32(time.Now().UnixMilli()),
 		CoordinateFrame: common.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-		TypeMask:       0b0000111111111000, // 忽略速度，使用位置控制
-		LatInt:         int32(req.Latitude * 1e7),
-		LonInt:         int32(req.Longitude * 1e7),
-		Alt:            float32(req.Altitude),
-		Vx:             0,
-		Vy:             0,
-		Vz:             0,
-		Afx:            0,
-		Afy:            0,
-		Afz:            0,
-		Yaw:            0,
-		YawRate:        0,
+		TypeMask:        0b0000111111111000, // 忽略速度，使用位置控制
+		LatInt:          int32(req.Latitude * 1e7),
+		LonInt:          int32(req.Longitude * 1e7),
+		Alt:             float32(req.Altitude),
+		Vx:              0,
+		Vy:              0,
+		Vz:              0,
+		Afx:             0,
+		Afy:             0,
+		Afz:             0,
+		Yaw:             0,
+		YawRate:         0,
 	}
 
 	err := p.handler.SendMessage(msg)
-	
+
 	// 记录调度
 	params, _ := json.Marshal(req)
 	var result string
@@ -255,7 +266,7 @@ func (p *PackageHandler) Move(req MoveRequest) MoveResponse {
 	} else {
 		result = "移动命令已发送"
 	}
-	
+
 	p.chainManager.AddRecordToCurrentChain(
 		handlerID,
 		"/mavlink/v2/api/move",
@@ -278,15 +289,14 @@ func (p *PackageHandler) GetStatus() StatusResponse {
 
 	handlerID := p.handler.GetHandlerID()
 	chain := p.chainManager.GetCurrentChain()
-	
+
 	status := map[string]interface{}{
-		"connected":       p.handler.IsConnected(),
-		"drone_status":    p.handler.GetDroneStatus(),
-		"position":        p.handler.GetDronePosition(),
-		"attitude":        p.handler.GetDroneAttitude(),
-		"battery":         p.handler.GetDroneBattery(),
-		"ground_station":  p.handler.GetGroundStation(),
-		"dispatcher":      p.handler.GetDispatcher(),
+		"connected":      p.handler.GetConnectionStatus() == "connected",
+		"drone_status":   p.handler.GetDroneStatus(),
+		"position":       p.handler.GetDronePosition(),
+		"attitude":       p.handler.GetDroneAttitude(),
+		"battery":        p.handler.GetDroneBattery(),
+		"ground_station": p.handler.GetGroundStation(),
 	}
 
 	var chainID string
@@ -306,36 +316,41 @@ func (p *PackageHandler) GetStatus() StatusResponse {
 func (p *PackageHandler) SetGroundStation(name, id string, lat, lon, alt float64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	position := Drones.Position{
 		Latitude:  lat,
 		Longitude: lon,
 		Altitude:  alt,
 	}
-	
-	info := &GroundStationInfo{
-		Name:     name,
-		ID:       id,
-		Position: position,
-	}
-	
-	p.handler.SetGroundStation(info)
+
+	p.handler.SetGroundStation(name, id, lat, lon, alt)
 }
 
 func (p *PackageHandler) SetAIAsDispatcher() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.handler.SetDispatcherByAI()
+	// v1 handler 不包含调度器功能，跳过
 }
 
 func (p *PackageHandler) SetUserAsDispatcher(username, email string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.handler.SetDispatcherByUser(username, email)
+	// v1 handler 不包含调度器功能，跳过
 }
 
 func (p *PackageHandler) GetHandler() *MAVLinkHandler {
 	return p.handler
+}
+
+func (p *PackageHandler) GetGroundStationInfo() GroundStationInfoV1 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.handler != nil {
+		return p.handler.GetGroundStationInfo()
+	}
+
+	return GroundStationInfoV1{}
 }
 
 func (p *PackageHandler) GetChainManager() *ChainManager {

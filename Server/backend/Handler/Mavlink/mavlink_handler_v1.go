@@ -39,20 +39,29 @@ type MAVLinkHandlerV1 struct {
 // ==================== 构造函数 ====================
 
 func NewMAVLinkHandlerV1(config MAVLinkConfigV1) *MAVLinkHandlerV1 {
+	// 创建默认的无人机配置
+	droneConfig := Drones.DroneConfig{
+		SystemID:        config.SystemID,
+		ComponentID:     config.ComponentID,
+		ProtocolVersion: string(config.ProtocolVersion),
+		HeartbeatRate:   config.HeartbeatRate,
+		Timeout:         30 * time.Second,
+	}
+
 	return &MAVLinkHandlerV1{
-		handlerID:     generateHandlerID(5),
+		handlerID:     generateHandlerIDV1(5),
 		config:        config,
-		drone:         Drones.NewDrone("default", "Default Drone"),
+		drone:         Drones.NewDrone("default", "Default Drone", "Generic", droneConfig),
 		stopChan:      make(chan bool),
 		messageChan:   make(chan *IncomingMessageV1, 100),
 		heartbeatChan: make(chan *HeartbeatDataV1, 100),
 		GPSChan:       make(chan *GPSDataV1, 100),
-		titudeChan:    make(chan *AttitudeDataV1, 100),
+		attitudeChan:  make(chan *AttitudeDataV1, 100),
 		batteryChan:   make(chan *BatteryDataV1, 100),
 	}
 }
 
-func generateHandlerID(length int) string {
+func generateHandlerIDV1(length int) string {
 	const digits = "0123456789"
 	var result string
 
@@ -93,15 +102,15 @@ func (h *MAVLinkHandlerV1) Start() error {
 	switch h.config.ConnectionType {
 	case ConnectionSerial:
 		endpointConf = gomavlib.EndpointSerial{
-			Address: h.config.SerialPort,
-			Baud:    h.config.SerialBaud,
+			Device: h.config.SerialPort,
+			Baud:   h.config.SerialBaud,
 		}
 	case ConnectionUDP:
-		endpointConf = gomavlib.EndpointUDP{
+		endpointConf = gomavlib.EndpointUDPClient{
 			Address: fmt.Sprintf("%s:%d", h.config.UDPAddr, h.config.UDPPort),
 		}
 	case ConnectionTCP:
-		endpointConf = gomavlib.EndpointTCP{
+		endpointConf = gomavlib.EndpointTCPClient{
 			Address: fmt.Sprintf("%s:%d", h.config.TCPAddr, h.config.TCPPort),
 		}
 	default:
@@ -229,6 +238,15 @@ func (h *MAVLinkHandlerV1) GetGroundStation() *GroundStationInfoV1 {
 	return h.groundStation
 }
 
+func (h *MAVLinkHandlerV1) GetGroundStationInfo() GroundStationInfoV1 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.groundStation != nil {
+		return *h.groundStation
+	}
+	return GroundStationInfoV1{}
+}
+
 func (h *MAVLinkHandlerV1) GetConfig() MAVLinkConfigV1 {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -307,22 +325,22 @@ func (h *MAVLinkHandlerV1) SendMoveToPosition(lat, lon, alt float64, speed float
 }
 
 func (h *MAVLinkHandlerV1) SetFlightMode(mode FlightMode) error {
-	var baseMode uint64
+	var baseMode common.MAV_MODE
 	var customMode uint32
 
 	switch mode {
 	case FlightModeManual:
-		baseMode = uint64(common.MAV_MODE_MANUAL)
+		baseMode = 1 // MAV_MODE_MANUAL
 	case FlightModeStabilize:
-		baseMode = uint64(common.MAV_MODE_STABILIZE_DISARMED)
+		baseMode = 2 // MAV_MODE_STABILIZE_DISARMED
 	case FlightModeAuto:
-		baseMode = uint64(common.MAV_MODE_AUTO)
+		baseMode = 4 // MAV_MODE_AUTO
 	case FlightModeGuided:
-		baseMode = uint64(common.MAV_MODE_GUIDED)
+		baseMode = 8 // MAV_MODE_GUIDED
 	case FlightModeRTL:
-		baseMode = uint64(common.MAV_MODE_RETURN_HOME)
+		baseMode = 16 // MAV_MODE_RETURN_HOME
 	case FlightModeLand:
-		baseMode = uint64(common.MAV_MODE_LAND)
+		baseMode = 32 // MAV_MODE_LAND
 	default:
 		return fmt.Errorf("unsupported flight mode: %s", mode)
 	}
@@ -465,13 +483,13 @@ func (h *MAVLinkHandlerV1) handleFrame(evt *gomavlib.EventFrame) {
 
 	switch msg := msg.(type) {
 	case *common.MessageHeartbeat:
-		h.handleHeartbeat(msg, evt.GetSystemID(), evt.GetComponentID())
+		h.handleHeartbeat(msg, int(evt.SystemID()), int(evt.ComponentID()))
 	case *common.MessageGlobalPositionInt:
-		h.handleGPS(msg, evt.GetSystemID(), evt.GetComponentID())
+		h.handleGPS(msg, int(evt.SystemID()), int(evt.ComponentID()))
 	case *common.MessageAttitude:
-		h.handleAttitude(msg, evt.GetSystemID(), evt.GetComponentID())
+		h.handleAttitude(msg, int(evt.SystemID()), int(evt.ComponentID()))
 	case *common.MessageBatteryStatus:
-		h.handleBattery(msg, evt.GetSystemID(), evt.GetComponentID())
+		h.handleBattery(msg, int(evt.SystemID()), int(evt.ComponentID()))
 	}
 }
 
@@ -496,29 +514,27 @@ func (h *MAVLinkHandlerV1) handleGPS(msg *common.MessageGlobalPositionInt, syste
 	data := &GPSDataV1{
 		SystemID:    systemID,
 		ComponentID: componentID,
-		FixType:     0,
-		Lat:         msg.Lat,
-		Lon:         msg.Lon,
-		Alt:         msg.Alt,
-		EPH:         0,
-		EPV:         0,
-		Vel:         0,
-		COG:         0,
+		Latitude:    float64(msg.Lat) / 1e7,
+		Longitude:   float64(msg.Lon) / 1e7,
+		Altitude:    float64(msg.Alt) / 1000,
+		Timestamp:   time.Now(),
 	}
 
 	select {
 	case h.GPSChan <- data:
 	default:
+		// 通道已满，丢弃数据
 	}
 
 	// 更新无人机位置
 	h.mu.Lock()
 	if h.drone != nil {
-		h.drone.UpdatePosition(
-			float64(msg.Lat)/1e7,
-			float64(msg.Lon)/1e7,
-			float64(msg.Alt)/1000.0,
-		)
+		position := Drones.Position{
+			Latitude:  data.Latitude,
+			Longitude: data.Longitude,
+			Altitude:  data.Altitude,
+		}
+		h.drone.SetPosition(position)
 	}
 	h.mu.Unlock()
 }
@@ -533,46 +549,74 @@ func (h *MAVLinkHandlerV1) handleAttitude(msg *common.MessageAttitude, systemID,
 		RollSpeed:   msg.Rollspeed,
 		PitchSpeed:  msg.Pitchspeed,
 		YawSpeed:    msg.Yawspeed,
+		Timestamp:   time.Now(),
 	}
 
 	select {
 	case h.attitudeChan <- data:
 	default:
+		// 通道已满，丢弃数据
 	}
 
 	// 更新无人机姿态
 	h.mu.Lock()
 	if h.drone != nil {
-		h.drone.UpdateAttitude(
-			float64(msg.Roll),
-			float64(msg.Pitch),
-			float64(msg.Yaw),
-		)
+		attitude := Drones.Attitude{
+			Roll:  float64(data.Roll),
+			Pitch: float64(data.Pitch),
+			Yaw:   float64(data.Yaw),
+		}
+		h.drone.SetAttitude(attitude)
 	}
 	h.mu.Unlock()
 }
 
 func (h *MAVLinkHandlerV1) handleBattery(msg *common.MessageBatteryStatus, systemID, componentID int) {
+	// 计算平均电压
+	var totalVoltage float32
+	cellCount := 0
+	for i, voltage := range msg.Voltages {
+		if voltage != 0xFFFF && voltage > 0 {
+			totalVoltage += float32(voltage) / 1000.0 // 转换为伏特
+			cellCount++
+		}
+		if i >= 0 && cellCount > 0 {
+			break
+		}
+	}
+
+	var avgVoltage float32
+	if cellCount > 0 {
+		avgVoltage = totalVoltage / float32(cellCount)
+	}
+
 	data := &BatteryDataV1{
 		SystemID:    systemID,
 		ComponentID: componentID,
-		Voltage:     msg.Voltage,
-		Current:     msg.Current,
-		Remaining:   msg.BatteryRemaining,
+		Voltage:     avgVoltage,
+		Current:     float32(msg.CurrentBattery) / 100.0, // 转换为安培
+		Remaining:   int(msg.BatteryRemaining),
+		Temperature: float32(msg.Temperature) / 100.0, // 转换为摄氏度
+		Timestamp:   time.Now(),
 	}
 
 	select {
 	case h.batteryChan <- data:
 	default:
+		// 通道已满，丢弃数据
 	}
 
 	// 更新无人机电池状态
 	h.mu.Lock()
 	if h.drone != nil {
-		h.drone.UpdateBattery(
-			float64(msg.Voltage),
-			float64(msg.BatteryRemaining),
-		)
+		battery := Drones.BatteryStatus{
+			Voltage:     float64(data.Voltage),
+			Current:     float64(data.Current),
+			Remaining:   data.Remaining,
+			Temperature: float64(data.Temperature),
+			CellCount:   cellCount,
+		}
+		h.drone.SetBattery(battery)
 	}
 	h.mu.Unlock()
 }

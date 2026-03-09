@@ -70,14 +70,33 @@ type Response struct {
 	Error   string `json:"error,omitempty"`
 }
 
-// SimpleVerification 简易验证管理器
-type SimpleVerification struct {
+// VerificationManager 验证管理器
+type VerificationManager struct {
 	redisClient        *redis.Client
 	VerificationConfig *VerificationConfig
 }
 
+func (cfg *VerificationConfig) Default(){
+	cfg.RedisAddr = "localhost:6379"
+	cfg.RedisPassword = ""
+	cfg.RedisDB = 15
+	cfg.SMTPHost = "smtp.qq.com"
+	cfg.SMTPPort = 587
+	cfg.CodeLength = 5
+	cfg.Expiration = 5 * 60 * time.Minute
+	cfg.MaxAttempts = 20
+	cfg.CoolDownTime = 60 * time.Second
+
+	cfg.SMTPUsername = "mavlinkproject@qq.com"
+	cfg.SMTPPassword = "edrypqkdchkncffi"
+
+	cfg.FromEmail = "mavlinkproject@qq.com"
+	cfg.FromName = "MavlinkProject"
+	
+}
+
 // 验证管理器
-func NewSimpleVerification(cfg *VerificationConfig) (*SimpleVerification, error) {
+func NewVerificationManager(cfg *VerificationConfig) (*VerificationManager, error) {
 	// 设置 验证码长度, 作废时间, 最大尝试次数, 冷却时间 参数
 	if cfg.CodeLength == 0 {
 		cfg.CodeLength = 6
@@ -103,7 +122,7 @@ func NewSimpleVerification(cfg *VerificationConfig) (*SimpleVerification, error)
 		return nil, fmt.Errorf("verification: failed to connect to Redis: %v", err)
 	}
 
-	return &SimpleVerification{
+	return &VerificationManager{
 		redisClient:        redisClient,
 		VerificationConfig: cfg,
 	}, nil
@@ -112,7 +131,7 @@ func NewSimpleVerification(cfg *VerificationConfig) (*SimpleVerification, error)
 // ==================== 核心功能方法 ====================
 
 // SendVerificationCode 发送验证码（函数形式）
-func (sv *SimpleVerification) SendVerificationCode(email, codeType string) error {
+func (sv *VerificationManager) SendVerificationCode(email, codeType string) error {
 	// 检查发送频率
 	if err := sv.checkCoolDown(email, codeType); err != nil {
 		return err
@@ -141,7 +160,7 @@ func (sv *SimpleVerification) SendVerificationCode(email, codeType string) error
 }
 
 // VerifyVerificationCode 验证验证码（函数形式）
-func (sv *SimpleVerification) VerifyVerificationCode(email, code, codeType string) (bool, error) {
+func (sv *VerificationManager) VerifyVerificationCode(email, code, codeType string) (bool, error) {
 	// 获取验证码
 	storedCode, err := sv.getCode(email, codeType)
 	if err != nil {
@@ -173,7 +192,7 @@ func (sv *SimpleVerification) VerifyVerificationCode(email, code, codeType strin
 
 // ==================== HTTP API 接口 ====================
 // SendCodeHandler 发送验证码API接口
-func (sv *SimpleVerification) SendCodeHandler(c *gin.Context) {
+func (sv *VerificationManager) SendCodeHandler(c *gin.Context) {
 	var req SendCodeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{
@@ -201,7 +220,7 @@ func (sv *SimpleVerification) SendCodeHandler(c *gin.Context) {
 }
 
 // VerifyCodeHandler 验证验证码API接口
-func (sv *SimpleVerification) VerifyCodeHandler(c *gin.Context) {
+func (sv *VerificationManager) VerifyCodeHandler(c *gin.Context) {
 	var req VerifyCodeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, Response{
@@ -238,7 +257,7 @@ func (sv *SimpleVerification) VerifyCodeHandler(c *gin.Context) {
 // ==================== 内部工具方法 ====================
 
 // 生成随机验证码
-func (sv *SimpleVerification) generateCode() (string, error) {
+func (sv *VerificationManager) generateCode() (string, error) {
 	const digits = "0123456789"
 	code := make([]byte, sv.VerificationConfig.CodeLength)
 
@@ -254,7 +273,7 @@ func (sv *SimpleVerification) generateCode() (string, error) {
 }
 
 // 发送邮件
-func (sv *SimpleVerification) sendCodeEmail(email, code, codeType string) error {
+func (sv *VerificationManager) sendCodeEmail(email, code, codeType string) error {
 	subject := sv.getSubjectByType(codeType)
 	htmlBody := sv.generateEmailHTML(code, codeType)
 
@@ -275,7 +294,7 @@ func (sv *SimpleVerification) sendCodeEmail(email, code, codeType string) error 
 }
 
 // 存储验证码到Redis
-func (sv *SimpleVerification) storeCode(email, code, codeType string) error {
+func (sv *VerificationManager) storeCode(email, code, codeType string) error {
 	verificationCode := &verificationCode{
 		Code:      code,
 		Email:     strings.ToLower(email),
@@ -295,7 +314,7 @@ func (sv *SimpleVerification) storeCode(email, code, codeType string) error {
 }
 
 // 从Redis获取验证码
-func (sv *SimpleVerification) getCode(email, codeType string) (*verificationCode, error) {
+func (sv *VerificationManager) getCode(email, codeType string) (*verificationCode, error) {
 	key := sv.getRedisKey(email, codeType)
 	data, err := sv.redisClient.Get(ctx, key).Bytes()
 	if err != nil {
@@ -308,13 +327,13 @@ func (sv *SimpleVerification) getCode(email, codeType string) (*verificationCode
 }
 
 // 删除验证码
-func (sv *SimpleVerification) deleteCode(email, codeType string) error {
+func (sv *VerificationManager) deleteCode(email, codeType string) error {
 	key := sv.getRedisKey(email, codeType)
 	return sv.redisClient.Del(ctx, key).Err()
 }
 
 // 增加尝试次数
-func (sv *SimpleVerification) incrementAttempts(email, codeType string) error {
+func (sv *VerificationManager) incrementAttempts(email, codeType string) error {
 	code, err := sv.getCode(email, codeType)
 	if err != nil {
 		return err
@@ -332,7 +351,7 @@ func (sv *SimpleVerification) incrementAttempts(email, codeType string) error {
 }
 
 // 检查发送频率
-func (sv *SimpleVerification) checkCoolDown(email, codeType string) error {
+func (sv *VerificationManager) checkCoolDown(email, codeType string) error {
 	code, err := sv.getCode(email, codeType)
 	if err != nil {
 		return nil // 没有记录，可以发送
@@ -346,12 +365,12 @@ func (sv *SimpleVerification) checkCoolDown(email, codeType string) error {
 }
 
 // 获取Redis键名
-func (sv *SimpleVerification) getRedisKey(email, codeType string) string {
+func (sv *VerificationManager) getRedisKey(email, codeType string) string {
 	return fmt.Sprintf("verification:%s:%s", codeType, strings.ToLower(email))
 }
 
 // 根据类型获取邮件主题
-func (sv *SimpleVerification) getSubjectByType(codeType string) string {
+func (sv *VerificationManager) getSubjectByType(codeType string) string {
 	switch codeType {
 	case "register":
 		return "注册验证码"
@@ -365,7 +384,7 @@ func (sv *SimpleVerification) getSubjectByType(codeType string) string {
 }
 
 // 生成邮件HTML内容
-func (sv *SimpleVerification) generateEmailHTML(code, codeType string) string {
+func (sv *VerificationManager) generateEmailHTML(code, codeType string) string {
 	actionText := sv.getActionTextByType(codeType)
 
 	return fmt.Sprintf(`
@@ -395,7 +414,7 @@ func (sv *SimpleVerification) generateEmailHTML(code, codeType string) string {
         </div>
         <div class="footer">
             <p>此为系统邮件，请勿回复</p>
-            <p>© %d ProjectGIT - By Tonyl1n 版权所有</p>
+            <p>© 2026 - %d MavlinkProject Verification By Tonyl1n - All Rights Reserved </p>
         </div>
     </div>
 </body>
@@ -404,7 +423,7 @@ func (sv *SimpleVerification) generateEmailHTML(code, codeType string) string {
 }
 
 // 根据类型获取操作文本
-func (sv *SimpleVerification) getActionTextByType(codeType string) string {
+func (sv *VerificationManager) getActionTextByType(codeType string) string {
 	switch codeType {
 	case "register":
 		return "账号注册"
@@ -418,4 +437,4 @@ func (sv *SimpleVerification) getActionTextByType(codeType string) string {
 }
 
 // Verification by TonyL1n
-// Using in ProjectG.I.T
+// Using in MavlinkProject

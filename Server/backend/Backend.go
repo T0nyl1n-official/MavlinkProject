@@ -4,25 +4,62 @@ import (
 	"log"
 
 	gin "github.com/gin-gonic/gin"
+	redis "github.com/redis/go-redis/v9"
+	gorm "gorm.io/gorm"
+
+	DBService "MavlinkProject/Server/backend/Database"
+	DBConfig "MavlinkProject/Server/backend/Database/Config"
+	Verification "MavlinkProject/Server/backend/Utils/Verification"
 )
 
 type BackendServer struct {
-	Router *gin.Engine
+	Router       *gin.Engine
+	Mysql        *gorm.DB
+	RedisClient  *[]redis.Client
+	Verification Verification.VerificationManager
 }
 
-func NewBackendServer() *BackendServer {
+func (bs *BackendServer) New() {
 	router := gin.Default()
-	return &BackendServer{Router: router}
+	redisClients := make([]redis.Client, 0)
+	verification := Verification.VerificationManager{}
+	redisDB := []DBConfig.RedisDB_allocate{
+		DBConfig.GeneralWarning,
+		DBConfig.Backend,
+		DBConfig.Frontend,
+		DBConfig.Agent,
+		DBConfig.Drone,
+		DBConfig.Sensor,
+		DBConfig.Verification,
+	}
+
+	for i := range redisDB {
+		config := DBConfig.RedisClientConfig{
+			DB: redisDB[i],
+		}
+		config.RedisConfig_Default(redisDB[i])
+
+		client, veri := DBService.InitRedis(&config)
+		if veri != nil {
+			verification = *veri
+		}
+		redisClients = append(redisClients, *client)
+	}
+
+	bs.Router = router
+	bs.RedisClient = &redisClients
+	bs.Verification = verification
+
 }
 
-func RunBackendServer(server *BackendServer, port string) {
-	server.Router.Run(port)
+func (bs *BackendServer) Run(port string) {
+	bs.Router.Run(port)
 	log.Printf("Backend server started on port %s", port)
 }
 
 // 被整合的Backend创建方法
-func StartBackend(port string) *BackendServer {
-	backend := NewBackendServer()
-	RunBackendServer(backend, port)
-	return backend
+func (bs *BackendServer) Start(port string) *BackendServer {
+	bs.New()
+	bs.Run(port)
+	return bs
 }

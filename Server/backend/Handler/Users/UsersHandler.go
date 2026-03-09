@@ -3,19 +3,20 @@ package UsersHandler
 import (
 	"fmt"
 	"strconv"
-	"time"
 
 	gin "github.com/gin-gonic/gin"
 	gorm "gorm.io/gorm"
 
+	Server "MavlinkProject/Server"
 	ErrorsMgr "MavlinkProject/Server/backend/Middles/ErrorMiddleHandle/ErrorsMgr"
 	User "MavlinkProject/Server/backend/Shared/User"
-	Verification "MavlinkProject/Server/backend/Utils/Verification"
 )
 
 type UserHandler struct {
 	Mysql *gorm.DB
 }
+
+var Backend = Server.BackendServer
 
 func (h *UserHandler) RegisterUser(c *gin.Context) {
 	user := &User.User{
@@ -284,31 +285,7 @@ func (h *UserHandler) SendEmailVerification(c *gin.Context) {
 		return
 	}
 
-	cfg := &Verification.VerificationConfig{
-		RedisAddr:     "localhost:6379",
-		RedisPassword: "",
-		RedisDB:       3,
-		SMTPHost:      "smtp.qq.com",
-		SMTPPort:      587,
-		CodeLength:    5,
-		Expiration:    5 * 60 * time.Minute,
-		MaxAttempts:   20,
-		CoolDownTime:  60 * time.Second,
-
-		SMTPUsername: "mavlinkproject@qq.com",
-		SMTPPassword: "edrypqkdchkncffi",
-
-		FromEmail: "mavlinkproject@qq.com",
-		FromName:  "MavlinkProject",
-	}
-
-	verification, err := Verification.NewSimpleVerification(cfg)
-	if err != nil {
-		errorDetail := ErrorsMgr.GlobalCreateDatabaseError("初始化验证码服务", "verification", err)
-		ErrorsMgr.HandleError(c, errorDetail)
-		return
-	}
-
+	verification := Server.BackendServer.Verification
 	if err := verification.SendVerificationCode(req.Email, req.Type); err != nil {
 		ErrorsMgr.HandleError(c, fmt.Errorf("发送验证码失败: %w", err))
 		return

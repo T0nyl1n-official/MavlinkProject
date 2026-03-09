@@ -6,6 +6,7 @@
         "Mavlink",
         "Pitchspeed",
         "Rollspeed",
+        "veri",
         "Yawspeed"
     ]
 }

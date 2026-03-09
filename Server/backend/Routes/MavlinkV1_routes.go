@@ -355,13 +355,13 @@ func SetupMavlinkV1Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandlerV1)
 // 简化版本的路由设置函数
 func SetupMavlinkRoutesV1(router *gin.Engine) {
 	// 创建默认的 MAVLink v1 handler
-	handler := Mavlink.NewMAVLinkHandlerV1(Mavlink.MAVLinkConfig{
+	handler := Mavlink.NewMAVLinkHandlerV1(Mavlink.MAVLinkConfigV1{
 		ConnectionType: Mavlink.ConnectionUDP,
 		UDPAddr:        "0.0.0.0",
 		UDPPort:        14550,
 		SystemID:       255,
 		ComponentID:    1,
-		ProtocolVersion: Mavlink.ProtocolVersion2,
+		ProtocolVersion: Mavlink.ProtocolVersionV2,
 		HeartbeatRate:   1 * time.Second,
 	})
 	
