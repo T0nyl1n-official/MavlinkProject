@@ -72,12 +72,11 @@ type MAVLinkHandler struct {
 	groundStation *GroundStationInfo
 	dispatcher    *DispatcherInfo
 
-	messageChan      chan *IncomingMessage
-	heartbeatChan    chan *HeartbeatData
-	GPSChan          chan *GPSData
-	attitudeChan     chan *AttitudeData
-	batteryChan      chan *BatteryData
-	timestampHistory []time.Time
+	messageChan   chan *IncomingMessage
+	heartbeatChan chan *HeartbeatData
+	GPSChan       chan *GPSData
+	attitudeChan  chan *AttitudeData
+	batteryChan   chan *BatteryData
 }
 
 // MAVLink 配置
@@ -267,6 +266,7 @@ func (h *MAVLinkHandler) Start() error {
 		outVersion = gomavlib.V2
 	}
 
+	node := &gomavlib.Node{}
 	node, err := gomavlib.NewNode(gomavlib.NodeConf{
 		Endpoints:           []gomavlib.EndpointConf{endpointConf},
 		OutVersion:          outVersion,
@@ -347,6 +347,7 @@ func (h *MAVLinkHandler) handleEvent(evt interface{}) {
 	}
 }
 
+// 处理协议类型
 func (h *MAVLinkHandler) handleFrame(evt *gomavlib.EventFrame) {
 	fr := evt.Frame
 
@@ -808,27 +809,4 @@ func (h *MAVLinkHandler) SetDispatcherByAI() {
 		Username: "AI-Agent",
 		Email:    "",
 	}
-}
-
-func (h *MAVLinkHandler) RecordTimestamp() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.timestampHistory = append(h.timestampHistory, time.Now())
-	if len(h.timestampHistory) > 1000 {
-		h.timestampHistory = h.timestampHistory[len(h.timestampHistory)-1000:]
-	}
-}
-
-func (h *MAVLinkHandler) GetTimestampHistory() []time.Time {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	result := make([]time.Time, len(h.timestampHistory))
-	copy(result, h.timestampHistory)
-	return result
-}
-
-func (h *MAVLinkHandler) ClearTimestampHistory() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.timestampHistory = nil
 }
