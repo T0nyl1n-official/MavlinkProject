@@ -46,7 +46,13 @@ func (bs *BackendServer) New() {
 		redisClients = append(redisClients, *client)
 	}
 
+	mysqlDB, err := DBService.InitMysql()
+	if err != nil {
+		log.Fatalf("MavlinkProject - Backend : 初始化Mysql失败 : %v", err)
+	}
+
 	bs.Router = router
+	bs.Mysql = mysqlDB
 	bs.RedisClient = &redisClients
 	bs.Verification = verification
 

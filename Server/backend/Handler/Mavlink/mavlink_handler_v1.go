@@ -175,6 +175,21 @@ func (h *MAVLinkHandlerV1) Restart() error {
 	return h.Start()
 }
 
+func (h *MAVLinkHandlerV1) RestartWithTimeout(timeout time.Duration) error {
+	done := make(chan error, 1)
+
+	go func() {
+		done <- h.Restart()
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(timeout):
+		return fmt.Errorf("restart timeout after %v", timeout)
+	}
+}
+
 // ==================== 状态查询 ====================
 
 func (h *MAVLinkHandlerV1) GetHandlerID() string {

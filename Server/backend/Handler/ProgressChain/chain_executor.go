@@ -3,16 +3,27 @@ package ProgressChain
 import (
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
 	Mavlink "MavlinkProject/Server/backend/Handler/Mavlink"
 )
+
+const (
+	DefaultNodeTimeout = 30 * time.Second
+)
+
+var (
+	nodeTimeout = DefaultNodeTimeout
+)
+
+func SetNodeTimeout(timeout time.Duration) {
+	nodeTimeout = timeout
+}
+
 // ChainExecutor 执行链中的节点操作
 type ChainExecutor struct {
-	mu      sync.RWMutex
 	chain   *Chain
 	manager *ChainManager
 }
@@ -276,10 +287,11 @@ func (ce *ChainExecutor) ExecuteAll(ctx *gin.Context) error {
 	for current != nil {
 		ce.chain.SetCurrentNode(current)
 
-		if err := ce.ExecuteNode(current, ctx); err != nil {
+		if err := ce.ExecuteNodeWithTimeout(current, ctx, nodeTimeout); err != nil {
 			ce.chain.Status = "error"
 			ce.chain.UpdatedAt = time.Now()
 			ce.saveChainLog()
+			ce.reportError(err)
 			return err
 		}
 
@@ -292,11 +304,57 @@ func (ce *ChainExecutor) ExecuteAll(ctx *gin.Context) error {
 	return nil
 }
 
+func (ce *ChainExecutor) ExecuteNodeWithTimeout(node *Node, ctx *gin.Context, timeout time.Duration) error {
+	done := make(chan error, 1)
+
+	go func() {
+		done <- ce.ExecuteNode(node, ctx)
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(timeout):
+		node.Status = NodeStatusError
+		node.Error = fmt.Errorf("node execution timeout after %v", timeout).Error()
+		return fmt.Errorf("node %s execution timeout after %v", node.Type, timeout)
+	}
+}
+
 func (ce *ChainExecutor) saveChainLog() {
 	dir := ensureChainLogDir()
 	if err := ce.chain.SaveToFile(dir); err != nil {
 		fmt.Printf("Failed to save chain log: %v\n", err)
 	}
+}
+
+func (ce *ChainExecutor) reportError(err error) {
+	errMsg := fmt.Sprintf("[Chain Error] ChainID: %s, ChainName: %s, Error: %v, Time: %s",
+		ce.chain.ID,
+		ce.chain.Name,
+		err,
+		time.Now().Format(time.RFC3339))
+
+	fmt.Println(errMsg)
+
+	reportToRedis(ce.chain.ID, errMsg)
+}
+
+func reportToRedis(chainID string, message string) {
+	// TODO: 实现 Redis 错误报告
+	// 实现思路：
+	// 1. 连接 Redis 服务器
+	// 2. 选择 DB（报告区）
+	// 3. 使用 LPUSH 将错误信息推送到列表
+	// 4. 可选：设置过期时间
+	//
+	// 示例代码：
+	// rdb := redis.NewClient(&redis.Options{
+	//     Addr: "localhost:6379",
+	//     DB:   1, // 报告区 DB
+	// })
+	// rdb.LPush("chain_errors:"+chainID, message)
+	// rdb.Expire("chain_errors:"+chainID, 7*24*time.Hour) // 7天后过期
 }
 
 func (ce *ChainExecutor) GetChainJSON() (string, error) {
@@ -332,4 +390,3 @@ func ensureChainLogDir() string {
 	}
 	return dir
 }
-
