@@ -117,22 +117,23 @@ func (h *MAVLinkHandlerV1) Start() error {
 		return fmt.Errorf("unsupported connection type: %s", h.config.ConnectionType)
 	}
 
-	node, err := gomavlib.NewNode(gomavlib.NodeConf{
-		Endpoints:           []gomavlib.EndpointConf{endpointConf},
-		Dialect:             common.Dialect,
-		OutVersion:          gomavlib.V2,
-		OutSystemID:         byte(h.config.SystemID),
-		OutComponentID:      1,
-		HeartbeatDisable:    false,
-		HeartbeatPeriod:     h.config.HeartbeatRate,
-		StreamRequestEnable: true,
-	})
+	node := gomavlib.Node{}
+	err := node.Initialize()
+
+	node.Endpoints = []gomavlib.EndpointConf{endpointConf}
+	node.Dialect = common.Dialect
+	node.OutVersion = gomavlib.V2
+	node.OutSystemID = byte(h.config.SystemID)
+	node.OutComponentID = 1
+	node.HeartbeatDisable = false
+	node.HeartbeatPeriod = h.config.HeartbeatRate
+	node.StreamRequestEnable = true
 
 	if err != nil {
 		return fmt.Errorf("failed to create MAVLink node: %w", err)
 	}
 
-	h.node = node
+	h.node = &node
 	h.started = true
 
 	go h.readLoop()
@@ -350,6 +351,10 @@ func (h *MAVLinkHandlerV1) SetFlightMode(mode FlightMode) error {
 		CustomMode: customMode,
 	}
 	return h.SendMessage(msg)
+}
+
+func (h *MAVLinkHandlerV1) SendReturnToLaunch() error {
+	return h.SetFlightMode(FlightModeRTL)
 }
 
 func (h *MAVLinkHandlerV1) SendHeartbeat() error {

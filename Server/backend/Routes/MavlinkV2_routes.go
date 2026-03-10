@@ -9,12 +9,11 @@ import (
 	Mavlink "MavlinkProject/Server/backend/Handler/Mavlink"
 )
 
-func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandler) {
+func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandlerV1) {
 	packageHandler := Mavlink.NewPackageHandler(handler)
 
 	v2Group := router.Group("/mavlink/v2/api")
 	{
-		// 无人机控制接口
 		v2Group.POST("/takeoff", func(c *gin.Context) {
 			var req Mavlink.TakeoffRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
@@ -57,27 +56,25 @@ func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandler) {
 			c.JSON(http.StatusOK, resp)
 		})
 
-		// 状态查询接口
-		v2Group.GET("/status", func(c *gin.Context) {
-			resp := packageHandler.GetStatus()
-			c.JSON(http.StatusOK, resp)
-		})
-
-		// 调度者设置接口
-		v2Group.POST("/dispatcher/ai", func(c *gin.Context) {
-			packageHandler.SetAIAsDispatcher()
+		v2Group.POST("/return", func(c *gin.Context) {
+			err := handler.SendReturnToLaunch()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
-				"message": "调度者已设置为AI",
+				"message": "Return to launch initiated",
 			})
 		})
 
-		v2Group.POST("/dispatcher/user", func(c *gin.Context) {
+		v2Group.POST("/mode", func(c *gin.Context) {
 			var req struct {
-				Username string `json:"username" binding:"required"`
-				Email    string `json:"email" binding:"required"`
+				Mode string `json:"mode" binding:"required"`
 			}
-
 			if err := c.ShouldBindJSON(&req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{
 					"success": false,
@@ -86,23 +83,49 @@ func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandler) {
 				return
 			}
 
-			packageHandler.SetUserAsDispatcher(req.Username, req.Email)
+			err := handler.SetFlightMode(Mavlink.FlightMode(req.Mode))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
-				"message": "调度者已设置为用户",
+				"message": "Flight mode set to " + req.Mode,
 			})
 		})
 
-		// 地面站设置接口
+		v2Group.GET("/status", func(c *gin.Context) {
+			resp := packageHandler.GetStatus()
+			c.JSON(http.StatusOK, resp)
+		})
+
+		v2Group.GET("/position", func(c *gin.Context) {
+			position := handler.GetDronePosition()
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"data":    position,
+			})
+		})
+
+		v2Group.GET("/battery", func(c *gin.Context) {
+			battery := handler.GetDroneBattery()
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"data":    battery,
+			})
+		})
+
 		v2Group.POST("/ground-station", func(c *gin.Context) {
 			var req struct {
 				Name      string  `json:"name" binding:"required"`
-				ID        string  `json:"id" binding:"required"`
-				Latitude  float64 `json:"latitude" binding:"required"`
-				Longitude float64 `json:"longitude" binding:"required"`
-				Altitude  float64 `json:"altitude" binding:"required"`
+				ID        string  `json:"id"`
+				Latitude  float64 `json:"latitude"`
+				Longitude float64 `json:"longitude"`
+				Altitude  float64 `json:"altitude"`
 			}
-
 			if err := c.ShouldBindJSON(&req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{
 					"success": false,
@@ -120,18 +143,17 @@ func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandler) {
 	}
 }
 
-// 简化的路由设置函数（用于快速集成）
 func SetupDefaultMavlinkRoutesV2(router *gin.Engine) {
-	// 创建默认的 MAVLink handler
-	handler := Mavlink.NewMAVLinkHandler(Mavlink.MAVLinkConfig{
+	config := Mavlink.MAVLinkConfigV1{
 		ConnectionType:  Mavlink.ConnectionUDP,
 		UDPAddr:         "0.0.0.0",
 		UDPPort:         14550,
 		SystemID:        255,
 		ComponentID:     1,
-		ProtocolVersion: Mavlink.ProtocolVersion2,
+		ProtocolVersion: Mavlink.ProtocolVersionV2,
 		HeartbeatRate:   1 * time.Second,
-	}, nil)
+	}
+	handler := Mavlink.NewMAVLinkHandlerV1(config)
 
 	SetupMavlinkV2Routes(router, handler)
 }

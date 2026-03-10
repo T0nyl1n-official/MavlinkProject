@@ -317,12 +317,6 @@ func (p *PackageHandler) SetGroundStation(name, id string, lat, lon, alt float64
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	position := Drones.Position{
-		Latitude:  lat,
-		Longitude: lon,
-		Altitude:  alt,
-	}
-
 	p.handler.SetGroundStation(name, id, lat, lon, alt)
 }
 
@@ -338,7 +332,7 @@ func (p *PackageHandler) SetUserAsDispatcher(username, email string) {
 	// v1 handler 不包含调度器功能，跳过
 }
 
-func (p *PackageHandler) GetHandler() *MAVLinkHandler {
+func (p *PackageHandler) GetHandler() *MAVLinkHandlerV1 {
 	return p.handler
 }
 
