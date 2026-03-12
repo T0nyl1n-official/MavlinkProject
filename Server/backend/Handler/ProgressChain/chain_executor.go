@@ -35,6 +35,8 @@ func NewChainExecutor(chain *Chain, manager *ChainManager) *ChainExecutor {
 	}
 }
 
+// 处理某个节点的任务
+// (本质分类任务给方法)
 func (ce *ChainExecutor) ExecuteNode(node *Node, ctx *gin.Context) error {
 	now := time.Now()
 	node.Status = NodeStatusRunning
@@ -45,11 +47,11 @@ func (ce *ChainExecutor) ExecuteNode(node *Node, ctx *gin.Context) error {
 
 	switch node.Type {
 	case NodeTypeCreateHandler:
-		err = ce.executeHandlerOperation(node, "create")
+		err = ce.executeHandlerOperation(ctx, node, "create")
 	case NodeTypeDeleteHandler:
-		err = ce.executeHandlerOperation(node, "delete")
+		err = ce.executeHandlerOperation(ctx, node, "delete")
 	case NodeTypeUpdateHandler:
-		err = ce.executeHandlerOperation(node, "update")
+		err = ce.executeHandlerOperation(ctx, node, "update")
 	case NodeTypeConnectionStart:
 		err = ce.executeConnection(node, "start")
 	case NodeTypeConnectionStop:
@@ -94,13 +96,14 @@ func (ce *ChainExecutor) ExecuteNode(node *Node, ctx *gin.Context) error {
 	return err
 }
 
+// 获取节点(Node)内参数 Node.HandlerConfig
 func (ce *ChainExecutor) getHandlerFromNode(node *Node) (*Mavlink.MAVLinkHandlerV1, error) {
 	if node.HandlerConfig == nil {
 		return nil, fmt.Errorf("node %s has no handler config", node.ID)
 	}
 
-	config := Mavlink.MAVLinkConfigV1{
-		ConnectionType:  Mavlink.ConnectionType(node.HandlerConfig.ConnectionType),
+	configData := &Mavlink.HandlerConfigData{
+		ConnectionType:  node.HandlerConfig.ConnectionType,
 		SerialPort:      node.HandlerConfig.SerialPort,
 		SerialBaud:      node.HandlerConfig.SerialBaud,
 		UDPAddr:         node.HandlerConfig.UDPAddr,
@@ -109,14 +112,15 @@ func (ce *ChainExecutor) getHandlerFromNode(node *Node) (*Mavlink.MAVLinkHandler
 		TCPPort:         node.HandlerConfig.TCPPort,
 		SystemID:        node.HandlerConfig.SystemID,
 		ComponentID:     node.HandlerConfig.ComponentID,
-		ProtocolVersion: Mavlink.ProtocolVersion(node.HandlerConfig.ProtocolVersion),
+		ProtocolVersion: node.HandlerConfig.ProtocolVersion,
 		HeartbeatRate:   node.HandlerConfig.HeartbeatRate,
 	}
 
-	return Mavlink.NewMAVLinkHandlerV1(config), nil
+	config := configData.ToConfigV1()
+	return Mavlink.NewMAVLinkHandlerV1(*config), nil
 }
 
-func (ce *ChainExecutor) executeHandlerOperation(node *Node, operation string) error {
+func (ce *ChainExecutor) executeHandlerOperation(c *gin.Context, node *Node, operation string) error {
 	switch operation {
 	case "create":
 		return nil

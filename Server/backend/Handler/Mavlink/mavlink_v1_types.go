@@ -120,3 +120,65 @@ type BatteryDataV1 struct {
 	Temperature float32
 	Timestamp   time.Time
 }
+
+// =============================================================================
+// 类型转换函数 - 用于 HandlerConfig 数据交换
+// =============================================================================
+
+// HandlerConfigData 用于链配置传递的中间数据结构
+// 不引用 ProgressChain 包以避免循环依赖
+type HandlerConfigData struct {
+	ConnectionType  string
+	SerialPort      string
+	SerialBaud      int
+	UDPAddr         string
+	UDPPort         int
+	TCPAddr         string
+	TCPPort         int
+	SystemID        int
+	ComponentID     int
+	ProtocolVersion string
+	HeartbeatRate   time.Duration
+}
+
+// ToConfigV1 将 HandlerConfigData 转换为 MAVLinkConfigV1
+func (hc *HandlerConfigData) ToConfigV1() *MAVLinkConfigV1 {
+	if hc == nil {
+		return &MAVLinkConfigV1{}
+	}
+
+	return &MAVLinkConfigV1{
+		ConnectionType:  ConnectionType(hc.ConnectionType),
+		SerialPort:      hc.SerialPort,
+		SerialBaud:      hc.SerialBaud,
+		UDPAddr:         hc.UDPAddr,
+		UDPPort:         hc.UDPPort,
+		TCPAddr:         hc.TCPAddr,
+		TCPPort:         hc.TCPPort,
+		SystemID:        hc.SystemID,
+		ComponentID:     hc.ComponentID,
+		ProtocolVersion: ProtocolVersion(hc.ProtocolVersion),
+		HeartbeatRate:   hc.HeartbeatRate,
+	}
+}
+
+// ToHandlerConfigData 将 MAVLinkConfigV1 转换为 HandlerConfigData
+func (v1Config *MAVLinkConfigV1) ToHandlerConfigData() *HandlerConfigData {
+	if v1Config == nil {
+		return &HandlerConfigData{}
+	}
+
+	return &HandlerConfigData{
+		ConnectionType:  string(v1Config.ConnectionType),
+		SerialPort:      v1Config.SerialPort,
+		SerialBaud:      v1Config.SerialBaud,
+		UDPAddr:         v1Config.UDPAddr,
+		UDPPort:         v1Config.UDPPort,
+		TCPAddr:         v1Config.TCPAddr,
+		TCPPort:         v1Config.TCPPort,
+		SystemID:        v1Config.SystemID,
+		ComponentID:     v1Config.ComponentID,
+		ProtocolVersion: string(v1Config.ProtocolVersion),
+		HeartbeatRate:   v1Config.HeartbeatRate,
+	}
+}

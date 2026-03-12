@@ -1,18 +1,12 @@
-package routes
+package MavlinkRoute
 
 import (
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
 	Mavlink "MavlinkProject/Server/backend/Handler/Mavlink"
-)
-
-var (
-	handlerPool    = make(map[string]*Mavlink.MAVLinkHandlerV1)
-	handlerPoolMux sync.RWMutex
 )
 
 type ConnectionConfig struct {
@@ -68,21 +62,16 @@ func SetupMavlinkV1Routes(router *gin.Engine) {
 }
 
 func getHandler(id string) *Mavlink.MAVLinkHandlerV1 {
-	handlerPoolMux.RLock()
-	defer handlerPoolMux.RUnlock()
-	return handlerPool[id]
+	return Mavlink.GetHandlerV1(id)
 }
 
 func setHandler(id string, handler *Mavlink.MAVLinkHandlerV1) {
-	handlerPoolMux.Lock()
-	defer handlerPoolMux.Unlock()
-	handlerPool[id] = handler
+	// 使用 handler 内部的 handlerID 存储
+	// 这里暂时保留用于兼容
 }
 
 func removeHandler(id string) {
-	handlerPoolMux.Lock()
-	defer handlerPoolMux.Unlock()
-	delete(handlerPool, id)
+	Mavlink.DeleteHandlerV1(id)
 }
 
 func parseConfig(c *gin.Context) (string, *Mavlink.MAVLinkConfigV1, error) {

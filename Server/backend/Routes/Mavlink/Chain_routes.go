@@ -1,9 +1,9 @@
-package Mavlink
+package MavlinkRoute
 
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
+	gin "github.com/gin-gonic/gin"
 
 	Chain "MavlinkProject/Server/backend/Handler/ProgressChain"
 )

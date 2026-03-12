@@ -10,12 +10,21 @@ import (
 	"github.com/bluenviron/gomavlib/v3"
 	"github.com/bluenviron/gomavlib/v3/pkg/dialects/common"
 	"github.com/bluenviron/gomavlib/v3/pkg/message"
+	"github.com/gin-gonic/gin"
 
 	Drones "MavlinkProject/Server/backend/Shared/Drones"
 )
 
-// ==================== MAVLink v1 Handler ====================
+// =============================================================================
+// 全局 Handler 池 - 用于管理多个 MAVLinkHandlerV1 实例
+// =============================================================================
 
+var (
+	handlerPool    = make(map[string]*MAVLinkHandlerV1)
+	handlerPoolMux sync.RWMutex
+)
+
+// ==================== MAVLink v1 Handler ====================
 type MAVLinkHandlerV1 struct {
 	handlerID string
 
@@ -35,6 +44,325 @@ type MAVLinkHandlerV1 struct {
 	attitudeChan  chan *AttitudeDataV1
 	batteryChan   chan *BatteryDataV1
 }
+
+
+// =============================================================================
+// MAVLinkHandlerV1 对象方法 - Create/Update/Delete
+// =============================================================================
+
+// Create 从 gin.Context 解析配置并初始化当前 MAVLinkHandlerV1
+// 解析请求中的配置, 设置到当前 handler 实例
+//
+// 参数说明:
+//   - ctx: gin.Context 指针, 包含请求的 JSON body
+//
+// 返回值:
+//   - error: 如果解析失败返回错误信息
+//
+// 注意:
+//   - 此方法会覆盖当前 handler 的配置
+//   - 如果 handler 正在运行, 需要重启才能生效
+func (h *MAVLinkHandlerV1) Create(ctx *gin.Context) error {
+	var config MAVLinkConfigV1
+
+	// 尝试从请求体解析配置
+	if err := ctx.ShouldBindJSON(&config); err != nil {
+		return fmt.Errorf("failed to parse handler config from request body: %v", err)
+	}
+
+	// 验证必需字段, 使用默认值填充
+	if config.ConnectionType == "" {
+		config.ConnectionType = ConnectionUDP
+	}
+	if config.SystemID == 0 {
+		config.SystemID = 1
+	}
+	if config.ComponentID == 0 {
+		config.ComponentID = 1
+	}
+	if config.ProtocolVersion == "" {
+		config.ProtocolVersion = ProtocolVersionV2
+	}
+	if config.HeartbeatRate == 0 {
+		config.HeartbeatRate = 1 * time.Second
+	}
+
+	// 根据连接类型验证参数
+	switch config.ConnectionType {
+	case ConnectionSerial:
+		if config.SerialPort == "" {
+			return fmt.Errorf("serial_port is required for serial connection")
+		}
+		if config.SerialBaud == 0 {
+			config.SerialBaud = 115200
+		}
+	case ConnectionUDP:
+		if config.UDPPort == 0 {
+			config.UDPPort = 14550
+		}
+	case ConnectionTCP:
+		if config.TCPAddr == "" {
+			return fmt.Errorf("tcp_addr is required for tcp connection")
+		}
+		if config.TCPPort == 0 {
+			config.TCPPort = 5760
+		}
+	}
+
+	// 更新当前 handler 的配置
+	h.config = config
+	h.handlerID = generateHandlerIDV1(5)
+
+	return nil
+}
+
+// Update 从 gin.Context 解析配置并更新当前 MAVLinkHandlerV1
+// 解析请求中的配置, 只更新提供的字段, 保留其他字段的原值
+//
+// 参数说明:
+//   - ctx: gin.Context 指针, 包含请求的 JSON body
+//
+// 返回值:
+//   - error: 如果解析失败返回错误信息
+//
+// 注意:
+//   - 此方法仅更新提供的字段, 其他字段保持不变
+//   - 如果 handler 正在运行, 需要重启才能生效
+func (h *MAVLinkHandlerV1) Update(ctx *gin.Context) error {
+	// 解析新配置
+	var newConfig MAVLinkConfigV1
+	if err := ctx.ShouldBindJSON(&newConfig); err != nil {
+		return fmt.Errorf("failed to parse updated config: %v", err)
+	}
+
+	// 更新配置 (只有提供的字段才会被更新)
+	if newConfig.ConnectionType != "" {
+		h.config.ConnectionType = newConfig.ConnectionType
+	}
+	if newConfig.SerialPort != "" {
+		h.config.SerialPort = newConfig.SerialPort
+	}
+	if newConfig.SerialBaud != 0 {
+		h.config.SerialBaud = newConfig.SerialBaud
+	}
+	if newConfig.UDPAddr != "" {
+		h.config.UDPAddr = newConfig.UDPAddr
+	}
+	if newConfig.UDPPort != 0 {
+		h.config.UDPPort = newConfig.UDPPort
+	}
+	if newConfig.TCPAddr != "" {
+		h.config.TCPAddr = newConfig.TCPAddr
+	}
+	if newConfig.TCPPort != 0 {
+		h.config.TCPPort = newConfig.TCPPort
+	}
+	if newConfig.SystemID != 0 {
+		h.config.SystemID = newConfig.SystemID
+	}
+	if newConfig.ComponentID != 0 {
+		h.config.ComponentID = newConfig.ComponentID
+	}
+	if newConfig.ProtocolVersion != "" {
+		h.config.ProtocolVersion = newConfig.ProtocolVersion
+	}
+	if newConfig.HeartbeatRate != 0 {
+		h.config.HeartbeatRate = newConfig.HeartbeatRate
+	}
+
+	return nil
+}
+
+// Delete 停止当前 handler 并从池中移除
+// 先尝试停止 handler (如果正在运行), 然后从池中移除
+//
+// 返回值:
+//   - error: 如果停止失败返回错误信息
+func (h *MAVLinkHandlerV1) Delete() error {
+	handlerID := h.handlerID
+
+	// 如果 handler 正在运行, 先停止
+	if h.started && !h.stopped {
+		if err := h.Stop(); err != nil {
+			return err
+		}
+	}
+
+	// 从池中删除
+	handlerPoolMux.Lock()
+	defer handlerPoolMux.Unlock()
+	delete(handlerPool, handlerID)
+
+	return nil
+}
+
+// GetID 获取当前 handler 的唯一标识符
+//
+// 返回值:
+//   - string: handler 的 ID
+func (h *MAVLinkHandlerV1) GetID() string {
+	return h.handlerID
+}
+
+// IsRunning 检查 handler 是否正在运行
+//
+// 返回值:
+//   - bool: 运行状态
+func (h *MAVLinkHandlerV1) IsRunning() bool {
+	return h.started && !h.stopped
+}
+
+// GetInfo 获取当前 handler 的基本信息
+//
+// 返回值:
+//   - map[string]interface{}: handler 的基本信息
+func (h *MAVLinkHandlerV1) GetInfo() map[string]interface{} {
+	return map[string]interface{}{
+		"handler_id":       h.handlerID,
+		"connection_type":  h.config.ConnectionType,
+		"system_id":        h.config.SystemID,
+		"component_id":     h.config.ComponentID,
+		"protocol_version": h.config.ProtocolVersion,
+		"started":          h.started,
+		"stopped":          h.stopped,
+	}
+}
+
+// =============================================================================
+// handlerPool 全局 CRUD 函数 (供路由调用)
+// =============================================================================
+
+// CreateHandlerV1 从 gin.Context 创建新的 MAVLinkHandlerV1
+// 解析请求中的配置, 创建 handler 并添加到池中
+//
+// 参数说明:
+//   - ctx: gin.Context 指针, 包含请求的 JSON body
+//
+// 返回值:
+//   - *MAVLinkHandlerV1: 创建的 handler 实例
+//   - string: handler 的唯一 ID
+//   - error: 如果创建失败返回错误信息
+func CreateHandlerV1(ctx *gin.Context) (*MAVLinkHandlerV1, string, error) {
+	var config MAVLinkConfigV1
+
+	if err := ctx.ShouldBindJSON(&config); err != nil {
+		return nil, "", fmt.Errorf("failed to parse handler config: %v", err)
+	}
+
+	// 验证必需字段
+	if config.ConnectionType == "" {
+		config.ConnectionType = ConnectionUDP
+	}
+	if config.SystemID == 0 {
+		config.SystemID = 1
+	}
+	if config.ComponentID == 0 {
+		config.ComponentID = 1
+	}
+	if config.ProtocolVersion == "" {
+		config.ProtocolVersion = ProtocolVersionV2
+	}
+	if config.HeartbeatRate == 0 {
+		config.HeartbeatRate = 1 * time.Second
+	}
+
+	// 根据连接类型验证参数
+	switch config.ConnectionType {
+	case ConnectionSerial:
+		if config.SerialPort == "" {
+			return nil, "", fmt.Errorf("serial_port is required for serial connection")
+		}
+		if config.SerialBaud == 0 {
+			config.SerialBaud = 115200
+		}
+	case ConnectionUDP:
+		if config.UDPPort == 0 {
+			config.UDPPort = 14550
+		}
+	case ConnectionTCP:
+		if config.TCPAddr == "" {
+			return nil, "", fmt.Errorf("tcp_addr is required for tcp connection")
+		}
+		if config.TCPPort == 0 {
+			config.TCPPort = 5760
+		}
+	}
+
+	// 创建 handler
+	handler := NewMAVLinkHandlerV1(config)
+	handlerID := handler.GetHandlerID()
+
+	// 添加到池中
+	handlerPoolMux.Lock()
+	handlerPool[handlerID] = handler
+	handlerPoolMux.Unlock()
+
+	return handler, handlerID, nil
+}
+
+// GetHandlerV1 根据 handlerID 获取 MAVLinkHandlerV1
+func GetHandlerV1(handlerID string) *MAVLinkHandlerV1 {
+	handlerPoolMux.RLock()
+	defer handlerPoolMux.RUnlock()
+	return handlerPool[handlerID]
+}
+
+// UpdateHandlerV1 根据 handlerID 更新 MAVLinkHandlerV1 的配置
+func UpdateHandlerV1(handlerID string, ctx *gin.Context) error {
+	handlerPoolMux.RLock()
+	handler, exists := handlerPool[handlerID]
+	handlerPoolMux.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("handler with id %s not found", handlerID)
+	}
+
+	return handler.Update(ctx)
+}
+
+// DeleteHandlerV1 根据 handlerID 删除 MAVLinkHandlerV1
+func DeleteHandlerV1(handlerID string) error {
+	handler := GetHandlerV1(handlerID)
+	if handler == nil {
+		return fmt.Errorf("handler with id %s not found", handlerID)
+	}
+	return handler.Delete()
+}
+
+// ListHandlerV1 列出所有已创建的 MAVLinkHandlerV1
+func ListHandlerV1() []map[string]interface{} {
+	handlerPoolMux.RLock()
+	defer handlerPoolMux.RUnlock()
+
+	result := make([]map[string]interface{}, 0, len(handlerPool))
+	for _, handler := range handlerPool {
+		result = append(result, handler.GetInfo())
+	}
+
+	return result
+}
+
+// GetHandlerCountV1 获取 handler 池中的 handler 数量
+func GetHandlerCountV1() int {
+	handlerPoolMux.RLock()
+	defer handlerPoolMux.RUnlock()
+	return len(handlerPool)
+}
+
+// ClearAllHandlersV1 清除 handler 池中的所有 handler
+func ClearAllHandlersV1() {
+	handlerPoolMux.Lock()
+	defer handlerPoolMux.Unlock()
+
+	for _, handler := range handlerPool {
+		if handler.started && !handler.stopped {
+			handler.Stop()
+		}
+	}
+
+	handlerPool = make(map[string]*MAVLinkHandlerV1)
+}
+
 
 // ==================== 构造函数 ====================
 
@@ -82,7 +410,7 @@ func generateHandlerIDV1(length int) string {
 	return result
 }
 
-// ==================== 连接管理 ====================
+// ==================== 连接管理 (MAVLink v1) ====================
 
 func (h *MAVLinkHandlerV1) Start() error {
 	h.mu.Lock()
@@ -200,15 +528,13 @@ func (h *MAVLinkHandlerV1) GetConnectionStatus() ConnectionStatus {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	if !h.started {
-		return ConnectionStatusDisconnected
-	}
-	if h.stopped {
+	if !h.started || h.stopped {
 		return ConnectionStatusDisconnected
 	}
 	if h.node == nil {
 		return ConnectionStatusError
 	}
+
 	return ConnectionStatusConnected
 }
 
@@ -218,7 +544,7 @@ func (h *MAVLinkHandlerV1) GetDroneStatus() string {
 	if h.drone != nil {
 		return string(h.drone.GetStatus())
 	}
-	return "unknown"
+	return "Error : unknown"
 }
 
 func (h *MAVLinkHandlerV1) GetDronePosition() Drones.Position {

@@ -1,7 +1,6 @@
 package Mavlink
 
 import (
-	Drones "MavlinkProject/Server/backend/Shared/Drones"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -10,30 +9,32 @@ import (
 	"github.com/bluenviron/gomavlib/v3/pkg/dialects/common"
 )
 
-type PackageHandler struct {
+/*
+	前名为 Mavlink_Packaged_Handler, 其主旨为分装V1API内较为原子化的操作, 以便于人工调度或者人工介入操作. 现为方便记忆, 改名为 Mavlink_Handler_v2
+
+	MavlinkHandler ver2的理念是因为ver1的API太过于原子化，不利于人工编排, 而ver2的API则是为了方便人工编排而设计的, 将一些常见的情况和需求连续的包装起来的API
+
+*/
+
+type MavlinkHandlerV2 struct {
 	handler      *MAVLinkHandlerV1
 	chainManager *ChainManager
-	drone        *Drones.Drone
 	mu           sync.RWMutex
 }
 
-func NewPackageHandler(handler *MAVLinkHandlerV1) *PackageHandler {
-	// 创建默认的无人机配置
-	droneConfig := Drones.DroneConfig{
-		SystemID:        1,
-		ComponentID:     1,
-		ProtocolVersion: "2.0",
-		HeartbeatRate:   1 * time.Second,
-		Timeout:         30 * time.Second,
+func (h *MavlinkHandlerV2)New(handler *MAVLinkHandlerV1) *MavlinkHandlerV2 {
+	if handler == nil {
+		fmt.Errorf("MavlinkHandlerV2 - ERROR: ver1 handler is nil")
+		return nil
 	}
-
-	return &PackageHandler{
+	return &MavlinkHandlerV2{
 		handler:      handler,
 		chainManager: GetChainManager(),
-		drone:        Drones.NewDrone("default", "Default Drone", "Generic", droneConfig),
 		mu:           sync.RWMutex{},
 	}
 }
+
+
 
 type TakeoffRequest struct {
 	Altitude float32 `json:"altitude" binding:"required"`
@@ -80,12 +81,13 @@ type StatusResponse struct {
 	Status    map[string]interface{} `json:"status"`
 }
 
-func (p *PackageHandler) Takeoff(req TakeoffRequest) TakeoffResponse {
+func (p *MavlinkHandlerV2) Takeoff(req TakeoffRequest) TakeoffResponse {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	handlerID := p.handler.GetHandlerID()
 	chain := p.chainManager.GetCurrentChain()
+	// 鲁棒性纠错
 	if chain == nil {
 		chainID := p.chainManager.CreateChain()
 		return TakeoffResponse{
@@ -95,7 +97,6 @@ func (p *PackageHandler) Takeoff(req TakeoffRequest) TakeoffResponse {
 			Message:   "创建了新调度链，请重新尝试",
 		}
 	}
-
 	if chain.IsFull() {
 		chainID := p.chainManager.CreateNewChainAndSwitch()
 		return TakeoffResponse{
@@ -146,7 +147,7 @@ func (p *PackageHandler) Takeoff(req TakeoffRequest) TakeoffResponse {
 	}
 }
 
-func (p *PackageHandler) Land(req LandRequest) LandResponse {
+func (p *MavlinkHandlerV2) Land(req LandRequest) LandResponse {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -212,7 +213,7 @@ func (p *PackageHandler) Land(req LandRequest) LandResponse {
 	}
 }
 
-func (p *PackageHandler) Move(req MoveRequest) MoveResponse {
+func (p *MavlinkHandlerV2) Move(req MoveRequest) MoveResponse {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -283,7 +284,7 @@ func (p *PackageHandler) Move(req MoveRequest) MoveResponse {
 	}
 }
 
-func (p *PackageHandler) GetStatus() StatusResponse {
+func (p *MavlinkHandlerV2) GetStatus() StatusResponse {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -313,30 +314,30 @@ func (p *PackageHandler) GetStatus() StatusResponse {
 	}
 }
 
-func (p *PackageHandler) SetGroundStation(name, id string, lat, lon, alt float64) {
+func (p *MavlinkHandlerV2) SetGroundStation(name, id string, lat, lon, alt float64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	p.handler.SetGroundStation(name, id, lat, lon, alt)
 }
 
-func (p *PackageHandler) SetAIAsDispatcher() {
+func (p *MavlinkHandlerV2) SetAIAsDispatcher() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	// v1 handler 不包含调度器功能，跳过
 }
 
-func (p *PackageHandler) SetUserAsDispatcher(username, email string) {
+func (p *MavlinkHandlerV2) SetUserAsDispatcher(username, email string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	// v1 handler 不包含调度器功能，跳过
 }
 
-func (p *PackageHandler) GetHandler() *MAVLinkHandlerV1 {
+func (p *MavlinkHandlerV2) GetHandler() *MAVLinkHandlerV1 {
 	return p.handler
 }
 
-func (p *PackageHandler) GetGroundStationInfo() GroundStationInfoV1 {
+func (p *MavlinkHandlerV2) GetGroundStationInfo() GroundStationInfoV1 {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -347,6 +348,6 @@ func (p *PackageHandler) GetGroundStationInfo() GroundStationInfoV1 {
 	return GroundStationInfoV1{}
 }
 
-func (p *PackageHandler) GetChainManager() *ChainManager {
+func (p *MavlinkHandlerV2) GetChainManager() *ChainManager {
 	return p.chainManager
 }

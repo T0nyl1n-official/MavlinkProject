@@ -388,6 +388,7 @@ func (c *Chain) ToJSON() (string, error) {
 	return string(data), nil
 }
 
+// 供存储的美化json输出
 func (c *Chain) ToPrettyJSON() (string, error) {
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
@@ -396,6 +397,7 @@ func (c *Chain) ToPrettyJSON() (string, error) {
 	return string(data), nil
 }
 
+// 保存链日志json
 func (c *Chain) SaveToFile(dir string) error {
 	jsonData, err := c.ToPrettyJSON()
 	if err != nil {

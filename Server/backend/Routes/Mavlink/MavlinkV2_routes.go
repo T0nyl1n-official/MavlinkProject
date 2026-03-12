@@ -1,7 +1,8 @@
-package routes
+package MavlinkRoute
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -9,12 +10,32 @@ import (
 	Mavlink "MavlinkProject/Server/backend/Handler/Mavlink"
 )
 
-func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandlerV1) {
-	packageHandler := Mavlink.NewPackageHandler(handler)
+var v2HandlerPoolMux sync.Mutex
 
-	v2Group := router.Group("/mavlink/v2/api")
+func getHandlerFromContext(c *gin.Context) *Mavlink.MAVLinkHandlerV1 {
+	handlerID := c.GetString("handler_id")
+	if handlerID == "" {
+		handlerID = c.Query("handler_id")
+	}
+	if handlerID == "" {
+		return nil
+	}
+	return Mavlink.GetHandlerV1(handlerID)
+}
+
+func SetupMavlinkV2Routes(router *gin.Engine) {
+	v2Group := router.Group("/mavlink/v2")
 	{
 		v2Group.POST("/takeoff", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
+
 			var req Mavlink.TakeoffRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{
@@ -24,11 +45,22 @@ func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandlerV1)
 				return
 			}
 
-			resp := packageHandler.Takeoff(req)
+			handlerV2 := Mavlink.MavlinkHandlerV2{}
+			handlerV2.New(handler)
+			resp := handlerV2.Takeoff(req)
 			c.JSON(http.StatusOK, resp)
 		})
 
 		v2Group.POST("/land", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
+
 			var req Mavlink.LandRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{
@@ -38,11 +70,22 @@ func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandlerV1)
 				return
 			}
 
-			resp := packageHandler.Land(req)
+			handlerV2 := Mavlink.MavlinkHandlerV2{}
+			handlerV2.New(handler)
+			resp := handlerV2.Land(req)
 			c.JSON(http.StatusOK, resp)
 		})
 
 		v2Group.POST("/move", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
+
 			var req Mavlink.MoveRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{
@@ -52,11 +95,22 @@ func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandlerV1)
 				return
 			}
 
-			resp := packageHandler.Move(req)
+			handlerV2 := Mavlink.MavlinkHandlerV2{}
+			handlerV2.New(handler)
+			resp := handlerV2.Move(req)
 			c.JSON(http.StatusOK, resp)
 		})
 
 		v2Group.POST("/return", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
+
 			err := handler.SendReturnToLaunch()
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{
@@ -72,6 +126,15 @@ func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandlerV1)
 		})
 
 		v2Group.POST("/mode", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
+
 			var req struct {
 				Mode string `json:"mode" binding:"required"`
 			}
@@ -98,11 +161,31 @@ func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandlerV1)
 		})
 
 		v2Group.GET("/status", func(c *gin.Context) {
-			resp := packageHandler.GetStatus()
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
+
+			handlerV2 := Mavlink.MavlinkHandlerV2{}
+			handlerV2.New(handler)
+			resp := handlerV2.GetStatus()
 			c.JSON(http.StatusOK, resp)
 		})
 
 		v2Group.GET("/position", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
+
 			position := handler.GetDronePosition()
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
@@ -111,6 +194,15 @@ func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandlerV1)
 		})
 
 		v2Group.GET("/battery", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
+
 			battery := handler.GetDroneBattery()
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
@@ -119,6 +211,15 @@ func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandlerV1)
 		})
 
 		v2Group.POST("/ground-station", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
+
 			var req struct {
 				Name      string  `json:"name" binding:"required"`
 				ID        string  `json:"id"`
@@ -134,7 +235,9 @@ func SetupMavlinkV2Routes(router *gin.Engine, handler *Mavlink.MAVLinkHandlerV1)
 				return
 			}
 
-			packageHandler.SetGroundStation(req.Name, req.ID, req.Latitude, req.Longitude, req.Altitude)
+			handlerV2 := Mavlink.MavlinkHandlerV2{}
+			handlerV2.New(handler)
+			handlerV2.SetGroundStation(req.Name, req.ID, req.Latitude, req.Longitude, req.Altitude)
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
 				"message": "地面站信息已设置",
@@ -153,7 +256,7 @@ func SetupDefaultMavlinkRoutesV2(router *gin.Engine) {
 		ProtocolVersion: Mavlink.ProtocolVersionV2,
 		HeartbeatRate:   1 * time.Second,
 	}
-	handler := Mavlink.NewMAVLinkHandlerV1(config)
+	_ = Mavlink.NewMAVLinkHandlerV1(config)
 
-	SetupMavlinkV2Routes(router, handler)
+	SetupMavlinkV2Routes(router)
 }
