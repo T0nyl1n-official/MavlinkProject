@@ -43,6 +43,15 @@ type BatteryStatus struct {
 	CellCount   int     `json:"cell_count"`
 }
 
+// 摄像头子对象 (备用)
+type Camera struct {
+	Model        string `json:"model"`
+	Resolution   string `json:"resolution"`
+	StorageGB    int    `json:"storage_gb"`
+	PhotoCount   int    `json:"photo_count"`
+	VideoSupport bool   `json:"video_support"`
+}
+
 type DroneConfig struct {
 	SystemID        int           `json:"system_id"`
 	ComponentID     int           `json:"component_id"`
@@ -52,7 +61,7 @@ type DroneConfig struct {
 }
 
 type Drone struct {
-	ID     string      `json:"id"`
+	ID     string      `json:"id" gorm:"primaryKey;uniqueIndex"`
 	Name   string      `json:"name"`
 	Model  string      `json:"model"`
 	Config DroneConfig `json:"config"`
@@ -62,6 +71,7 @@ type Drone struct {
 	Attitude Attitude      `json:"attitude"`
 	Velocity Velocity      `json:"velocity"`
 	Battery  BatteryStatus `json:"battery"`
+	Camera   Camera        `json:"camera"`
 
 	LastHeartbeat time.Time `json:"last_heartbeat"`
 	Connected     bool      `json:"connected"`
@@ -265,4 +275,53 @@ func (d *Drone) SetConfig(config DroneConfig) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.Config = config
+}
+
+func (d *Drone) HasCamera() bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.Camera.Model != ""
+}
+
+func (d *Drone) GetCamera() Camera {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.Camera
+}
+
+func (d *Drone) SetCamera(camera Camera) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.Camera = camera
+}
+
+func (d *Drone) CanTakePhoto() bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.Camera.Model != "" && d.Camera.PhotoCount < d.Camera.StorageGB*1000
+}
+
+func (d *Drone) TakePhoto() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.Camera.Model == "" {
+		return ErrNoCamera
+	}
+	if d.Camera.PhotoCount >= d.Camera.StorageGB*1000 {
+		return ErrStorageFull
+	}
+	d.Camera.PhotoCount++
+	return nil
+}
+
+var ErrNoCamera = &DroneError{"drone has no camera"}
+var ErrStorageFull = &DroneError{"camera storage is full"}
+
+type DroneError struct {
+	Message string
+}
+
+func (e *DroneError) Error() string {
+	return e.Message
 }

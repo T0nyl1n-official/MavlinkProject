@@ -243,6 +243,56 @@ func SetupMavlinkV2Routes(router *gin.Engine) {
 				"message": "地面站信息已设置",
 			})
 		})
+
+		v2Group.POST("/sensor-alert", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
+
+			var req Mavlink.SensorAlertRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
+
+			handlerV2 := Mavlink.MavlinkHandlerV2{}
+			handlerV2.New(handler)
+			resp := handlerV2.RespondToSensorAlert(req)
+			c.JSON(http.StatusOK, resp)
+		})
+
+		v2Group.POST("/return-charge", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
+
+			var req Mavlink.ReturnToChargeRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
+
+			handlerV2 := Mavlink.MavlinkHandlerV2{}
+			handlerV2.New(handler)
+			resp := handlerV2.ReturnToCharge(req)
+			c.JSON(http.StatusOK, resp)
+		})
 	}
 }
 

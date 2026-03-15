@@ -3,8 +3,11 @@ package Mavlink
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sync"
 	"time"
+
+	Charging "MavlinkProject/Server/backend/Shared/Charge"
 
 	"github.com/bluenviron/gomavlib/v3/pkg/dialects/common"
 )
@@ -22,7 +25,7 @@ type MavlinkHandlerV2 struct {
 	mu           sync.RWMutex
 }
 
-func (h *MavlinkHandlerV2)New(handler *MAVLinkHandlerV1) *MavlinkHandlerV2 {
+func (h *MavlinkHandlerV2) New(handler *MAVLinkHandlerV1) *MavlinkHandlerV2 {
 	if handler == nil {
 		fmt.Errorf("MavlinkHandlerV2 - ERROR: ver1 handler is nil")
 		return nil
@@ -33,8 +36,6 @@ func (h *MavlinkHandlerV2)New(handler *MAVLinkHandlerV1) *MavlinkHandlerV2 {
 		mu:           sync.RWMutex{},
 	}
 }
-
-
 
 type TakeoffRequest struct {
 	Altitude float32 `json:"altitude" binding:"required"`
@@ -350,4 +351,258 @@ func (p *MavlinkHandlerV2) GetGroundStationInfo() GroundStationInfoV1 {
 
 func (p *MavlinkHandlerV2) GetChainManager() *ChainManager {
 	return p.chainManager
+}
+
+// =============================================================================
+// 传感器警报响应 - 调度无人机到警报位置周围待命并拍照
+// =============================================================================
+
+type SensorAlertRequest struct {
+	Latitude     float64 `json:"latitude" binding:"required"`
+	Longitude    float64 `json:"longitude" binding:"required"`
+	Altitude     float64 `json:"altitude"`
+	Radius       float64 `json:"radius"`
+	PhotoCount   int     `json:"photo_count"`
+	AlertType    string  `json:"alert_type"`
+	AlertMessage string  `json:"alert_message"`
+}
+
+type SensorAlertResponse struct {
+	Success     bool                   `json:"success"`
+	HandlerID   string                 `json:"handler_id"`
+	ChainID     string                 `json:"chain_id"`
+	Message     string                 `json:"message"`
+	PhotosTaken int                    `json:"photos_taken"`
+	FinalPos    map[string]interface{} `json:"final_position"`
+	HasCamera   bool                   `json:"has_camera"`
+}
+
+func (p *MavlinkHandlerV2) RespondToSensorAlert(req SensorAlertRequest) SensorAlertResponse {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	handlerID := p.handler.GetHandlerID()
+	drone := p.handler.GetDrone()
+
+	hasCamera := drone.HasCamera()
+	photoCount := req.PhotoCount
+	if photoCount <= 0 {
+		photoCount = 10
+	}
+
+	radius := req.Radius
+	if radius <= 0 {
+		radius = 50
+	}
+
+	altitude := req.Altitude
+	if altitude <= 0 {
+		altitude = 100
+	}
+
+	chain := p.chainManager.GetCurrentChain()
+	if chain == nil {
+		chainID := p.chainManager.CreateChain()
+		return SensorAlertResponse{
+			Success:   false,
+			HandlerID: handlerID,
+			ChainID:   chainID,
+			Message:   "创建了新调度链，请重新尝试",
+		}
+	}
+
+	p.handler.Start()
+
+	p.handler.SetFlightMode(FlightModeGuided)
+
+	currentPos := p.handler.GetDronePosition()
+	if currentPos.Latitude == 0 && currentPos.Longitude == 0 {
+		return SensorAlertResponse{
+			Success:   false,
+			HandlerID: handlerID,
+			ChainID:   chain.GetID(),
+			Message:   "无法获取无人机当前位置",
+		}
+	}
+
+	orbitPoints := calculateOrbitPoints(req.Latitude, req.Longitude, radius, 8)
+	for i, point := range orbitPoints {
+		moveReq := MoveRequest{
+			Latitude:  point.Latitude,
+			Longitude: point.Longitude,
+			Altitude:  altitude,
+			Speed:     5,
+		}
+		p.Move(moveReq)
+		time.Sleep(2 * time.Second)
+
+		if hasCamera {
+			for j := 0; j < photoCount/8; j++ {
+				if drone.CanTakePhoto() {
+					drone.TakePhoto()
+				}
+			}
+		}
+		_ = i
+	}
+
+	holdReq := MoveRequest{
+		Latitude:  req.Latitude,
+		Longitude: req.Longitude,
+		Altitude:  altitude,
+		Speed:     0,
+	}
+	p.Move(holdReq)
+
+	finalPos := p.handler.GetDronePosition()
+
+	return SensorAlertResponse{
+		Success:     true,
+		HandlerID:   handlerID,
+		ChainID:     chain.GetID(),
+		Message:     fmt.Sprintf("已到达警报位置(%f, %f)周围待命", req.Latitude, req.Longitude),
+		PhotosTaken: photoCount,
+		FinalPos: map[string]interface{}{
+			"latitude":  finalPos.Latitude,
+			"longitude": finalPos.Longitude,
+			"altitude":  finalPos.Altitude,
+		},
+		HasCamera: hasCamera,
+	}
+}
+
+type OrbitPoint struct {
+	Latitude  float64
+	Longitude float64
+}
+
+func calculateOrbitPoints(centerLat, centerLon, radius float64, numPoints int) []OrbitPoint {
+	points := make([]OrbitPoint, numPoints)
+	earthRadius := 6371000.0
+
+	for i := 0; i < numPoints; i++ {
+		angle := float64(i) * (360.0 / float64(numPoints))
+		angleRad := angle * math.Pi / 180.0
+
+		latOffset := (radius / earthRadius) * 180.0 / math.Pi
+		lonOffset := (radius / (earthRadius * math.Cos(centerLat*math.Pi/180.0))) * 180.0 / math.Pi
+
+		points[i] = OrbitPoint{
+			Latitude:  centerLat + latOffset*math.Sin(angleRad),
+			Longitude: centerLon + lonOffset*math.Cos(angleRad),
+		}
+	}
+	return points
+}
+
+// =============================================================================
+// 返回充电地点 - 查找最近的空闲充电仓
+// =============================================================================
+
+type ReturnToChargeRequest struct {
+	Priority string `json:"priority"`
+}
+
+type ReturnToChargeResponse struct {
+	Success       bool                   `json:"success"`
+	HandlerID     string                 `json:"handler_id"`
+	ChainID       string                 `json:"chain_id"`
+	Message       string                 `json:"message"`
+	ChargingCase  map[string]interface{} `json:"charging_case"`
+	RouteDistance float64                `json:"route_distance"`
+}
+
+func (p *MavlinkHandlerV2) ReturnToCharge(req ReturnToChargeRequest) ReturnToChargeResponse {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	handlerID := p.handler.GetHandlerID()
+	drone := p.handler.GetDrone()
+
+	chain := p.chainManager.GetCurrentChain()
+	if chain == nil {
+		chainID := p.chainManager.CreateChain()
+		return ReturnToChargeResponse{
+			Success:   false,
+			HandlerID: handlerID,
+			ChainID:   chainID,
+			Message:   "创建了新调度链，请重新尝试",
+		}
+	}
+
+	chargingManager := Charging.GetChargingManager()
+	availableCases := chargingManager.GetAvailable()
+
+	if len(availableCases) == 0 {
+		return ReturnToChargeResponse{
+			Success:   false,
+			HandlerID: handlerID,
+			ChainID:   chain.GetID(),
+			Message:   "没有可用的充电仓",
+		}
+	}
+
+	currentPos := p.handler.GetDronePosition()
+	if currentPos.Latitude == 0 && currentPos.Longitude == 0 {
+		return ReturnToChargeResponse{
+			Success:   false,
+			HandlerID: handlerID,
+			ChainID:   chain.GetID(),
+			Message:   "无法获取无人机当前位置",
+		}
+	}
+
+	var nearestCase *Charging.ChargingCase
+	minDistance := float64(0)
+
+	for _, c := range availableCases {
+		dist := calculateDistance(currentPos.Latitude, currentPos.Longitude, c.Latitude, c.Longitude)
+		if nearestCase == nil || dist < minDistance {
+			minDistance = dist
+			nearestCase = c
+		}
+	}
+
+	if nearestCase == nil {
+		return ReturnToChargeResponse{
+			Success:   false,
+			HandlerID: handlerID,
+			ChainID:   chain.GetID(),
+			Message:   "未找到合适的充电仓",
+		}
+	}
+
+	nearestCase.Occupy(drone.GetID())
+
+	p.handler.SetFlightMode(FlightModeRTL)
+
+	landReq := LandRequest{
+		Latitude:  nearestCase.Latitude,
+		Longitude: nearestCase.Longitude,
+		Altitude:  nearestCase.Altitude,
+	}
+	p.Land(landReq)
+
+	return ReturnToChargeResponse{
+		Success:       true,
+		HandlerID:     handlerID,
+		ChainID:       chain.GetID(),
+		Message:       fmt.Sprintf("正在返回充电仓: %s", nearestCase.Name),
+		ChargingCase:  nearestCase.GetInfo(),
+		RouteDistance: minDistance,
+	}
+}
+
+func calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
+	const earthRadius = 6371000.0
+
+	dLat := (lat2 - lat1) * math.Pi / 180.0
+	dLon := (lon2 - lon1) * math.Pi / 180.0
+
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*math.Pi/180.0)*math.Cos(lat2*math.Pi/180.0)*
+			math.Sin(dLon/2)*math.Sin(dLon/2)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+
+	return earthRadius * c
 }
