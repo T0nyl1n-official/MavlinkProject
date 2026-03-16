@@ -366,7 +366,7 @@ type SensorAlertResponse struct {
 	HasCamera   bool                   `json:"has_camera"`
 }
 
-// RespondToSensorAlert - 快速处理传感器警报请求, 使用指定的通用处理方法来处理传感器传来的警报(警报来自redis DB3)
+// RespondToSensorAlert - 快速处理传感器警报请求, 使用指定的通用处理方法来处理传感器传来的警报(警报来自redis DB5)
 func (p *MavlinkHandlerV2) RespondToSensorAlert(req SensorAlertRequest) SensorAlertResponse {
 	p.mu.Lock()
 	defer p.mu.Unlock()
