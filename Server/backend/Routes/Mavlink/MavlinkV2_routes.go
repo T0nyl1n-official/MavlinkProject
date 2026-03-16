@@ -8,7 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	Mavlink "MavlinkProject/Server/backend/Handler/Mavlink"
-	Jwt "MavlinkProject/Server/Backend/Middles/Jwt"
+	JwtMiddleware "MavlinkProject/Server/backend/Middles"
+	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
+	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 )
 
 var v2HandlerPoolMux sync.Mutex
@@ -24,8 +26,10 @@ func getHandlerFromContext(c *gin.Context) *Mavlink.MAVLinkHandlerV1 {
 	return Mavlink.GetHandlerV1(handlerID)
 }
 
-func SetupMavlinkV2Routes(router *gin.Engine) {
+func SetupMavlinkV2Routes(router *gin.Engine, jwtManager interface{}, tokenManager interface{}) {
 	v2Group := router.Group("/mavlink/v2")
+	v2Group.Use(JwtMiddleware.JwtAuthMiddleWareWithRedis(jwtManager.(*jwtUtils.JWTManager), tokenManager.(*Jwt.RedisTokenManager), nil))
+
 	{
 		v2Group.POST("/takeoff", func(c *gin.Context) {
 			handler := getHandlerFromContext(c)
@@ -298,7 +302,7 @@ func SetupMavlinkV2Routes(router *gin.Engine) {
 	v2Group.Use()
 }
 
-func SetupDefaultMavlinkRoutesV2(router *gin.Engine) {
+func SetupDefaultMavlinkRoutesV2(router *gin.Engine, jwtManager interface{}, tokenManager interface{}) {
 	config := Mavlink.MAVLinkConfigV1{
 		ConnectionType:  Mavlink.ConnectionUDP,
 		UDPAddr:         "0.0.0.0",
@@ -310,5 +314,5 @@ func SetupDefaultMavlinkRoutesV2(router *gin.Engine) {
 	}
 	_ = Mavlink.NewMAVLinkHandlerV1(config)
 
-	SetupMavlinkV2Routes(router)
+	SetupMavlinkV2Routes(router, jwtManager, tokenManager)
 }

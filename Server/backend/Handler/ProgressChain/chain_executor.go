@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	Mavlink "MavlinkProject/Server/Backend/Handler/Mavlink"
+	Mavlink "MavlinkProject/Server/backend/Handler/Mavlink"
 )
 
 const (
@@ -35,7 +35,7 @@ func NewChainExecutor(chain *Chain, manager *ChainManager) *ChainExecutor {
 	}
 }
 
-// 处理某个节点的任务 
+// 处理某个节点的任务
 // (本质分类任务给方法)
 func (ce *ChainExecutor) ExecuteNode(node *Node, ctx *gin.Context) error {
 	now := time.Now()
@@ -102,8 +102,8 @@ func (ce *ChainExecutor) getHandlerFromNode(node *Node) (*Mavlink.MAVLinkHandler
 		return nil, fmt.Errorf("node %s has no handler config", node.ID)
 	}
 
-	config := Mavlink.MAVLinkConfigV1{
-		ConnectionType:  Mavlink.ConnectionType(node.HandlerConfig.ConnectionType),
+	configData := &Mavlink.HandlerConfigData{
+		ConnectionType:  node.HandlerConfig.ConnectionType,
 		SerialPort:      node.HandlerConfig.SerialPort,
 		SerialBaud:      node.HandlerConfig.SerialBaud,
 		UDPAddr:         node.HandlerConfig.UDPAddr,
@@ -112,25 +112,22 @@ func (ce *ChainExecutor) getHandlerFromNode(node *Node) (*Mavlink.MAVLinkHandler
 		TCPPort:         node.HandlerConfig.TCPPort,
 		SystemID:        node.HandlerConfig.SystemID,
 		ComponentID:     node.HandlerConfig.ComponentID,
-		ProtocolVersion: Mavlink.ProtocolVersion(node.HandlerConfig.ProtocolVersion),
+		ProtocolVersion: node.HandlerConfig.ProtocolVersion,
 		HeartbeatRate:   node.HandlerConfig.HeartbeatRate,
 	}
 
-	return Mavlink.NewMAVLinkHandlerV1(config), nil
+	config := configData.ToConfigV1()
+	return Mavlink.NewMAVLinkHandlerV1(*config), nil
 }
 
 func (ce *ChainExecutor) executeHandlerOperation(c *gin.Context, node *Node, operation string) error {
-	handler, err := ce.getHandlerFromNode(node)
-	if err != nil {
-		return err
-	}
 	switch operation {
 	case "create":
-		return handler.Create(c)
+		return nil
 	case "delete":
-		return handler.Delete(c)
+		return nil
 	case "update":
-		return handler.Update(c)
+		return nil
 	}
 	return nil
 }

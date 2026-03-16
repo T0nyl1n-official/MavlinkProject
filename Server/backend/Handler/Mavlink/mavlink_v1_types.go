@@ -4,7 +4,6 @@ import (
 	"time"
 
 	Drones "MavlinkProject/Server/backend/Shared/Drones"
-	ProgressNode "MavlinkProject/Server/backend/Handler/ProgressChain"
 )
 
 // ==================== v1 专用类型定义 ====================
@@ -122,14 +121,34 @@ type BatteryDataV1 struct {
 	Timestamp   time.Time
 }
 
+// =============================================================================
+// 类型转换函数 - 用于 HandlerConfig 数据交换
+// =============================================================================
 
-func (hc *MAVLinkConfigV1) ConfigToNodeHandler() *ProgressNode.HandlerConfig {
+// HandlerConfigData 用于链配置传递的中间数据结构
+// 不引用 ProgressChain 包以避免循环依赖
+type HandlerConfigData struct {
+	ConnectionType  string
+	SerialPort      string
+	SerialBaud      int
+	UDPAddr         string
+	UDPPort         int
+	TCPAddr         string
+	TCPPort         int
+	SystemID        int
+	ComponentID     int
+	ProtocolVersion string
+	HeartbeatRate   time.Duration
+}
+
+// ToConfigV1 将 HandlerConfigData 转换为 MAVLinkConfigV1
+func (hc *HandlerConfigData) ToConfigV1() *MAVLinkConfigV1 {
 	if hc == nil {
-		return &ProgressNode.HandlerConfig{}
+		return &MAVLinkConfigV1{}
 	}
 
-	return &ProgressNode.HandlerConfig{
-		ConnectionType:  string(hc.ConnectionType),
+	return &MAVLinkConfigV1{
+		ConnectionType:  ConnectionType(hc.ConnectionType),
 		SerialPort:      hc.SerialPort,
 		SerialBaud:      hc.SerialBaud,
 		UDPAddr:         hc.UDPAddr,
@@ -138,7 +157,28 @@ func (hc *MAVLinkConfigV1) ConfigToNodeHandler() *ProgressNode.HandlerConfig {
 		TCPPort:         hc.TCPPort,
 		SystemID:        hc.SystemID,
 		ComponentID:     hc.ComponentID,
-		ProtocolVersion: string(hc.ProtocolVersion),
+		ProtocolVersion: ProtocolVersion(hc.ProtocolVersion),
 		HeartbeatRate:   hc.HeartbeatRate,
+	}
+}
+
+// ToHandlerConfigData 将 MAVLinkConfigV1 转换为 HandlerConfigData
+func (v1Config *MAVLinkConfigV1) ToHandlerConfigData() *HandlerConfigData {
+	if v1Config == nil {
+		return &HandlerConfigData{}
+	}
+
+	return &HandlerConfigData{
+		ConnectionType:  string(v1Config.ConnectionType),
+		SerialPort:      v1Config.SerialPort,
+		SerialBaud:      v1Config.SerialBaud,
+		UDPAddr:         v1Config.UDPAddr,
+		UDPPort:         v1Config.UDPPort,
+		TCPAddr:         v1Config.TCPAddr,
+		TCPPort:         v1Config.TCPPort,
+		SystemID:        v1Config.SystemID,
+		ComponentID:     v1Config.ComponentID,
+		ProtocolVersion: string(v1Config.ProtocolVersion),
+		HeartbeatRate:   v1Config.HeartbeatRate,
 	}
 }
