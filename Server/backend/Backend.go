@@ -75,7 +75,6 @@ func (bs *BackendServer) New() {
 	bs.Verification = verification
 
 	UsersHandler.SetVerification(verification)
-	UsersHandler.SetJWTManager(jwtManager)
 }
 
 func (bs *BackendServer) Run(port string) {
