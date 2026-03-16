@@ -64,20 +64,20 @@ type Drone struct {
 	ID     string      `json:"id" gorm:"primaryKey;uniqueIndex"`
 	Name   string      `json:"name"`
 	Model  string      `json:"model"`
-	Config DroneConfig `json:"config"`
+	Config DroneConfig `json:"config" gorm:"serializer:json"`
 
-	Status   DroneStatus   `json:"status"`
-	Position Position      `json:"position"`
-	Attitude Attitude      `json:"attitude"`
-	Velocity Velocity      `json:"velocity"`
-	Battery  BatteryStatus `json:"battery"`
-	Camera   Camera        `json:"camera"`
+	Status   DroneStatus   `json:"status" gorm:"serializer:json"`
+	Position Position      `json:"position" gorm:"serializer:json"`
+	Attitude Attitude      `json:"attitude" gorm:"serializer:json"`
+	Velocity Velocity      `json:"velocity" gorm:"serializer:json"`
+	Battery  BatteryStatus `json:"battery" gorm:"serializer:json"`
+	Camera   Camera        `json:"camera" gorm:"serializer:json"`
 
 	LastHeartbeat time.Time `json:"last_heartbeat"`
 	Connected     bool      `json:"connected"`
 
-	mu             sync.RWMutex
-	eventCallbacks map[string]EventCallback
+	mu             sync.RWMutex             `gorm:"-"`
+	eventCallbacks map[string]EventCallback `gorm:"-"`
 }
 
 type EventCallback func(event DroneEvent)

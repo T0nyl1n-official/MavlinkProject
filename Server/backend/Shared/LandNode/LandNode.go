@@ -20,17 +20,17 @@ type LandNodeConfig struct {
 type MessageHandler func(droneID string, message interface{})
 
 type LandNode struct {
-	ID     string         `json:"id"`
+	ID     string         `json:"id" gorm:"primaryKey;uniqueIndex"`
 	Name   string         `json:"name"`
-	Config LandNodeConfig `json:"config"`
+	Config LandNodeConfig `json:"config" gorm:"serializer:json"`
 
-	drones map[string]*Drones.Drone `json:"-"`
-	mu     sync.RWMutex
+	drones map[string]*Drones.Drone `gorm:"-"`
+	mu     sync.RWMutex             `gorm:"-"`
 
-	messageHandlers map[string]MessageHandler
+	messageHandlers map[string]MessageHandler `gorm:"-"`
 
 	started  bool
-	stopChan chan bool
+	stopChan chan bool `gorm:"-"`
 }
 
 func NewLandNode(id, name string, config LandNodeConfig) *LandNode {
@@ -51,7 +51,6 @@ func NewLandNode(id, name string, config LandNodeConfig) *LandNode {
 	}
 }
 
-// 无人机 容器操作-内部方法
 func (ln *LandNode) GetID() string {
 	ln.mu.RLock()
 	defer ln.mu.RUnlock()
@@ -82,17 +81,12 @@ func (ln *LandNode) SetConfig(config LandNodeConfig) {
 	ln.Config = config
 }
 
-// 无人机 外部方法
 func (ln *LandNode) AddDrone(drone *Drones.Drone) error {
 	ln.mu.Lock()
 	defer ln.mu.Unlock()
 
 	if len(ln.drones) >= ln.Config.MaxDrones {
 		return fmt.Errorf("已达到最大无人机数量限制: %d", ln.Config.MaxDrones)
-	}
-
-	if _, exists := ln.drones[drone.GetID()]; exists {
-		return fmt.Errorf("无人机已存在: %s", drone.GetID())
 	}
 
 	ln.drones[drone.GetID()] = drone
@@ -111,16 +105,10 @@ func (ln *LandNode) RemoveDrone(droneID string) error {
 	return nil
 }
 
-func (ln *LandNode) GetDrone(droneID string) (*Drones.Drone, error) {
+func (ln *LandNode) GetDrone(droneID string) *Drones.Drone {
 	ln.mu.RLock()
 	defer ln.mu.RUnlock()
-
-	drone, exists := ln.drones[droneID]
-	if !exists {
-		return nil, fmt.Errorf("无人机不存在: %s", droneID)
-	}
-
-	return drone, nil
+	return ln.drones[droneID]
 }
 
 func (ln *LandNode) GetAllDrones() []*Drones.Drone {
@@ -131,7 +119,6 @@ func (ln *LandNode) GetAllDrones() []*Drones.Drone {
 	for _, drone := range ln.drones {
 		drones = append(drones, drone)
 	}
-
 	return drones
 }
 
@@ -147,23 +134,14 @@ func (ln *LandNode) RegisterMessageHandler(messageType string, handler MessageHa
 	ln.messageHandlers[messageType] = handler
 }
 
-func (ln *LandNode) UnregisterMessageHandler(messageType string) {
-	ln.mu.Lock()
-	defer ln.mu.Unlock()
-	delete(ln.messageHandlers, messageType)
-}
-
 func (ln *LandNode) HandleMessage(droneID string, message interface{}) {
 	ln.mu.RLock()
 	defer ln.mu.RUnlock()
 
-	if handler, exists := ln.messageHandlers["*"]; exists {
-		handler(droneID, message)
-	}
-
-	messageType := fmt.Sprintf("%T", message)
-	if handler, exists := ln.messageHandlers[messageType]; exists {
-		handler(droneID, message)
+	if messageType, ok := message.(string); ok {
+		if handler, exists := ln.messageHandlers[messageType]; exists {
+			handler(droneID, message)
+		}
 	}
 }
 
@@ -237,7 +215,7 @@ func (ln *LandNode) BroadcastMessage(message interface{}) error {
 		return fmt.Errorf("地面站未在运行")
 	}
 
-	for droneID, _ := range ln.drones {
+	for droneID := range ln.drones {
 		ln.HandleMessage(droneID, message)
 	}
 
