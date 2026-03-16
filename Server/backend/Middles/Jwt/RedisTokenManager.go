@@ -11,13 +11,13 @@ import (
 
 // TokenInfo 存储在Redis中的Token信息
 type TokenInfo struct {
-	Token      string    `json:"token"`
-	UserID     uint      `json:"user_id"`
-	Username   string    `json:"username"`
-	Role       string    `json:"role"`
-	ExpiresAt  time.Time `json:"expires_at"`
-	CreatedAt  time.Time `json:"created_at"`
-	IsActive   bool      `json:"is_active"`
+	Token     string    `json:"token"`
+	UserID    uint      `json:"user_id"`
+	Username  string    `json:"username"`
+	Role      string    `json:"role"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+	IsActive  bool      `json:"is_active"`
 }
 
 // RedisTokenManager Redis Token管理器
@@ -37,13 +37,13 @@ func NewRedisTokenManager(redisClient *redis.Client) *RedisTokenManager {
 // StoreToken 存储Token到Redis
 func (rtm *RedisTokenManager) StoreToken(token string, userID uint, username, role string, expiresAt time.Time) error {
 	tokenInfo := TokenInfo{
-		Token:      token,
-		UserID:     userID,
-		Username:   username,
-		Role:       role,
-		ExpiresAt:  expiresAt,
-		CreatedAt:  time.Now(),
-		IsActive:   true,
+		Token:     token,
+		UserID:    userID,
+		Username:  username,
+		Role:      role,
+		ExpiresAt: expiresAt,
+		CreatedAt: time.Now(),
+		IsActive:  true,
 	}
 
 	data, err := json.Marshal(tokenInfo)

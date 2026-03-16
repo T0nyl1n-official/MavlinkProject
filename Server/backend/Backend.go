@@ -16,6 +16,7 @@ type BackendServer struct {
 	Router       *gin.Engine
 	Mysql        *gorm.DB
 	RedisClient  *[]redis.Client
+	TokenRedis   *redis.Client
 	Verification Verification.VerificationManager
 }
 
@@ -30,6 +31,7 @@ func (bs *BackendServer) New() {
 		DBConfig.Agent,
 		DBConfig.Drone,
 		DBConfig.Sensor,
+		DBConfig.Token,
 		DBConfig.Verification,
 	}
 
@@ -51,9 +53,12 @@ func (bs *BackendServer) New() {
 		log.Fatalf("MavlinkProject - Backend : 初始化Mysql失败 : %v", err)
 	}
 
+	tokenRedis := redisClients[len(redisClients)-1]
+
 	bs.Router = router
 	bs.Mysql = mysqlDB
 	bs.RedisClient = &redisClients
+	bs.TokenRedis = &tokenRedis
 	bs.Verification = verification
 
 }

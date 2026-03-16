@@ -296,3 +296,28 @@ func (h *UserHandler) SendEmailVerification(c *gin.Context) {
 		"email":   req.Email,
 	})
 }
+
+func (h *UserHandler) LogoutUser(c *gin.Context) {
+	var user User.User
+
+	userID := c.Param("id")
+
+	// validate userID
+	if idErr := ErrorsMgr.ValidateRequired("user_id", userID); idErr != nil {
+		ErrorsMgr.HandleError(c, idErr)
+		return
+	}
+
+	// 检查用户是否存在
+	err := h.Mysql.First(&user, userID).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			errorDetail := ErrorsMgr.GlobalNewError(ErrorsMgr.ErrUserNotFound, "用户不存在", nil)
+			ErrorsMgr.HandleError(c, errorDetail)
+		} else {
+			errorDetail := ErrorsMgr.GlobalCreateDatabaseError("查询用户", "users", err)
+			ErrorsMgr.HandleError(c, errorDetail)
+		}
+		return
+	}
+}
