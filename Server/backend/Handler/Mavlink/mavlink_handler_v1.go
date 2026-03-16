@@ -45,7 +45,6 @@ type MAVLinkHandlerV1 struct {
 	batteryChan   chan *BatteryDataV1
 }
 
-
 // =============================================================================
 // MAVLinkHandlerV1 对象方法 - Create/Update/Delete
 // =============================================================================
@@ -363,7 +362,6 @@ func ClearAllHandlersV1() {
 	handlerPool = make(map[string]*MAVLinkHandlerV1)
 }
 
-
 // ==================== 构造函数 ====================
 
 func NewMAVLinkHandlerV1(config MAVLinkConfigV1) *MAVLinkHandlerV1 {
@@ -536,6 +534,12 @@ func (h *MAVLinkHandlerV1) GetConnectionStatus() ConnectionStatus {
 	}
 
 	return ConnectionStatusConnected
+}
+
+func (h *MAVLinkHandlerV1) GetDrone() *Drones.Drone {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.drone
 }
 
 func (h *MAVLinkHandlerV1) GetDroneStatus() string {

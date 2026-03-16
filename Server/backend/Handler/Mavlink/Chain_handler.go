@@ -34,6 +34,12 @@ type DispatchChain struct {
 	mu        sync.RWMutex
 }
 
+func (c *DispatchChain) GetID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.ChainID
+}
+
 func generateChainID() string {
 	const digits = "0123456789"
 	var result string
@@ -134,7 +140,7 @@ func (c *DispatchChain) GetInfo() map[string]interface{} {
 
 type ChainManager struct {
 	chains    map[string]*DispatchChain
-	currentID string
+	ID 		  string
 	mu        sync.RWMutex
 	maxSize   int
 }
@@ -152,7 +158,7 @@ func (cm *ChainManager) CreateChain() string {
 
 	chain := NewDispatchChain()
 	cm.chains[chain.ChainID] = chain
-	cm.currentID = chain.ChainID
+	cm.ID = chain.ChainID
 
 	return chain.ChainID
 }
@@ -161,10 +167,10 @@ func (cm *ChainManager) GetCurrentChain() *DispatchChain {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
-	if cm.currentID == "" {
+	if cm.ID == "" {
 		return nil
 	}
-	return cm.chains[cm.currentID]
+	return cm.chains[cm.ID]
 }
 
 func (cm *ChainManager) GetChain(chainID string) *DispatchChain {
@@ -173,15 +179,15 @@ func (cm *ChainManager) GetChain(chainID string) *DispatchChain {
 	return cm.chains[chainID]
 }
 
-func (cm *ChainManager) GetCurrentChainID() string {
+func (cm *ChainManager) GetChainID() string {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
-	return cm.currentID
+	return cm.ID
 }
 
 func (cm *ChainManager) AddRecordToCurrentChain(handlerID, route, params, result string, success bool) error {
 	cm.mu.RLock()
-	chain, ok := cm.chains[cm.currentID]
+	chain, ok := cm.chains[cm.ID]
 	cm.mu.RUnlock()
 
 	if !ok || chain == nil {
@@ -209,7 +215,7 @@ func (cm *ChainManager) SwitchChain(chainID string) error {
 		return fmt.Errorf("chain not found: %s", chainID)
 	}
 
-	cm.currentID = chainID
+	cm.ID = chainID
 	return nil
 }
 
@@ -219,7 +225,7 @@ func (cm *ChainManager) CreateNewChainAndSwitch() string {
 
 	chain := NewDispatchChain()
 	cm.chains[chain.ChainID] = chain
-	cm.currentID = chain.ChainID
+	cm.ID = chain.ChainID
 
 	return chain.ChainID
 }
@@ -232,8 +238,8 @@ func (cm *ChainManager) DeleteChain(chainID string) error {
 		return fmt.Errorf("chain not found")
 	}
 
-	if cm.currentID == chainID {
-		cm.currentID = ""
+	if cm.ID == chainID {
+		cm.ID = ""
 	}
 
 	delete(cm.chains, chainID)

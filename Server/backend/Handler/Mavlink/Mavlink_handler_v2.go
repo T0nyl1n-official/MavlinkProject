@@ -315,23 +315,12 @@ func (p *MavlinkHandlerV2) GetStatus() StatusResponse {
 	}
 }
 
+// SetGroundStation - 设置当前无人机的地面站信息
 func (p *MavlinkHandlerV2) SetGroundStation(name, id string, lat, lon, alt float64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	p.handler.SetGroundStation(name, id, lat, lon, alt)
-}
-
-func (p *MavlinkHandlerV2) SetAIAsDispatcher() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	// v1 handler 不包含调度器功能，跳过
-}
-
-func (p *MavlinkHandlerV2) SetUserAsDispatcher(username, email string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	// v1 handler 不包含调度器功能，跳过
 }
 
 func (p *MavlinkHandlerV2) GetHandler() *MAVLinkHandlerV1 {
@@ -377,6 +366,7 @@ type SensorAlertResponse struct {
 	HasCamera   bool                   `json:"has_camera"`
 }
 
+// RespondToSensorAlert - 快速处理传感器警报请求, 使用指定的通用处理方法来处理传感器传来的警报(警报来自redis DB3)
 func (p *MavlinkHandlerV2) RespondToSensorAlert(req SensorAlertRequest) SensorAlertResponse {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -420,7 +410,7 @@ func (p *MavlinkHandlerV2) RespondToSensorAlert(req SensorAlertRequest) SensorAl
 		return SensorAlertResponse{
 			Success:   false,
 			HandlerID: handlerID,
-			ChainID:   chain.GetID(),
+			ChainID:   chain.ChainID,
 			Message:   "无法获取无人机当前位置",
 		}
 	}
@@ -459,7 +449,7 @@ func (p *MavlinkHandlerV2) RespondToSensorAlert(req SensorAlertRequest) SensorAl
 	return SensorAlertResponse{
 		Success:     true,
 		HandlerID:   handlerID,
-		ChainID:     chain.GetID(),
+		ChainID:     chain.ChainID,
 		Message:     fmt.Sprintf("已到达警报位置(%f, %f)周围待命", req.Latitude, req.Longitude),
 		PhotosTaken: photoCount,
 		FinalPos: map[string]interface{}{
@@ -500,7 +490,8 @@ func calculateOrbitPoints(centerLat, centerLon, radius float64, numPoints int) [
 // =============================================================================
 
 type ReturnToChargeRequest struct {
-	Priority string `json:"priority"`
+	Priority       string `json:"priority"`
+	ChargingCaseID string `json:"charging_case_id"`
 }
 
 type ReturnToChargeResponse struct {
@@ -512,6 +503,7 @@ type ReturnToChargeResponse struct {
 	RouteDistance float64                `json:"route_distance"`
 }
 
+// ReturnToCharge - 指定目前操控的无人机(从handler中获取)返回充电地点(从req中获取地点, 如果为nil, 则查找最近的空闲充电仓)
 func (p *MavlinkHandlerV2) ReturnToCharge(req ReturnToChargeRequest) ReturnToChargeResponse {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -531,18 +523,8 @@ func (p *MavlinkHandlerV2) ReturnToCharge(req ReturnToChargeRequest) ReturnToCha
 	}
 
 	chargingManager := Charging.GetChargingManager()
-	availableCases := chargingManager.GetAvailable()
-
-	if len(availableCases) == 0 {
-		return ReturnToChargeResponse{
-			Success:   false,
-			HandlerID: handlerID,
-			ChainID:   chain.GetID(),
-			Message:   "没有可用的充电仓",
-		}
-	}
-
 	currentPos := p.handler.GetDronePosition()
+
 	if currentPos.Latitude == 0 && currentPos.Longitude == 0 {
 		return ReturnToChargeResponse{
 			Success:   false,
@@ -552,18 +534,51 @@ func (p *MavlinkHandlerV2) ReturnToCharge(req ReturnToChargeRequest) ReturnToCha
 		}
 	}
 
-	var nearestCase *Charging.ChargingCase
-	minDistance := float64(0)
+	var targetCase *Charging.ChargingCase
 
-	for _, c := range availableCases {
-		dist := calculateDistance(currentPos.Latitude, currentPos.Longitude, c.Latitude, c.Longitude)
-		if nearestCase == nil || dist < minDistance {
-			minDistance = dist
-			nearestCase = c
+	if req.ChargingCaseID != "" {
+		specificCase := chargingManager.Get(req.ChargingCaseID)
+		if specificCase == nil {
+			return ReturnToChargeResponse{
+				Success:   false,
+				HandlerID: handlerID,
+				ChainID:   chain.GetID(),
+				Message:   fmt.Sprintf("指定的充电仓 %s 不存在", req.ChargingCaseID),
+			}
+		}
+
+		if !specificCase.IsAvailable() {
+			return ReturnToChargeResponse{
+				Success:   false,
+				HandlerID: handlerID,
+				ChainID:   chain.GetID(),
+				Message:   fmt.Sprintf("指定的充电仓 %s 当前不可用 (状态: %s)", req.ChargingCaseID, specificCase.Status),
+			}
+		}
+
+		targetCase = specificCase
+	} else {
+		availableCases := chargingManager.GetAvailable()
+		if len(availableCases) == 0 {
+			return ReturnToChargeResponse{
+				Success:   false,
+				HandlerID: handlerID,
+				ChainID:   chain.GetID(),
+				Message:   "没有可用的充电仓",
+			}
+		}
+
+		minDistance := float64(0)
+		for _, c := range availableCases {
+			dist := calculateDistance(currentPos.Latitude, currentPos.Longitude, c.Latitude, c.Longitude)
+			if targetCase == nil || dist < minDistance {
+				minDistance = dist
+				targetCase = c
+			}
 		}
 	}
 
-	if nearestCase == nil {
+	if targetCase == nil {
 		return ReturnToChargeResponse{
 			Success:   false,
 			HandlerID: handlerID,
@@ -572,14 +587,23 @@ func (p *MavlinkHandlerV2) ReturnToCharge(req ReturnToChargeRequest) ReturnToCha
 		}
 	}
 
-	nearestCase.Occupy(drone.GetID())
+	if err := targetCase.Occupy(drone.GetID()); err != nil {
+		return ReturnToChargeResponse{
+			Success:   false,
+			HandlerID: handlerID,
+			ChainID:   chain.GetID(),
+			Message:   fmt.Sprintf("占领充电仓失败: %v", err),
+		}
+	}
+
+	routeDistance := calculateDistance(currentPos.Latitude, currentPos.Longitude, targetCase.Latitude, targetCase.Longitude)
 
 	p.handler.SetFlightMode(FlightModeRTL)
 
 	landReq := LandRequest{
-		Latitude:  nearestCase.Latitude,
-		Longitude: nearestCase.Longitude,
-		Altitude:  nearestCase.Altitude,
+		Latitude:  targetCase.Latitude,
+		Longitude: targetCase.Longitude,
+		Altitude:  targetCase.Altitude,
 	}
 	p.Land(landReq)
 
@@ -587,12 +611,13 @@ func (p *MavlinkHandlerV2) ReturnToCharge(req ReturnToChargeRequest) ReturnToCha
 		Success:       true,
 		HandlerID:     handlerID,
 		ChainID:       chain.GetID(),
-		Message:       fmt.Sprintf("正在返回充电仓: %s", nearestCase.Name),
-		ChargingCase:  nearestCase.GetInfo(),
-		RouteDistance: minDistance,
+		Message:       fmt.Sprintf("正在返回充电仓: %s", targetCase.Name),
+		ChargingCase:  targetCase.GetInfo(),
+		RouteDistance: routeDistance,
 	}
 }
 
+// returnToCharge - 子方法, 计算无人机到充电仓的距离
 func calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
 	const earthRadius = 6371000.0
 
