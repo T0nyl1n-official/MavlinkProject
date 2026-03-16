@@ -1,6 +1,7 @@
 package UsersHandler
 
 import (
+	"crypto/md5"
 	"fmt"
 	"strconv"
 
@@ -8,26 +9,32 @@ import (
 	gorm "gorm.io/gorm"
 
 	ErrorsMgr "MavlinkProject/Server/backend/Middles/ErrorMiddleHandle/ErrorsMgr"
+	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 	User "MavlinkProject/Server/backend/Shared/User"
 	Verification "MavlinkProject/Server/backend/Utils/Verification"
 )
 
 type UserHandler struct {
-	Mysql        *gorm.DB
-	Verification Verification.VerificationManager
+	Mysql      *gorm.DB
+	JWTManager *jwtUtils.JWTManager
 }
 
 var globalVerification Verification.VerificationManager
+var globalJWTManager *jwtUtils.JWTManager
 
 func SetVerification(v Verification.VerificationManager) {
 	globalVerification = v
+}
+
+func SetJWTManager(jwtMgr *jwtUtils.JWTManager) {
+	globalJWTManager = jwtMgr
 }
 
 func (h *UserHandler) RegisterUser(c *gin.Context) {
 	user := &User.User{
 		Username: c.PostForm("username"),
 		Email:    c.PostForm("email"),
-		Password: c.PostForm("password"),
+		Password: fmt.Sprintf("%x", md5.Sum([]byte(c.PostForm("password")))),
 	}
 
 	if err := c.ShouldBindJSON(&user); err != nil {
@@ -63,12 +70,11 @@ func (h *UserHandler) RegisterUser(c *gin.Context) {
 }
 
 func (h *UserHandler) LoginUser(c *gin.Context) {
-	user := &User.User{
-		Email:    c.PostForm("email"),
-		Password: c.PostForm("password"),
+	var req struct {
+		Email    string `json:"email" binding:"required"`
+		Password string `json:"password" binding:"required"`
 	}
-	// (鲁棒性) 检查JSON绑定是否成功
-	if err := c.ShouldBindJSON(&user); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		validationErrors := []ErrorsMgr.ValidationError{
 			{Field: "general", Message: "用户数据格式错误"},
 		}
@@ -76,9 +82,8 @@ func (h *UserHandler) LoginUser(c *gin.Context) {
 		return
 	}
 
-	// validations
-	ValidEmailErr := ErrorsMgr.ValidateEmail(user.Email)
-	ValidPasswordErr := ErrorsMgr.ValidatePassword(user.Password)
+	ValidEmailErr := ErrorsMgr.ValidateEmail(req.Email)
+	ValidPasswordErr := ErrorsMgr.ValidatePassword(req.Password)
 
 	if ValidEmailErr != nil {
 		ErrorsMgr.HandleError(c, ValidEmailErr)
@@ -89,12 +94,40 @@ func (h *UserHandler) LoginUser(c *gin.Context) {
 		return
 	}
 
+	user := &User.User{}
+	err := h.Mysql.Where("email = ?", req.Email).First(&user).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			ErrorsMgr.HandleError(c, fmt.Errorf("用户不存在或密码错误"))
+		} else {
+			ErrorsMgr.HandleError(c, fmt.Errorf("数据库错误: %v", err))
+		}
+		return
+	}
+
+	if !user.CheckPassword(req.Password) {
+		ErrorsMgr.HandleError(c, fmt.Errorf("用户不存在或密码错误"))
+		return
+	}
+
+	role := "user"
+	if user.IsAdmin() {
+		role = "admin"
+	}
+
+	token := ""
+	if globalJWTManager != nil {
+		token, _ = globalJWTManager.GenerateToken(user.ID, user.Username, role)
+	}
+
 	user.HidePassword()
 
 	ErrorsMgr.CreateSuccessResponse(c, gin.H{
 		"User_ID":  user.ID,
 		"Username": user.Username,
 		"Email":    user.Email,
+		"Role":     role,
+		"token":    token,
 		"message":  "用户登录成功",
 	})
 }

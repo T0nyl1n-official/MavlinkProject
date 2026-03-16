@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	gin "github.com/gin-gonic/gin"
+	gorm "gorm.io/gorm"
 
 	UsersHandler "MavlinkProject/Server/backend/Handler/Users"
 	JwtMiddleware "MavlinkProject/Server/backend/Middles"
@@ -11,8 +12,8 @@ import (
 	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 )
 
-func SetUsersRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager) {
-	h := UsersHandler.UserHandler{}
+func SetUsersRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager, mysqlDB *gorm.DB) {
+	h := UsersHandler.UserHandler{Mysql: mysqlDB}
 
 	users := r.Group("/users")
 	{

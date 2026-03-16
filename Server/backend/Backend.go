@@ -9,6 +9,7 @@ import (
 
 	DBService "MavlinkProject/Server/backend/Database"
 	DBConfig "MavlinkProject/Server/backend/Database/Config"
+	UsersHandler "MavlinkProject/Server/backend/Handler/Users"
 	JwtMiddleware "MavlinkProject/Server/backend/Middles"
 	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
 	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
@@ -72,10 +73,13 @@ func (bs *BackendServer) New() {
 	bs.JWTManager = jwtManager
 	bs.TokenManager = tokenManager
 	bs.Verification = verification
+
+	UsersHandler.SetVerification(verification)
+	UsersHandler.SetJWTManager(jwtManager)
 }
 
 func (bs *BackendServer) Run(port string) {
-	Routes.InitAllRoutes(bs.Router, bs.JWTManager, bs.TokenManager)
+	Routes.InitAllRoutes(bs.Router, bs.JWTManager, bs.TokenManager, bs.Mysql)
 
 	bs.Router.Run(port)
 	log.Printf("Backend server started on port %s", port)

@@ -1,6 +1,9 @@
 package Shared
 
 import (
+	"crypto/md5"
+	"fmt"
+
 	gorm "gorm.io/gorm"
 )
 
@@ -40,6 +43,10 @@ func (u *User) SetOffline() {
 
 func (u *User) HidePassword() {
 	u.Password = ""
+}
+
+func (u *User) CheckPassword(password string) bool {
+	return u.Password == fmt.Sprintf("%x", md5.Sum([]byte(password)))
 }
 
 func (u *User) ToJSON() map[string]interface{} {

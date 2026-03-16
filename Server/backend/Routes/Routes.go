@@ -2,6 +2,7 @@ package Routes
 
 import (
 	gin "github.com/gin-gonic/gin"
+	gorm "gorm.io/gorm"
 
 	MavlinkRoutes "MavlinkProject/Server/backend/Routes/Mavlink"
 	UsersRoutes "MavlinkProject/Server/backend/Routes/User"
@@ -10,9 +11,9 @@ import (
 	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 )
 
-func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager) {
+func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager, mysqlDB *gorm.DB) {
 	Test_Routes(r)
-	UsersRoutes.SetUsersRoutes(r, jwtManager, tokenManager)
+	UsersRoutes.SetUsersRoutes(r, jwtManager, tokenManager, mysqlDB)
 	MavlinkRoutes.SetupChainRoutes(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupDefaultMavlinkRoutesV2(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupMavlinkV1Routes(r, jwtManager, tokenManager)
