@@ -7,16 +7,21 @@ import (
 	gin "github.com/gin-gonic/gin"
 	gorm "gorm.io/gorm"
 
-	Server "MavlinkProject/Server"
 	ErrorsMgr "MavlinkProject/Server/backend/Middles/ErrorMiddleHandle/ErrorsMgr"
 	User "MavlinkProject/Server/backend/Shared/User"
+	Verification "MavlinkProject/Server/backend/Utils/Verification"
 )
 
 type UserHandler struct {
-	Mysql *gorm.DB
+	Mysql        *gorm.DB
+	Verification Verification.VerificationManager
 }
 
-var Backend = Server.BackendServer
+var globalVerification Verification.VerificationManager
+
+func SetVerification(v Verification.VerificationManager) {
+	globalVerification = v
+}
 
 func (h *UserHandler) RegisterUser(c *gin.Context) {
 	user := &User.User{
@@ -285,7 +290,7 @@ func (h *UserHandler) SendEmailVerification(c *gin.Context) {
 		return
 	}
 
-	verification := Server.BackendServer.Verification
+	verification := globalVerification
 	if err := verification.SendVerificationCode(req.Email, req.Type); err != nil {
 		ErrorsMgr.HandleError(c, fmt.Errorf("发送验证码失败: %w", err))
 		return

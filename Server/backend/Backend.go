@@ -9,15 +9,21 @@ import (
 
 	DBService "MavlinkProject/Server/backend/Database"
 	DBConfig "MavlinkProject/Server/backend/Database/Config"
+	JwtMiddleware "MavlinkProject/Server/backend/Middles"
+	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
+	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
+	Routes "MavlinkProject/Server/backend/Routes"
 	Verification "MavlinkProject/Server/backend/Utils/Verification"
 )
 
 type BackendServer struct {
-	Router       *gin.Engine
-	Mysql        *gorm.DB
-	RedisClient  *[]redis.Client
-	TokenRedis   *redis.Client
-	Verification Verification.VerificationManager
+	Router            *gin.Engine
+	Mysql             *gorm.DB
+	RedisClient       *[]redis.Client
+	VerificationRedis *redis.Client
+	JWTManager        *jwtUtils.JWTManager
+	TokenManager      *Jwt.RedisTokenManager
+	Verification      Verification.VerificationManager
 }
 
 func (bs *BackendServer) New() {
@@ -53,17 +59,24 @@ func (bs *BackendServer) New() {
 		log.Fatalf("MavlinkProject - Backend : 初始化Mysql失败 : %v", err)
 	}
 
-	tokenRedis := redisClients[len(redisClients)-1]
+	tokenRedis := redisClients[len(redisClients)-2]
+	verificationRedis := redisClients[len(redisClients)-1]
+
+	jwtManager := JwtMiddleware.NewDefaultJWTManager()
+	tokenManager := Jwt.NewRedisTokenManager(&tokenRedis)
 
 	bs.Router = router
 	bs.Mysql = mysqlDB
 	bs.RedisClient = &redisClients
-	bs.TokenRedis = &tokenRedis
+	bs.VerificationRedis = &verificationRedis
+	bs.JWTManager = jwtManager
+	bs.TokenManager = tokenManager
 	bs.Verification = verification
-
 }
 
 func (bs *BackendServer) Run(port string) {
+	Routes.InitAllRoutes(bs.Router, bs.JWTManager, bs.TokenManager)
+
 	bs.Router.Run(port)
 	log.Printf("Backend server started on port %s", port)
 }

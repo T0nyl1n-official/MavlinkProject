@@ -5,29 +5,15 @@ import (
 
 	gin "github.com/gin-gonic/gin"
 
-	Server "MavlinkProject/Server"
-	UsersHandler "MavlinkProject/Server/Backend/Handler/Users"
-	JwtMiddleware "MavlinkProject/Server/Backend/Middles"
-	Jwt "MavlinkProject/Server/Backend/Middles/Jwt"
-	jwtUtils "MavlinkProject/Server/Backend/Middles/Jwt/Claims-Manager"
+	UsersHandler "MavlinkProject/Server/backend/Handler/Users"
+	JwtMiddleware "MavlinkProject/Server/backend/Middles"
+	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
+	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 )
 
-var Backend = Server.BackendServer
-var h = UsersHandler.UserHandler{
-	Mysql: Backend.Mysql,
-}
+func SetUsersRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager) {
+	h := UsersHandler.UserHandler{}
 
-var jwtManager *jwtUtils.JWTManager
-var tokenManager *Jwt.RedisTokenManager
-
-func init() {
-	if Backend.TokenRedis != nil {
-		tokenManager = Jwt.NewRedisTokenManager(Backend.TokenRedis)
-	}
-	jwtManager = (*jwtUtils.JWTManager)(JwtMiddleware.NewDefaultJWTManager())
-}
-
-func SetUsersRoutes(r *gin.Engine) {
 	users := r.Group("/users")
 	{
 		users.POST("/register", h.RegisterUser)

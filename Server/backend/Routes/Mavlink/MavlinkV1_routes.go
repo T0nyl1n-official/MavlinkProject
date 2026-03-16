@@ -7,6 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	Mavlink "MavlinkProject/Server/backend/Handler/Mavlink"
+	JwtMiddleware "MavlinkProject/Server/backend/Middles"
+	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
+	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 )
 
 type ConnectionConfig struct {
@@ -31,8 +34,10 @@ type MavlinkV1Response struct {
 	Error     string      `json:"error,omitempty"`
 }
 
-func SetupMavlinkV1Routes(router *gin.Engine) {
+func SetupMavlinkV1Routes(router *gin.Engine, jwtManager interface{}, tokenManager interface{}) {
 	v1Group := router.Group("/mavlink/v1")
+	v1Group.Use(JwtMiddleware.JwtAuthMiddleWareWithRedis(jwtManager.(*jwtUtils.JWTManager), tokenManager.(*Jwt.RedisTokenManager), nil))
+
 	{
 		v1Group.POST("/handler/create", createHandler)
 		v1Group.DELETE("/handler/:id", deleteHandler)
@@ -61,90 +66,6 @@ func SetupMavlinkV1Routes(router *gin.Engine) {
 	}
 }
 
-func getHandler(id string) *Mavlink.MAVLinkHandlerV1 {
-	return Mavlink.GetHandlerV1(id)
-}
-
-func setHandler(id string, handler *Mavlink.MAVLinkHandlerV1) {
-	// 使用 handler 内部的 handlerID 存储
-	// 这里暂时保留用于兼容
-}
-
-func removeHandler(id string) {
-	Mavlink.DeleteHandlerV1(id)
-}
-
-func parseConfig(c *gin.Context) (string, *Mavlink.MAVLinkConfigV1, error) {
-	handlerID := c.GetString("handler_id")
-	if handlerID == "" {
-		handlerID = c.Query("handler_id")
-	}
-
-	if handlerID != "" {
-		handler := getHandler(handlerID)
-		if handler != nil {
-			cfg := handler.GetConfig()
-			return handlerID, &cfg, nil
-		}
-	}
-
-	var config ConnectionConfig
-	if err := c.ShouldBindJSON(&config); err != nil {
-		var queryErr error
-		handlerID = c.Query("handler_id")
-		if handlerID != "" {
-			handler := getHandler(handlerID)
-			if handler != nil {
-				cfg := handler.GetConfig()
-				return handlerID, &cfg, nil
-			}
-			queryErr = nil
-		}
-		if queryErr != nil {
-			return "", nil, queryErr
-		}
-		return "", nil, err
-	}
-
-	mavlinkConfig := &Mavlink.MAVLinkConfigV1{
-		ConnectionType:  Mavlink.ConnectionType(config.ConnectionType),
-		SerialPort:      config.SerialPort,
-		SerialBaud:      config.SerialBaud,
-		UDPAddr:         config.UDPAddr,
-		UDPPort:         config.UDPPort,
-		TCPAddr:         config.TCPAddr,
-		TCPPort:         config.TCPPort,
-		SystemID:        config.SystemID,
-		ComponentID:     config.ComponentID,
-		ProtocolVersion: Mavlink.ProtocolVersion(config.ProtocolVersion),
-		HeartbeatRate:   config.HeartbeatRate,
-	}
-
-	return handlerID, mavlinkConfig, nil
-}
-
-func getOrCreateHandler(c *gin.Context) (*Mavlink.MAVLinkHandlerV1, string, error) {
-	handlerID, config, err := parseConfig(c)
-	if err != nil {
-		return nil, "", err
-	}
-
-	var handler *Mavlink.MAVLinkHandlerV1
-
-	if handlerID != "" {
-		handler = getHandler(handlerID)
-		if handler != nil {
-			return handler, handlerID, nil
-		}
-	}
-
-	handler = Mavlink.NewMAVLinkHandlerV1(*config)
-	handlerID = handler.GetHandlerID()
-	setHandler(handlerID, handler)
-
-	return handler, handlerID, nil
-}
-
 func createHandler(c *gin.Context) {
 	var config ConnectionConfig
 	if err := c.ShouldBindJSON(&config); err != nil {
@@ -170,60 +91,72 @@ func createHandler(c *gin.Context) {
 	}
 
 	handler := Mavlink.NewMAVLinkHandlerV1(mavlinkConfig)
-	handlerID := handler.GetHandlerID()
-	setHandler(handlerID, handler)
+	if handler == nil {
+		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
+			Success: false,
+			Error:   "Failed to create handler",
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
-		HandlerID: handlerID,
-		Message:   "Handler创建成功",
+		HandlerID: handler.GetHandlerID(),
+		Message:   "Handler created successfully",
 	})
 }
 
 func deleteHandler(c *gin.Context) {
 	handlerID := c.Param("id")
-	handler := getHandler(handlerID)
+	handler := Mavlink.GetHandlerV1(handlerID)
+
 	if handler == nil {
 		c.JSON(http.StatusNotFound, MavlinkV1Response{
 			Success: false,
-			Error:   "Handler不存在",
+			Error:   "Handler not found",
 		})
 		return
 	}
 
-	handler.Stop()
-	removeHandler(handlerID)
+	err := handler.Delete()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success: true,
-		Message: "Handler已删除",
+		Message: "Handler deleted successfully",
 	})
 }
 
 func getHandlerStatus(c *gin.Context) {
 	handlerID := c.Param("id")
-	handler := getHandler(handlerID)
+	handler := Mavlink.GetHandlerV1(handlerID)
+
 	if handler == nil {
 		c.JSON(http.StatusNotFound, MavlinkV1Response{
 			Success: false,
-			Error:   "Handler不存在",
+			Error:   "Handler not found",
 		})
 		return
 	}
 
+	info := handler.GetInfo()
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success: true,
-		Data: gin.H{
-			"handler_id":        handler.GetHandlerID(),
-			"connection_status": handler.GetConnectionStatus(),
-			"config":            handler.GetConfig(),
-		},
+		Data:    info,
 	})
 }
 
 func startConnection(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	var req struct {
+		HandlerID string `json:"handler_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
 			Error:   err.Error(),
@@ -231,25 +164,36 @@ func startConnection(c *gin.Context) {
 		return
 	}
 
-	if err := handler.Start(); err != nil {
+	handler := Mavlink.GetHandlerV1(req.HandlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
+		})
+		return
+	}
+
+	err := handler.Start()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+			Success: false,
+			Error:   err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
-		HandlerID: handlerID,
-		Message:   "连接已启动",
+		HandlerID: req.HandlerID,
+		Message:   "Connection started",
 	})
 }
 
 func stopConnection(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	var req struct {
+		HandlerID string `json:"handler_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
 			Error:   err.Error(),
@@ -257,25 +201,36 @@ func stopConnection(c *gin.Context) {
 		return
 	}
 
-	if err := handler.Stop(); err != nil {
+	handler := Mavlink.GetHandlerV1(req.HandlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
+		})
+		return
+	}
+
+	err := handler.Stop()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+			Success: false,
+			Error:   err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
-		HandlerID: handlerID,
-		Message:   "连接已停止",
+		HandlerID: req.HandlerID,
+		Message:   "Connection stopped",
 	})
 }
 
 func restartConnection(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	var req struct {
+		HandlerID string `json:"handler_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
 			Error:   err.Error(),
@@ -283,25 +238,37 @@ func restartConnection(c *gin.Context) {
 		return
 	}
 
-	if err := handler.Restart(); err != nil {
+	handler := Mavlink.GetHandlerV1(req.HandlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
+		})
+		return
+	}
+
+	err := handler.Restart()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+			Success: false,
+			Error:   err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
-		HandlerID: handlerID,
-		Message:   "连接已重启",
+		HandlerID: req.HandlerID,
+		Message:   "Connection restarted",
 	})
 }
 
 func droneTakeoff(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	var req struct {
+		HandlerID string  `json:"handler_id" binding:"required"`
+		Altitude  float32 `json:"altitude" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
 			Error:   err.Error(),
@@ -309,85 +276,74 @@ func droneTakeoff(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Altitude float32 `json:"altitude" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+	handler := Mavlink.GetHandlerV1(req.HandlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
 		})
 		return
 	}
 
-	if err := handler.SendTakeoff(req.Altitude); err != nil {
+	err := handler.SendTakeoff(req.Altitude)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+			Success: false,
+			Error:   err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
-		HandlerID: handlerID,
-		Message:   "起飞指令已发送",
+		HandlerID: req.HandlerID,
+		Message:   "Drone taking off",
 	})
 }
 
 func droneLand(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, MavlinkV1Response{
-			Success: false,
-			Error:   err.Error(),
-		})
-		return
-	}
-
 	var req struct {
+		HandlerID string  `json:"handler_id" binding:"required"`
 		Latitude  float64 `json:"latitude"`
 		Longitude float64 `json:"longitude"`
 		Altitude  float64 `json:"altitude"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
-		})
-		return
-	}
-
-	if err := handler.SendLand(req.Latitude, req.Longitude, req.Altitude); err != nil {
-		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, MavlinkV1Response{
-		Success:   true,
-		HandlerID: handlerID,
-		Message:   "降落指令已发送",
-	})
-}
-
-func droneMove(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
 			Error:   err.Error(),
 		})
 		return
 	}
 
+	handler := Mavlink.GetHandlerV1(req.HandlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
+		})
+		return
+	}
+
+	err := handler.SendLand(req.Latitude, req.Longitude, req.Altitude)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, MavlinkV1Response{
+		Success:   true,
+		HandlerID: req.HandlerID,
+		Message:   "Drone landing",
+	})
+}
+
+func droneMove(c *gin.Context) {
 	var req struct {
+		HandlerID string  `json:"handler_id" binding:"required"`
 		Latitude  float64 `json:"latitude" binding:"required"`
 		Longitude float64 `json:"longitude" binding:"required"`
 		Altitude  float64 `json:"altitude" binding:"required"`
@@ -395,37 +351,42 @@ func droneMove(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+			Success: false,
+			Error:   err.Error(),
 		})
 		return
 	}
 
-	speed := req.Speed
-	if speed == 0 {
-		speed = 5.0
+	handler := Mavlink.GetHandlerV1(req.HandlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
+		})
+		return
 	}
 
-	if err := handler.SendMoveToPosition(req.Latitude, req.Longitude, req.Altitude, speed); err != nil {
+	err := handler.SendMoveToPosition(req.Latitude, req.Longitude, req.Altitude, req.Speed)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+			Success: false,
+			Error:   err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
-		HandlerID: handlerID,
-		Message:   "移动指令已发送",
+		HandlerID: req.HandlerID,
+		Message:   "Drone moving",
 	})
 }
 
 func droneReturn(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	var req struct {
+		HandlerID string `json:"handler_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
 			Error:   err.Error(),
@@ -433,25 +394,37 @@ func droneReturn(c *gin.Context) {
 		return
 	}
 
-	if err := handler.SendReturnToLaunch(); err != nil {
+	handler := Mavlink.GetHandlerV1(req.HandlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
+		})
+		return
+	}
+
+	err := handler.SendReturnToLaunch()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+			Success: false,
+			Error:   err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
-		HandlerID: handlerID,
-		Message:   "返航指令已发送",
+		HandlerID: req.HandlerID,
+		Message:   "Drone returning to launch",
 	})
 }
 
 func droneMode(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	var req struct {
+		HandlerID string `json:"handler_id" binding:"required"`
+		Mode      string `json:"mode" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
 			Error:   err.Error(),
@@ -459,111 +432,158 @@ func droneMode(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Mode string `json:"mode" binding:"required,oneof=manual stabilize auto guided rtl land"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+	handler := Mavlink.GetHandlerV1(req.HandlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
 		})
 		return
 	}
 
-	mode := Mavlink.FlightMode(req.Mode)
-	if err := handler.SetFlightMode(mode); err != nil {
+	err := handler.SetFlightMode(Mavlink.FlightMode(req.Mode))
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+			Success: false,
+			Error:   err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
-		HandlerID: handlerID,
-		Message:   "飞行模式已设置",
+		HandlerID: req.HandlerID,
+		Message:   "Flight mode set",
 	})
 }
 
 func getDroneStatus(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	handlerID := c.Query("handler_id")
+	if handlerID == "" {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
-			Error:   err.Error(),
+			Error:   "handler_id is required",
 		})
 		return
 	}
 
+	handler := Mavlink.GetHandlerV1(handlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
+		})
+		return
+	}
+
+	status := handler.GetDroneStatus()
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
 		HandlerID: handlerID,
-		Data: gin.H{
-			"drone_status": handler.GetDroneStatus(),
-			"position":     handler.GetDronePosition(),
-			"attitude":     handler.GetDroneAttitude(),
-			"battery":      handler.GetDroneBattery(),
-		},
+		Data:      status,
 	})
 }
 
 func getDronePosition(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	handlerID := c.Query("handler_id")
+	if handlerID == "" {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
-			Error:   err.Error(),
+			Error:   "handler_id is required",
 		})
 		return
 	}
 
+	handler := Mavlink.GetHandlerV1(handlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
+		})
+		return
+	}
+
+	position := handler.GetDronePosition()
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
 		HandlerID: handlerID,
-		Data:      handler.GetDronePosition(),
+		Data:      position,
 	})
 }
 
 func getDroneAttitude(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	handlerID := c.Query("handler_id")
+	if handlerID == "" {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
-			Error:   err.Error(),
+			Error:   "handler_id is required",
 		})
 		return
 	}
 
+	handler := Mavlink.GetHandlerV1(handlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
+		})
+		return
+	}
+
+	attitude := handler.GetDroneAttitude()
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
 		HandlerID: handlerID,
-		Data:      handler.GetDroneAttitude(),
+		Data:      attitude,
 	})
 }
 
 func getDroneBattery(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	handlerID := c.Query("handler_id")
+	if handlerID == "" {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
-			Error:   err.Error(),
+			Error:   "handler_id is required",
 		})
 		return
 	}
 
+	handler := Mavlink.GetHandlerV1(handlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
+		})
+		return
+	}
+
+	drone := handler.GetDrone()
+	if drone == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Drone not found",
+		})
+		return
+	}
+
+	battery := drone.GetBattery()
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
 		HandlerID: handlerID,
-		Data:      handler.GetDroneBattery(),
+		Data:      battery,
 	})
 }
 
 func setGroundStation(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	var req struct {
+		HandlerID string  `json:"handler_id" binding:"required"`
+		Name      string  `json:"name" binding:"required"`
+		ID        string  `json:"id"`
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+		Altitude  float64 `json:"altitude"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
 			Error:   err.Error(),
@@ -571,51 +591,56 @@ func setGroundStation(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Name      string  `json:"name" binding:"required"`
-		ID        string  `json:"id" binding:"required"`
-		Latitude  float64 `json:"latitude" binding:"required"`
-		Longitude float64 `json:"longitude" binding:"required"`
-		Altitude  float64 `json:"altitude" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+	handler := Mavlink.GetHandlerV1(req.HandlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
 		})
 		return
 	}
 
 	handler.SetGroundStation(req.Name, req.ID, req.Latitude, req.Longitude, req.Altitude)
-
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
-		HandlerID: handlerID,
-		Message:   "地面站已设置",
+		HandlerID: req.HandlerID,
+		Message:   "Ground station set",
 	})
 }
 
 func getGroundStation(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	handlerID := c.Query("handler_id")
+	if handlerID == "" {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
-			Error:   err.Error(),
+			Error:   "handler_id is required",
 		})
 		return
 	}
 
+	handler := Mavlink.GetHandlerV1(handlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
+		})
+		return
+	}
+
+	info := handler.GetGroundStationInfo()
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
 		HandlerID: handlerID,
-		Data:      handler.GetGroundStation(),
+		Data:      info,
 	})
 }
 
 func requestStream(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	var req struct {
+		HandlerID string `json:"handler_id" binding:"required"`
+		StreamID  int    `json:"stream_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
 			Error:   err.Error(),
@@ -623,38 +648,27 @@ func requestStream(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		MessageID int `json:"message_id" binding:"required"`
-		Rate      int `json:"rate" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
-		})
-		return
-	}
-
-	if err := handler.RequestMessageStream(req.MessageID, req.Rate); err != nil {
-		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+	handler := Mavlink.GetHandlerV1(req.HandlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
-		HandlerID: handlerID,
-		Message:   "数据流请求已发送",
+		HandlerID: req.HandlerID,
+		Message:   "Stream requested",
 	})
 }
 
 func sendHeartbeat(c *gin.Context) {
-	handler, handlerID, err := getOrCreateHandler(c)
-	if err != nil {
+	var req struct {
+		HandlerID string `json:"handler_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, MavlinkV1Response{
 			Success: false,
 			Error:   err.Error(),
@@ -662,18 +676,27 @@ func sendHeartbeat(c *gin.Context) {
 		return
 	}
 
-	if err := handler.SendHeartbeat(); err != nil {
+	handler := Mavlink.GetHandlerV1(req.HandlerID)
+	if handler == nil {
+		c.JSON(http.StatusNotFound, MavlinkV1Response{
+			Success: false,
+			Error:   "Handler not found",
+		})
+		return
+	}
+
+	err := handler.SendHeartbeat()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, MavlinkV1Response{
-			Success:   false,
-			HandlerID: handlerID,
-			Error:     err.Error(),
+			Success: false,
+			Error:   err.Error(),
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
-		HandlerID: handlerID,
-		Message:   "心跳已发送",
+		HandlerID: req.HandlerID,
+		Message:   "Heartbeat sent",
 	})
 }

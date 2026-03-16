@@ -6,10 +6,16 @@ import (
 	gin "github.com/gin-gonic/gin"
 
 	Chain "MavlinkProject/Server/backend/Handler/ProgressChain"
+	JwtMiddleware "MavlinkProject/Server/backend/Middles"
+	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
+	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 )
 
-func SetupChainRoutes(router *gin.Engine) {
+func SetupChainRoutes(router *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager) {
 	chainGroup := router.Group("/api/chain")
+
+	chainGroup.Use(JwtMiddleware.JwtAuthMiddleWareWithRedis(jwtManager, tokenManager, nil))
+
 	{
 		chainGroup.POST("/create", createChain)
 		chainGroup.DELETE("/:id", deleteChain)
@@ -17,15 +23,12 @@ func SetupChainRoutes(router *gin.Engine) {
 		chainGroup.GET("/list", listChains)
 
 		chainGroup.POST("/:id/node/add", addNodeToChain)
-		chainGroup.POST("/:id/node/insert-after", insertNodeAfter)
-		chainGroup.POST("/:id/node/insert-before", insertNodeBefore)
-		chainGroup.PUT("/:id/node/:nodeId/update-config", updateNodeConfig)
-		chainGroup.DELETE("/:id/node/:nodeId", deleteNodeFromChain)
+		chainGroup.POST("/:id/node/delete/:nodeId", deleteNodeFromChain)
 
-		chainGroup.POST("/:id/execute", executeChain)
-		chainGroup.POST("/:id/execute-step", executeNextStep)
+		chainGroup.POST("/:id/start", startChain)
 		chainGroup.POST("/:id/reset", resetChain)
 		chainGroup.POST("/:id/pause", pauseChain)
+		chainGroup.POST("/:id/stop", stopChain)
 	}
 }
 
@@ -51,8 +54,9 @@ func createChain(c *gin.Context) {
 func deleteChain(c *gin.Context) {
 	chainID := c.Param("id")
 	manager := Chain.GetChainManager()
+	err := manager.DeleteChain(chainID)
 
-	if err := manager.DeleteChain(chainID); err != nil {
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"success": false,
 			"error":   err.Error(),
@@ -79,12 +83,10 @@ func getChain(c *gin.Context) {
 		return
 	}
 
+	jsonStr, _ := chain.ToJSON()
 	c.JSON(http.StatusOK, gin.H{
-		"success":        true,
-		"chain":          chain,
-		"node_count":     chain.GetNodeCount(),
-		"waiting_count":  chain.GetWaitingNodeCount(),
-		"finished_count": chain.GetFinishedNodeCount(),
+		"success": true,
+		"chain":   jsonStr,
 	})
 }
 
@@ -94,28 +96,18 @@ func listChains(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"success":     true,
+		"chain_count": len(chains),
 		"chains":      chains,
-		"total_count": len(chains),
 	})
 }
 
 func addNodeToChain(c *gin.Context) {
 	chainID := c.Param("id")
-	manager := Chain.GetChainManager()
-	chain := manager.GetChain(chainID)
-
-	if chain == nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"error":   "Chain not found",
-		})
-		return
-	}
 
 	var req struct {
-		Type          string                       `json:"type" binding:"required"`
-		HandlerConfig *Chain.HandlerConfig `json:"handler_config"`
-		Params        map[string]interface{}       `json:"params"`
+		NodeType      string                 `json:"node_type"`
+		HandlerConfig *Chain.HandlerConfig   `json:"handler_config"`
+		Params        map[string]interface{} `json:"params"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -125,113 +117,32 @@ func addNodeToChain(c *gin.Context) {
 		return
 	}
 
-	nodeType := Chain.NodeType(req.Type)
+	manager := Chain.GetChainManager()
+	chain := manager.GetChain(chainID)
+	if chain == nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "Chain not found",
+		})
+		return
+	}
+
+	nodeType := Chain.NodeType(req.NodeType)
 	node := chain.AddNode(nodeType, req.HandlerConfig, req.Params)
 
 	c.JSON(http.StatusOK, gin.H{
-		"success":    true,
-		"node_id":    node.ID,
-		"node_type":  node.Type,
-		"node_count": chain.GetNodeCount(),
+		"success": true,
+		"node_id": node.ID,
+		"message": "Node added successfully",
 	})
 }
 
-func insertNodeAfter(c *gin.Context) {
-	chainID := c.Param("id")
-	manager := Chain.GetChainManager()
-	chain := manager.GetChain(chainID)
-
-	if chain == nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"error":   "Chain not found",
-		})
-		return
-	}
-
-	var req struct {
-		AfterNodeID   string                       `json:"after_node_id" binding:"required"`
-		Type          string                       `json:"type" binding:"required"`
-		HandlerConfig *Chain.HandlerConfig `json:"handler_config"`
-		Params        map[string]interface{}       `json:"params"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   err.Error(),
-		})
-		return
-	}
-
-	nodeType := Chain.NodeType(req.Type)
-	node, err := chain.InsertNodeAfter(req.AfterNodeID, nodeType, req.HandlerConfig, req.Params)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success":    true,
-		"node_id":    node.ID,
-		"node_type":  node.Type,
-		"node_count": chain.GetNodeCount(),
-	})
-}
-
-func insertNodeBefore(c *gin.Context) {
-	chainID := c.Param("id")
-	manager := Chain.GetChainManager()
-	chain := manager.GetChain(chainID)
-
-	if chain == nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"error":   "Chain not found",
-		})
-		return
-	}
-
-	var req struct {
-		BeforeNodeID  string                       `json:"before_node_id" binding:"required"`
-		Type          string                       `json:"type" binding:"required"`
-		HandlerConfig *Chain.HandlerConfig `json:"handler_config"`
-		Params        map[string]interface{}       `json:"params"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   err.Error(),
-		})
-		return
-	}
-
-	nodeType := Chain.NodeType(req.Type)
-	node, err := chain.InsertNodeBefore(req.BeforeNodeID, nodeType, req.HandlerConfig, req.Params)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success":    true,
-		"node_id":    node.ID,
-		"node_type":  node.Type,
-		"node_count": chain.GetNodeCount(),
-	})
-}
-
-func updateNodeConfig(c *gin.Context) {
+func deleteNodeFromChain(c *gin.Context) {
 	chainID := c.Param("id")
 	nodeID := c.Param("nodeId")
+
 	manager := Chain.GetChainManager()
 	chain := manager.GetChain(chainID)
-
 	if chain == nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"success": false,
@@ -240,19 +151,9 @@ func updateNodeConfig(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		HandlerConfig *Chain.HandlerConfig `json:"handler_config" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   err.Error(),
-		})
-		return
-	}
-
-	if err := chain.UpdateNodeHandlerConfig(nodeID, req.HandlerConfig); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
+	err := chain.RemoveNode(nodeID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   err.Error(),
 		})
@@ -261,16 +162,15 @@ func updateNodeConfig(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "Node config updated and propagated to subsequent nodes",
+		"message": "Node deleted successfully",
 	})
 }
 
-func deleteNodeFromChain(c *gin.Context) {
+func startChain(c *gin.Context) {
 	chainID := c.Param("id")
-	nodeID := c.Param("nodeId")
+
 	manager := Chain.GetChainManager()
 	chain := manager.GetChain(chainID)
-
 	if chain == nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"success": false,
@@ -279,108 +179,19 @@ func deleteNodeFromChain(c *gin.Context) {
 		return
 	}
 
-	if err := chain.RemoveNode(nodeID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   err.Error(),
-		})
-		return
-	}
+	chain.Start()
 
 	c.JSON(http.StatusOK, gin.H{
-		"success":    true,
-		"message":    "Node deleted",
-		"node_count": chain.GetNodeCount(),
-	})
-}
-
-func executeChain(c *gin.Context) {
-	chainID := c.Param("id")
-	manager := Chain.GetChainManager()
-	chain := manager.GetChain(chainID)
-
-	if chain == nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"error":   "Chain not found",
-		})
-		return
-	}
-
-	executor := Chain.NewChainExecutor(chain, manager)
-
-	Chain.SetChainToContext(c, chain)
-
-	if err := executor.ExecuteAll(c); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success":    false,
-			"error":      err.Error(),
-			"chain":      chain,
-			"node_count": chain.GetNodeCount(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success":        true,
-		"message":        "Chain executed successfully",
-		"chain":          chain,
-		"finished_count": chain.GetFinishedNodeCount(),
-		"node_count":     chain.GetNodeCount(),
-	})
-}
-
-func executeNextStep(c *gin.Context) {
-	chainID := c.Param("id")
-	manager := Chain.GetChainManager()
-	chain := manager.GetChain(chainID)
-
-	if chain == nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"error":   "Chain not found",
-		})
-		return
-	}
-
-	executor := Chain.NewChainExecutor(chain, manager)
-	nextNode := chain.GetNextNode()
-
-	if nextNode == nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success":    false,
-			"error":      "No more nodes to execute",
-			"node_count": chain.GetNodeCount(),
-		})
-		return
-	}
-
-	Chain.SetChainToContext(c, chain)
-
-	if err := executor.ExecuteNode(nextNode, c); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   err.Error(),
-			"node":    nextNode,
-		})
-		return
-	}
-
-	chain.MoveToNextNode()
-
-	c.JSON(http.StatusOK, gin.H{
-		"success":       true,
-		"message":       "Node executed",
-		"node":          nextNode,
-		"current_index": chain.CurrentIndex,
+		"success": true,
+		"message": "Chain started successfully",
 	})
 }
 
 func resetChain(c *gin.Context) {
 	chainID := c.Param("id")
+
 	manager := Chain.GetChainManager()
 	chain := manager.GetChain(chainID)
-
 	if chain == nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"success": false,
@@ -392,17 +203,16 @@ func resetChain(c *gin.Context) {
 	chain.Reset()
 
 	c.JSON(http.StatusOK, gin.H{
-		"success":    true,
-		"message":    "Chain reset",
-		"node_count": chain.GetNodeCount(),
+		"success": true,
+		"message": "Chain reset successfully",
 	})
 }
 
 func pauseChain(c *gin.Context) {
 	chainID := c.Param("id")
+
 	manager := Chain.GetChainManager()
 	chain := manager.GetChain(chainID)
-
 	if chain == nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"success": false,
@@ -415,6 +225,27 @@ func pauseChain(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"status":  chain.Status,
+		"message": "Chain paused successfully",
+	})
+}
+
+func stopChain(c *gin.Context) {
+	chainID := c.Param("id")
+
+	manager := Chain.GetChainManager()
+	chain := manager.GetChain(chainID)
+	if chain == nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "Chain not found",
+		})
+		return
+	}
+
+	chain.Stop()
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Chain stopped successfully",
 	})
 }
