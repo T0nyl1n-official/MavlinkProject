@@ -58,6 +58,13 @@ func (h *UserHandler) RegisterUser(c *gin.Context) {
 		return
 	}
 
+	// 设置用户为在线状态, 并保存到数据库
+	user.SetOnline()
+	if err := h.Mysql.Create(&user).Error; err != nil {
+		ErrorsMgr.HandleError(c, fmt.Errorf("数据库错误: %v", err))
+		return
+	}
+
 	// 隐藏密码
 	user.HidePassword()
 
@@ -110,8 +117,15 @@ func (h *UserHandler) LoginUser(c *gin.Context) {
 		return
 	}
 
+	// 设置用户为在线状态, 并保存到数据库
+	user.SetOnline()
+	if err := h.Mysql.Save(&user).Error; err != nil {
+		ErrorsMgr.HandleError(c, fmt.Errorf("数据库错误: %v", err))
+		return
+	}
+
 	role := "user"
-	if user.IsAdmin() {
+	if (user.isAdmin) {
 		role = "admin"
 	}
 
@@ -295,11 +309,8 @@ func (h *UserHandler) GetAllUsers(c *gin.Context) {
 		return
 	}
 
-	// 隐藏所有用户的密码 (非管理员)
-	if !user.IsAdmin() {
-		for _, qUser := range queryUsers {
-			qUser.HidePassword()
-		}
+	for _, qUser := range queryUsers {
+		qUser.HidePassword()
 	}
 
 	// 返回成功响应
@@ -358,4 +369,23 @@ func (h *UserHandler) LogoutUser(c *gin.Context) {
 		}
 		return
 	}
+
+	user.SetOffline()
+
+	// 更新用户
+	err = h.Mysql.Save(&user).Error
+	if err != nil {
+		errorDetail := ErrorsMgr.GlobalCreateDatabaseError("更新用户", "users", err)
+		ErrorsMgr.HandleError(c, errorDetail)
+		return
+	}
+
+	// 隐藏密码
+	user.HidePassword()
+
+	// 返回成功响应
+	ErrorsMgr.CreateSuccessResponse(c, gin.H{
+		"user":    user,
+		"message": "用户退出成功",
+	})
 }

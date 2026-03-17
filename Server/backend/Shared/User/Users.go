@@ -17,10 +17,6 @@ type User struct {
 	isOnline bool `gorm:"default:false"`
 }
 
-func (u *User) IsAdmin() bool {
-	return u.isAdmin
-}
-
 func (u *User) SetAdmin(isAdmin bool) {
 	u.isAdmin = true
 }
@@ -33,7 +29,7 @@ func (u *User) IsOnline() bool {
 	return u.isOnline
 }
 
-func (u *User) SetOnline(isOnline bool) {
+func (u *User) SetOnline() {
 	u.isOnline = true
 }
 
