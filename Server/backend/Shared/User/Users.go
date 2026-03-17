@@ -45,6 +45,10 @@ func (u *User) CheckPassword(password string) bool {
 	return u.Password == fmt.Sprintf("%x", md5.Sum([]byte(password)))
 }
 
+func (u *User) GetIsAdmin() bool {
+    return u.isAdmin
+}
+
 func (u *User) ToJSON() map[string]interface{} {
 	return map[string]interface{}{
 		"ID":       u.ID,

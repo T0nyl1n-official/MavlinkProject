@@ -4,12 +4,14 @@ import (
 	"crypto/md5"
 	"fmt"
 	"strconv"
+	"time"
 
 	gin "github.com/gin-gonic/gin"
 	gorm "gorm.io/gorm"
 
 	ErrorsMgr "MavlinkProject/Server/backend/Middles/ErrorMiddleHandle/ErrorsMgr"
-	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
+	Jwt "MavlinkProject/Server/backend/Middles/Jwt" 
+    jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 	User "MavlinkProject/Server/backend/Shared/User"
 	Verification "MavlinkProject/Server/backend/Utils/Verification"
 )
@@ -21,6 +23,7 @@ type UserHandler struct {
 
 var globalVerification Verification.VerificationManager
 var globalJWTManager *jwtUtils.JWTManager
+var globalRedisTokenManager *Jwt.RedisTokenManager
 
 func SetVerification(v Verification.VerificationManager) {
 	globalVerification = v
@@ -28,6 +31,10 @@ func SetVerification(v Verification.VerificationManager) {
 
 func SetJWTManager(jwtMgr *jwtUtils.JWTManager) {
 	globalJWTManager = jwtMgr
+}
+
+func SetRedisTokenManager(redisMgr *Jwt.RedisTokenManager) {
+    globalRedisTokenManager = redisMgr
 }
 
 func (h *UserHandler) RegisterUser(c *gin.Context) {
@@ -125,16 +132,30 @@ func (h *UserHandler) LoginUser(c *gin.Context) {
 	}
 
 	role := "user"
-	if (user.isAdmin) {
+	if (user.GetIsAdmin()) {
 		role = "admin"
 	}
 
 	token := ""
-	if globalJWTManager != nil {
-		token, _ = globalJWTManager.GenerateToken(user.ID, user.Username, role)
-	}
+    if globalJWTManager != nil {
+        var err error
+        token, err = globalJWTManager.GenerateToken(user.ID, user.Username, role)
+        if err != nil {
+            ErrorsMgr.HandleError(c, fmt.Errorf("生成Token失败: %v", err))
+            return
+        }
+        
+        if globalRedisTokenManager != nil {
+            // 有效期设为 24 小时 (根据JWT配置调整，这里先写死)
+			err := globalRedisTokenManager.StoreToken(token, user.ID, user.Username, role, time.Now().Add(time.Hour*24))
+            if err != nil {
+                ErrorsMgr.HandleError(c, fmt.Errorf("保存Token失败: %v", err))
+                return
+            }
+        }
+    }
 
-	user.HidePassword()
+    user.HidePassword()
 
 	ErrorsMgr.CreateSuccessResponse(c, gin.H{
 		"User_ID":  user.ID,

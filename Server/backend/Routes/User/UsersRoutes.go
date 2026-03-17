@@ -13,22 +13,26 @@ import (
 )
 
 func SetUsersRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager, mysqlDB *gorm.DB) {
+	
+    UsersHandler.SetJWTManager(jwtManager)
+    UsersHandler.SetRedisTokenManager(tokenManager)
+
 	h := UsersHandler.UserHandler{Mysql: mysqlDB}
 
 	users := r.Group("/users")
 	{
 		users.POST("/register", h.RegisterUser)
 		users.POST("/login", h.LoginUser)
-		users.GET("/profile", h.GetUserInfo)
+		users.GET("/profile/:userID", h.GetUserInfo)
 	}
 
 	usersAuth := r.Group("/users")
 	usersAuth.Use(JwtMiddleware.JwtAuthMiddleWareWithRedis(jwtManager, tokenManager, nil))
 	{
-		usersAuth.POST("/update", h.UpdateUserInfo)
-		usersAuth.POST("/delete", h.DeleteUser)
-		usersAuth.POST("/logout", h.LogoutUser)
-		usersAuth.POST("/send-email-verification", h.SendEmailVerification)
+        usersAuth.POST("/update/:id", h.UpdateUserInfo) 
+        usersAuth.POST("/delete/:id", h.DeleteUser)
+        usersAuth.POST("/logout/:id", h.LogoutUser)
+        usersAuth.POST("/send-email-verification", h.SendEmailVerification)
 	}
 
 	admin := r.Group("/admin")
