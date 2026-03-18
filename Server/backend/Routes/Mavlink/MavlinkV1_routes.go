@@ -99,6 +99,8 @@ func createHandler(c *gin.Context) {
 		return
 	}
 
+	Mavlink.AddHandlerToPool(handler) 
+
 	c.JSON(http.StatusOK, MavlinkV1Response{
 		Success:   true,
 		HandlerID: handler.GetHandlerID(),

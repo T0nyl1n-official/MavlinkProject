@@ -64,6 +64,8 @@ func (h *UserHandler) RegisterUser(c *gin.Context) {
 		ErrorsMgr.HandleError(c, ValidPasswordErr)
 		return
 	}
+	
+	user.Password = fmt.Sprintf("%x", md5.Sum([]byte(user.Password)))
 
 	// 设置用户为在线状态, 并保存到数据库
 	user.SetOnline()

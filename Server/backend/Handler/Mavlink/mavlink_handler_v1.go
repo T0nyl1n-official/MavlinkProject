@@ -443,17 +443,18 @@ func (h *MAVLinkHandlerV1) Start() error {
 		return fmt.Errorf("unsupported connection type: %s", h.config.ConnectionType)
 	}
 
-	node := gomavlib.Node{}
-	err := node.Initialize()
+    node := gomavlib.Node{
+        Endpoints:           []gomavlib.EndpointConf{endpointConf},
+        Dialect:             common.Dialect,
+        OutVersion:          gomavlib.V2,
+        OutSystemID:         byte(h.config.SystemID),
+        OutComponentID:      1,
+        HeartbeatDisable:    false,
+        HeartbeatPeriod:     h.config.HeartbeatRate,
+        StreamRequestEnable: true,
+    }
 
-	node.Endpoints = []gomavlib.EndpointConf{endpointConf}
-	node.Dialect = common.Dialect
-	node.OutVersion = gomavlib.V2
-	node.OutSystemID = byte(h.config.SystemID)
-	node.OutComponentID = 1
-	node.HeartbeatDisable = false
-	node.HeartbeatPeriod = h.config.HeartbeatRate
-	node.StreamRequestEnable = true
+    err := node.Initialize()
 
 	if err != nil {
 		return fmt.Errorf("failed to create MAVLink node: %w", err)
@@ -969,6 +970,14 @@ func (h *MAVLinkHandlerV1) handleBattery(msg *common.MessageBatteryStatus, syste
 		h.drone.SetBattery(battery)
 	}
 	h.mu.Unlock()
+}
+
+// AddHandlerToPool 将 Handler 手动注册到全局池中
+// 必须在 Create 之后调用，否则 GetHandlerV1 找不到它
+func AddHandlerToPool(h *MAVLinkHandlerV1) {
+    handlerPoolMux.Lock()
+    defer handlerPoolMux.Unlock()
+    handlerPool[h.handlerID] = h
 }
 
 func (h *MAVLinkHandlerV1) handleChannelOpen(evt *gomavlib.EventChannelOpen) {
