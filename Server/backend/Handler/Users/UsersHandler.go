@@ -10,8 +10,8 @@ import (
 	gorm "gorm.io/gorm"
 
 	ErrorsMgr "MavlinkProject/Server/backend/Middles/ErrorMiddleHandle/ErrorsMgr"
-	Jwt "MavlinkProject/Server/backend/Middles/Jwt" 
-    jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
+	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
+	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 	User "MavlinkProject/Server/backend/Shared/User"
 	Verification "MavlinkProject/Server/backend/Utils/Verification"
 )
@@ -34,7 +34,7 @@ func SetJWTManager(jwtMgr *jwtUtils.JWTManager) {
 }
 
 func SetRedisTokenManager(redisMgr *Jwt.RedisTokenManager) {
-    globalRedisTokenManager = redisMgr
+	globalRedisTokenManager = redisMgr
 }
 
 func (h *UserHandler) RegisterUser(c *gin.Context) {
@@ -132,30 +132,30 @@ func (h *UserHandler) LoginUser(c *gin.Context) {
 	}
 
 	role := "user"
-	if (user.GetIsAdmin()) {
+	if user.IsAdmin {
 		role = "admin"
 	}
 
 	token := ""
-    if globalJWTManager != nil {
-        var err error
-        token, err = globalJWTManager.GenerateToken(user.ID, user.Username, role)
-        if err != nil {
-            ErrorsMgr.HandleError(c, fmt.Errorf("生成Token失败: %v", err))
-            return
-        }
-        
-        if globalRedisTokenManager != nil {
-            // 有效期设为 24 小时 (根据JWT配置调整，这里先写死)
-			err := globalRedisTokenManager.StoreToken(token, user.ID, user.Username, role, time.Now().Add(time.Hour*24))
-            if err != nil {
-                ErrorsMgr.HandleError(c, fmt.Errorf("保存Token失败: %v", err))
-                return
-            }
-        }
-    }
+	if globalJWTManager != nil {
+		var err error
+		token, err = globalJWTManager.GenerateToken(user.ID, user.Username, role)
+		if err != nil {
+			ErrorsMgr.HandleError(c, fmt.Errorf("生成Token失败: %v", err))
+			return
+		}
 
-    user.HidePassword()
+		if globalRedisTokenManager != nil {
+			// 有效期设为 24 小时 (根据JWT配置调整，这里先写死)
+			err := globalRedisTokenManager.StoreToken(token, user.ID, user.Username, role, time.Now().Add(time.Hour*24))
+			if err != nil {
+				ErrorsMgr.HandleError(c, fmt.Errorf("保存Token失败: %v", err))
+				return
+			}
+		}
+	}
+
+	user.HidePassword()
 
 	ErrorsMgr.CreateSuccessResponse(c, gin.H{
 		"User_ID":  user.ID,

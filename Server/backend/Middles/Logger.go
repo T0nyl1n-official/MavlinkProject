@@ -50,6 +50,10 @@ const (
 	MaxLogFileSize       = 100 * 1024 * 1024 // 100MB 最大日志文件大小
 )
 
+var (
+	logDir = "./OutputLogs"
+)
+
 // 初始化访问监控器
 func initAccessMonitor() {
 	monitorOnce.Do(func() {
@@ -60,7 +64,6 @@ func initAccessMonitor() {
 		}
 
 		// 创建日志目录
-		logDir := "d:\\practices\\GuiyuProject\\logs"
 		if err := os.MkdirAll(logDir, 0755); err != nil {
 			log.Printf("创建日志目录失败: %v", err)
 		}
@@ -96,7 +99,7 @@ func (am *AccessMonitor) logToFile(level, message string) {
 			am.logFile.Close()
 		}
 
-		logPath := filepath.Join("d:\\practices\\testProject\\src\\newProject\\WebEdition\\BackEnd\\log",
+		logPath := filepath.Join(logDir,
 			fmt.Sprintf("log_%s.log", currentDate))
 
 		file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -165,7 +168,7 @@ func (am *AccessMonitor) checkURLError(url string, statusCode int) {
 }
 
 // logErrorMgrError 记录ErrorMgr错误
-func (am *AccessMonitor) logErrorMgrError(c *gin.Context, duration time.Duration) {
+func (am *AccessMonitor) logErrorMgrError(c *gin.Context) {
 	// 检查是否有ErrorMgr错误
 	if len(c.Errors) > 0 {
 		for _, ginErr := range c.Errors {
@@ -216,7 +219,7 @@ func (am *AccessMonitor) logErrorMgrError(c *gin.Context, duration time.Duration
 }
 
 // 结构化日志中间件
-func Logger(gitDB *gorm.DB) gin.HandlerFunc {
+func Logger(mysql *gorm.DB) gin.HandlerFunc {
 	// 初始化监控器
 	initAccessMonitor()
 
@@ -284,6 +287,6 @@ func Logger(gitDB *gorm.DB) gin.HandlerFunc {
 		accessMonitor.checkURLError(urlPath, statusCode)
 
 		// 记录ErrorMgr错误
-		accessMonitor.logErrorMgrError(c, duration)
+		accessMonitor.logErrorMgrError(c)
 	}
 }

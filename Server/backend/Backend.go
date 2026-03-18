@@ -7,12 +7,14 @@ import (
 	redis "github.com/redis/go-redis/v9"
 	gorm "gorm.io/gorm"
 
+	WarningHandler "MavlinkProject/Server/Backend/Utils/WarningHandle"
 	DBService "MavlinkProject/Server/backend/Database"
 	DBConfig "MavlinkProject/Server/backend/Database/Config"
 	UsersHandler "MavlinkProject/Server/backend/Handler/Users"
-	JwtMiddleware "MavlinkProject/Server/backend/Middles"
+	Middleware "MavlinkProject/Server/backend/Middles"
 	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
 	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
+	ListeningMidWare "MavlinkProject/Server/backend/Middles/Listening"
 	Routes "MavlinkProject/Server/backend/Routes"
 	Verification "MavlinkProject/Server/backend/Utils/Verification"
 )
@@ -63,8 +65,13 @@ func (bs *BackendServer) New() {
 	tokenRedis := redisClients[len(redisClients)-2]
 	verificationRedis := redisClients[len(redisClients)-1]
 
-	jwtManager := JwtMiddleware.NewDefaultJWTManager()
+	jwtManager := Middleware.NewDefaultJWTManager()
 	tokenManager := Jwt.NewRedisTokenManager(&tokenRedis)
+
+	// 全局中间件使用
+	router.Use(ListeningMidWare.ListeningErrorMiddleWare(),
+		Middleware.Logger(mysqlDB),
+	)
 
 	bs.Router = router
 	bs.Mysql = mysqlDB
@@ -76,6 +83,8 @@ func (bs *BackendServer) New() {
 
 	UsersHandler.SetVerification(verification)
 	UsersHandler.SetJWTManager(jwtManager)
+
+	WarningHandler.SetRedisClients(&redisClients)
 }
 
 func (bs *BackendServer) Run(port string) {
@@ -85,7 +94,6 @@ func (bs *BackendServer) Run(port string) {
 	log.Printf("Backend server started on port %s", port)
 }
 
-// 被整合的Backend创建方法
 func (bs *BackendServer) Start(port string) *BackendServer {
 	bs.New()
 	bs.Run(port)

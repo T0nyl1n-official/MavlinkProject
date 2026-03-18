@@ -13,28 +13,24 @@ type User struct {
 	Email    string `gorm:"unique, not null"`
 	Password string `gorm:"not null"`
 
-	isAdmin  bool `gorm:"default:false"`
-	isOnline bool `gorm:"default:false"`
+	IsAdmin  bool `gorm:"default:false"`
+	IsOnline bool `gorm:"default:false"`
 }
 
-func (u *User) SetAdmin(isAdmin bool) {
-	u.isAdmin = true
+func (u *User) SetAdmin() {
+	u.IsAdmin = true
 }
 
-func (u *User) DecAdmin(username string) {
-	u.isAdmin = false
-}
-
-func (u *User) IsOnline() bool {
-	return u.isOnline
+func (u *User) DecAdmin() {
+	u.IsAdmin = false
 }
 
 func (u *User) SetOnline() {
-	u.isOnline = true
+	u.IsOnline = true
 }
 
 func (u *User) SetOffline() {
-	u.isOnline = false
+	u.IsOnline = false
 }
 
 func (u *User) HidePassword() {
@@ -46,7 +42,7 @@ func (u *User) CheckPassword(password string) bool {
 }
 
 func (u *User) GetIsAdmin() bool {
-    return u.isAdmin
+	return u.IsAdmin
 }
 
 func (u *User) ToJSON() map[string]interface{} {
@@ -54,7 +50,7 @@ func (u *User) ToJSON() map[string]interface{} {
 		"ID":       u.ID,
 		"Username": u.Username,
 		"Email":    u.Email,
-		"IsAdmin":  u.isAdmin,
-		"IsOnline": u.isOnline,
+		"IsAdmin":  u.IsAdmin,
+		"IsOnline": u.IsOnline,
 	}
 }
