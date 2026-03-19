@@ -35,7 +35,7 @@ func (m *JWTManager) GenerateToken(userID uint, username, role string) (string, 
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.Config.ExpireTime)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "ProjectGIT",
+			Issuer:    "MavlinkProject",
 			Subject:   "authentication",
 		},
 	}
@@ -59,7 +59,7 @@ func (m *JWTManager) GenerateRefreshToken(userID uint, username, role string) (s
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.Config.RefreshTime)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "ProjectGIT",
+			Issuer:    "MavlinkProject",
 			Subject:   "refresh",
 		},
 	}

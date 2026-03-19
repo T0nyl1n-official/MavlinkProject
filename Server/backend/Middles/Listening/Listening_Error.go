@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -35,10 +36,11 @@ func ListeningErrorMiddleWare() gin.HandlerFunc {
 	return ListeningErrorWithConfig(defaultListeningConfig)
 }
 
+// ListeningErrorWithConfig 配置监听错误中间件
 func ListeningErrorWithConfig(config ListeningConfig) gin.HandlerFunc {
 	listenerInit.Do(func() {
 		if config.EnablePanicRecovery {
-			log.Println("[ListeningError] 全局错误监听已启动 - Panic恢复已启用")
+			log.Printf("[%s] [ListeningError] 全局错误监听已启动 - Panic恢复已启用", time.Now().Format("2006-01-02 15:04:05"))
 		}
 	})
 
@@ -48,9 +50,10 @@ func ListeningErrorWithConfig(config ListeningConfig) gin.HandlerFunc {
 				if panicValue := recover(); panicValue != nil {
 					stack := string(debug.Stack())
 					errorMsg := fmt.Sprintf("Panic recovered: %v", panicValue)
+					timestamp := time.Now().Format("2006-01-02 15:04:05")
 
 					if config.EnableErrorLogging {
-						log.Printf("[PANIC] %s\nStack Trace:\n%s", errorMsg, stack)
+						log.Printf("[%s] [PANIC] %s\nStack Trace:\n%s", timestamp, errorMsg, stack)
 					}
 
 					if config.EnableWarningPush {
@@ -75,9 +78,10 @@ func ListeningErrorWithConfig(config ListeningConfig) gin.HandlerFunc {
 					if err != nil {
 						errorMsg := err.Error()
 						source := detectErrorSource(c)
+						timestamp := time.Now().Format("2006-01-02 15:04:05")
 
 						if config.EnableErrorLogging {
-							log.Printf("[ERROR] Source: %s, Error: %s", source, errorMsg)
+							log.Printf("[%s] [ERROR] Source: %s, Error: %s", timestamp, source, errorMsg)
 						}
 
 						if config.EnableWarningPush {
@@ -90,6 +94,7 @@ func ListeningErrorWithConfig(config ListeningConfig) gin.HandlerFunc {
 	}
 }
 
+// 检查错误来源路径
 func detectErrorSource(c *gin.Context) string {
 	path := c.Request.URL.Path
 
