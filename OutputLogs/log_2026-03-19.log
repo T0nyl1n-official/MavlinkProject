@@ -1,0 +1,55 @@
+[2026-03-19 11:53:21] INFO POST /users/login 200 56ms
+[2026-03-19 11:54:59] INFO POST /mavlink/v1/handler/create 200 12ms
+[2026-03-19 11:55:32] INFO 监控数据已重置
+[2026-03-19 11:56:13] INFO POST /mavlink/v1/connection/start 400 1ms
+[2026-03-19 12:00:32] INFO 监控数据已重置
+[2026-03-19 12:02:21] INFO GET /mavlink/v1/handler/:id 404 1ms
+[2026-03-19 12:02:34] INFO GET /mavlink/v1/handler/ 404 0ms
+[2026-03-19 12:02:50] INFO GET /mavlink/v1/handler/: 404 1ms
+[2026-03-19 12:03:26] INFO GET /mavlink/v1/handler/87516 200 7ms
+[2026-03-19 12:04:38] INFO POST /mavlink/v1/connection/start 200 25ms
+[2026-03-19 12:05:05] INFO POST /mavlink/v1/connection/stop 200 2ms
+[2026-03-19 12:05:12] INFO POST /mavlink/v1/connection/start 200 19ms
+[2026-03-19 12:05:32] INFO 监控数据已重置
+[2026-03-19 12:06:10] INFO GET /mavlink/v1//handler/87516 404 0ms
+[2026-03-19 12:06:18] INFO GET /mavlink/v1//handler/:87516 404 0ms
+[2026-03-19 12:06:32] INFO GET /mavlink/v1//handler/87516 404 0ms
+[2026-03-19 12:06:35] INFO POST /mavlink/v1/connection/start 500 1ms
+[2026-03-19 12:06:52] INFO GET /mavlink/v1//handler/87516 404 0ms
+[2026-03-19 12:07:39] INFO GET /mavlink/v1//handler/87516 404 0ms
+[2026-03-19 12:10:04] INFO POST /mavlink/v1/connection/start 500 1ms
+[2026-03-19 12:10:22] INFO POST /mavlink/v1/drone/return 200 1ms
+[2026-03-19 12:10:24] INFO POST /mavlink/v1/drone/return 200 0ms
+[2026-03-19 12:10:32] INFO 监控数据已重置
+[2026-03-19 12:10:44] INFO POST /mavlink/v1/drone/status 404 1ms
+[2026-03-19 12:10:52] INFO GET /mavlink/v1/drone/status 400 1ms
+[2026-03-19 12:11:16] INFO GET /mavlink/v1/drone/status 200 10ms
+[2026-03-19 12:11:37] INFO GET /mavlink/v1/drone/posision 404 0ms
+[2026-03-19 12:11:46] INFO GET /mavlink/v1/drone/position 200 1ms
+[2026-03-19 12:12:03] INFO GET /mavlink/v1/drone/battery 200 1ms
+[2026-03-19 12:12:32] INFO POST /mavlink/v2/land 400 1ms
+[2026-03-19 12:13:27] INFO POST /mavlink/v2/land 200 1ms
+[2026-03-19 12:13:35] INFO POST /mavlink/v2/land 200 1ms
+[2026-03-19 12:13:53] INFO POST /mavlink/v2/return 200 0ms
+[2026-03-19 12:13:55] INFO POST /mavlink/v2/return 200 0ms
+[2026-03-19 12:15:32] INFO 监控数据已重置
+[2026-03-19 12:47:34] INFO POST /users/register 400 0ms
+[2026-03-19 12:48:49] INFO POST /users/register 200 16ms
+[2026-03-19 12:48:49] INFO POST /users/login 200 19ms
+[2026-03-19 12:50:33] INFO POST /users/register 200 7ms
+[2026-03-19 12:50:33] INFO POST /users/login 200 12ms
+[2026-03-19 12:52:22] INFO 监控数据已重置
+[2026-03-19 12:53:09] INFO POST /users/register 200 15ms
+[2026-03-19 12:53:09] INFO POST /users/login 200 10ms
+[2026-03-19 12:57:22] INFO 监控数据已重置
+[2026-03-19 12:57:25] INFO POST /users/register 200 8ms
+[2026-03-19 12:57:25] INFO POST /users/login 200 5ms
+[2026-03-19 12:57:25] INFO POST /api/chain/create 200 0ms
+[2026-03-19 12:57:25] INFO POST /api/chain/a522ca205bc6e82a/node/add 200 0ms
+[2026-03-19 12:57:25] INFO DELETE /api/chain/a522ca205bc6e82a 200 0ms
+[2026-03-19 12:59:51] INFO POST /users/register 200 5ms
+[2026-03-19 12:59:51] INFO POST /users/login 200 7ms
+[2026-03-19 12:59:51] INFO POST /api/chain/create 200 0ms
+[2026-03-19 12:59:51] INFO POST /api/chain/fe529ec7462b117e/node/add 200 0ms
+[2026-03-19 12:59:51] INFO DELETE /api/chain/fe529ec7462b117e 200 0ms
+[2026-03-19 12:59:51] INFO POST /users/register 200 10ms

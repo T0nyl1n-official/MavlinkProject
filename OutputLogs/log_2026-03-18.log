@@ -76,3 +76,13 @@
 [2026-03-18 16:44:25] INFO POST /mavlink/v2/takeoff 400 47ms
 [2026-03-18 16:45:02] INFO POST /mavlink/v1/handler/create 400 0ms
 [2026-03-18 16:45:17] INFO POST /mavlink/v1/handler/create 200 1ms
+[2026-03-18 16:52:47] INFO POST /mavlink/v1/handler/create 200 38ms
+[2026-03-18 16:52:56] INFO POST /mavlink/v2/takeoff 200 1ms
+[2026-03-18 16:53:52] INFO POST /mavlink/v2/takeoff 200 9ms
+[2026-03-18 16:54:16] INFO POST /mavlink/v2/move 400 2ms
+[2026-03-18 16:54:22] INFO POST /mavlink/v2/takeoff 200 3ms
+[2026-03-18 16:54:34] INFO POST /mavlink/v2/move 400 1ms
+[2026-03-18 16:55:31] INFO POST /mavlink/v2/takeoff 200 5ms
+[2026-03-18 16:56:43] INFO POST /mavlink/v2/move 200 1ms
+[2026-03-18 16:57:38] INFO 监控数据已重置
+[2026-03-18 17:02:38] INFO 监控数据已重置

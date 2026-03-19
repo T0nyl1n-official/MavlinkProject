@@ -67,6 +67,14 @@ func (h *UserHandler) RegisterUser(c *gin.Context) {
 	
 	user.Password = fmt.Sprintf("%x", md5.Sum([]byte(user.Password)))
 
+	// 检查邮箱是否已存在
+	var count int64
+    h.Mysql.Model(&User.User{}).Where("email = ?", user.Email).Count(&count)
+    if count > 0 {
+        ErrorsMgr.HandleError(c, fmt.Errorf("该邮箱已被注册"))
+        return
+    }
+
 	// 设置用户为在线状态, 并保存到数据库
 	user.SetOnline()
 	if err := h.Mysql.Create(&user).Error; err != nil {
