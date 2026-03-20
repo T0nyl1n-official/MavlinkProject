@@ -204,7 +204,7 @@ func ClassifyError(err error) ErrorType {
 	}
 
 	if strings.Contains(errStr, "mavlink") ||
-		strings.Contains(errStr, "mavlink") ||
+		strings.Contains(errStr, "chain") ||
 		strings.Contains(errStr, "heartbeat") ||
 		strings.Contains(errStr, "dialect") {
 		return ErrorTypeMavlink
@@ -243,6 +243,7 @@ func ClassifyError(err error) ErrorType {
 	return ErrorTypeUnknown
 }
 
+// DistributeError 分发错误
 func DistributeError(errorMsg string, source string) ErrorType {
 	err := fmt.Errorf(errorMsg)
 	detail := ErrorDetail{
@@ -254,6 +255,7 @@ func DistributeError(errorMsg string, source string) ErrorType {
 	return Distribute(detail)
 }
 
+// Distribute 分发错误子方法
 func Distribute(detail ErrorDetail) ErrorType {
 	var dbIndex DBIndex
 
@@ -271,6 +273,7 @@ func Distribute(detail ErrorDetail) ErrorType {
 	return detail.ErrorType
 }
 
+// storeToRedis 存储警告到Redis
 func storeToRedis(detail ErrorDetail, dbIndex DBIndex) {
 	client := GetRedisClientGlobal(dbIndex)
 	if client == nil {

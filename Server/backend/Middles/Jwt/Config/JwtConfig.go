@@ -29,7 +29,7 @@ type ServerConfig struct {
 
 // DefaultJWTConfig 默认JWT配置 (管理员设置)
 var DefaultJWTConfig = JWTConfig{
-	SecretKey:     []byte(os.Getenv("ProjectGIT_JWT_SECRET_KEY")),
+	SecretKey:     []byte(os.Getenv("MavlinkProject_JWT_SECRET_KEY")),
 	ExpireTime:    time.Hour,
 	RefreshTime:   time.Hour * 24,
 	SigningMethod: jwt.SigningMethodHS256,
@@ -46,7 +46,7 @@ func Load() *Config {
 			IdentityKey:   DefaultJWTConfig.IdentityKey,
 		},
 		Server: ServerConfig{
-			Port: os.Getenv("ProjectGIT_JWT_SERVER_PORT"),
+			Port: os.Getenv("MavlinkProject_JWT_SERVER_PORT"),
 		},
 	}
 }

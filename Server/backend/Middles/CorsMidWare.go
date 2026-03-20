@@ -23,7 +23,7 @@ func CORSMiddleware() gin.HandlerFunc {
 		},
 
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,           //必须带cookies
+		AllowCredentials: true,           // 必须带cookies
 		MaxAge:           12 * time.Hour, // 控制浏览器缓存预检请求（OPTIONS）结果的时间
 	})
 }
