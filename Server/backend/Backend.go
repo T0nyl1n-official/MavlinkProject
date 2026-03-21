@@ -14,7 +14,7 @@ import (
 	Middleware "MavlinkProject/Server/backend/Middles"
 	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
 	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
-	ListeningMidWare "MavlinkProject/Server/backend/Middles/Listening"
+	Listening "MavlinkProject/Server/backend/Middles/Listening"
 	Routes "MavlinkProject/Server/backend/Routes"
 	Verification "MavlinkProject/Server/backend/Utils/Verification"
 )
@@ -69,7 +69,8 @@ func (bs *BackendServer) New() {
 	tokenManager := Jwt.NewRedisTokenManager(&tokenRedis)
 
 	// 全局中间件使用
-	router.Use(ListeningMidWare.ListeningErrorMiddleWare(),
+	router.Use(Listening.ListeningErrorMiddleWare(),
+		Listening.BoardListenerMiddleware(),
 		Middleware.Logger(mysqlDB),
 	)
 
@@ -85,6 +86,9 @@ func (bs *BackendServer) New() {
 	UsersHandler.SetJWTManager(jwtManager)
 
 	WarningHandler.SetRedisClients(&redisClients)
+
+	Listening.StartBoardListener()
+	log.Printf("[BackendServer] Board listener service started")
 }
 
 func (bs *BackendServer) Run(port string) {

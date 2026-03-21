@@ -737,3 +737,260 @@ curl -X GET http://localhost:8080/mavlink/v1/drone/status?handler_id=12345 \
 4. MAVLink V1 接口为原子化操作，适合精细控制
 5. MAVLink V2 接口为组合操作，适合快速任务执行
 6. 进度链支持最多 1000 步任务执行
+
+---
+
+## Board 板子通信接口 (需认证)
+
+基础路径: `/api/board`
+
+**Header**: `Authorization: Bearer <token>`
+
+> ⚠️ 注意：Board API 需要 JWT 认证，用于前端/AI 发送指令给板子。
+
+### 23. 创建板子服务器
+
+#### POST /api/board/create
+创建并启动 Board 服务器
+
+**请求体**:
+```json
+{
+  "board_id": "drone_001",
+  "board_name": "Drone Board",
+  "board_type": "Drone",
+  "connection": "TCP",
+  "address": "0.0.0.0",
+  "port": "14550"
+}
+```
+
+**connection 选项**: `TCP`, `UDP`
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "message": "Board server created successfully",
+  "handler_id": "drone_001",
+  "board": {
+    "board_id": "drone_001",
+    "board_name": "Drone Board"
+  }
+}
+```
+
+---
+
+### 24. 启动板子服务器
+
+#### POST /api/board/start
+启动已创建的 Board 服务器
+
+**请求体**:
+```json
+{
+  "board_id": "drone_001",
+  "connection": "TCP",
+  "address": "0.0.0.0",
+  "port": "14550"
+}
+```
+
+---
+
+### 25. 停止板子服务器
+
+#### POST /api/board/stop
+停止 Board 服务器
+
+**请求体**:
+```json
+{
+  "board_id": "drone_001"
+}
+```
+
+---
+
+### 26. 删除板子服务器
+
+#### DELETE /api/board/delete/:boardID
+删除 Board 服务器
+
+**参数**: `boardID` - Board ID
+
+---
+
+### 27. 发送消息给板子
+
+#### POST /api/board/send
+后端发送消息给指定板子
+
+**请求体**:
+```json
+{
+  "to_id": "drone_001",
+  "to_type": "Drone",
+  "command": "TakePhoto",
+  "attribute": "Command",
+  "data": {
+    "count": 10
+  }
+}
+```
+
+**command 选项**: `TakePhoto`, `TakeOff`, `Land`, `GoTo`, `SetSpeed`, `SetPosition`, `SetConfig`, `SetCamera`, `GetStatus`, `GetConfig`, `Connect`, `Disconnect`
+
+**attribute 选项**: `Default`, `Status`, `Mission`, `Control`, `Command`, `Warning`
+
+---
+
+### 28. 板子间消息转发
+
+#### POST /api/board/forward
+手动转发消息从一个板子到另一个板子
+
+**请求体**:
+```json
+{
+  "from_board_id": "drone_001",
+  "to_board_id": "drone_002",
+  "command": "RelayCommand",
+  "attribute": "Control",
+  "data": {
+    "message": "hello"
+  }
+}
+```
+
+**说明**: 
+- `forwardMessage` 是**手动调用**的转发方式
+- 消息从后端手动指定源板子和目标板子
+- 适用于 AI/前端需要精确控制转发路径的场景
+
+---
+
+### 29. 启用自动转发
+
+#### POST /api/board/auto-forward
+启用消息自动转发功能
+
+**说明**:
+- 启用后，后端会自动将收到的消息根据 `ToID` 转发到对应板子
+- 板子发送消息时只需设置 `ToID` 为目标板子 ID
+- 适用于板子自主通信场景，减少后端干预
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "message": "Auto-forward enabled"
+}
+```
+
+---
+
+### 30. 获取板子列表
+
+#### GET /api/board/list
+获取所有已连接板子列表
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "boards": [
+    {
+      "board_id": "drone_001",
+      "board_ip": "0.0.0.0",
+      "board_port": "14550",
+      "board_status": "TCP",
+      "is_connected": true
+    }
+  ]
+}
+```
+
+---
+
+### 31. 获取板子信息
+
+#### GET /api/board/info/:boardID
+获取指定板子详细信息
+
+**参数**: `boardID` - Board ID
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "board": {
+    "board_id": "drone_001",
+    "board_ip": "0.0.0.0",
+    "board_port": "14550",
+    "board_status": "TCP",
+    "is_connected": true
+  }
+}
+```
+
+---
+
+## 板子通信流程说明
+
+### 通信模式
+
+#### 1. 后端 → 板子
+```
+前端/AI → 后端 → /api/board/send → 板子
+```
+
+#### 2. 板子 → 后端
+```
+板子 → TCP/UDP 监听端口 → BoardListener → BoardClassifier → 处理/存储
+```
+
+#### 3. 板子 → 板子 (自动转发)
+```
+板子A → 后端 → 自动根据ToID转发 → 板子B
+(需先调用 /api/board/auto-forward 启用)
+```
+
+#### 4. 板子 → 板子 (手动转发)
+```
+前端/AI → 后端 → /api/board/forward → 板子B
+```
+
+### BoardMessage 结构
+
+```json
+{
+  "message_id": "20260321153045-abc123",
+  "message_time": "2026-03-21T15:30:45Z",
+  "message": {
+    "message_type": "Request",
+    "attribute": "Command",
+    "connection": "TCP",
+    "command": "TakePhoto",
+    "data": {"count": 10}
+  },
+  "from_id": "drone_001",
+  "from_type": "Drone",
+  "to_id": "drone_002",
+  "to_type": "Drone"
+}
+```
+
+### 消息分类处理
+
+BoardClassifier 会根据消息类型自动处理：
+
+| 消息类型 | 处理动作 | 说明 |
+|----------|----------|------|
+| Heartbeat | Ignore | 正常心跳 |
+| Status | Log | 状态更新记录 |
+| Mission | DispatchNext/Reschedule | 任务完成/失败处理 |
+| Control | Log | 控制指令记录 |
+| Command | Response | 命令执行响应 |
+| Warning/Error | ReportError | 错误上报 Agent |
