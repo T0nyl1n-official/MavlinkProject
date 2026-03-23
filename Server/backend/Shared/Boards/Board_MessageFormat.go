@@ -66,7 +66,6 @@ type Message struct {
 	Command string                 `json:"command"`
 	Data    map[string]interface{} `json:"data"`
 }
-
 /*
 	Message 属性详解:
 	MessageType: 消息类型，用于标识消息的类型，例如 "Request" 或 "Response"。

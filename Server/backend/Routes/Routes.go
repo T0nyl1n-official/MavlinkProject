@@ -15,7 +15,7 @@ import (
 func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager, mysqlDB *gorm.DB) {
 	Test_Routes(r)
 	UsersRoutes.SetUsersRoutes(r, jwtManager, tokenManager, mysqlDB)
-BoardsRoutes.SetupBoardRoutes(r, jwtManager, tokenManager)
+	BoardsRoutes.SetupBoardRoutes(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupChainRoutes(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupDefaultMavlinkRoutesV2(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupMavlinkV1Routes(r, jwtManager, tokenManager)
