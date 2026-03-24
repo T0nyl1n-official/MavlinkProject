@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	boardHandler "MavlinkProject/Server/Backend/Handler/Boards"
-	Board "MavlinkProject/Server/Backend/Shared/Boards"
-	MavlinkBoard "MavlinkProject/Server/Backend/Utils/CentralBoard/MavlinkCommand"
+	boardHandler "MavlinkProject/Server/backend/Handler/Boards"
+	Board "MavlinkProject/Server/backend/Shared/Boards"
+	MavlinkBoard "MavlinkProject/Server/backend/Utils/CentralBoard/MavlinkCommand"
 
 	"github.com/bluenviron/gomavlib/v3"
 	"github.com/bluenviron/gomavlib/v3/pkg/message"

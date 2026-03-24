@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	Board "MavlinkProject/Server/Backend/Shared/Boards"
-	Distribute "MavlinkProject/Server/Backend/Utils/CentralBoard/Distribute"
-	MavlinkBoard "MavlinkProject/Server/Backend/Utils/CentralBoard/MavlinkCommand"
+	Board "MavlinkProject/Server/backend/Shared/Boards"
+	Distribute "MavlinkProject/Server/backend/Utils/CentralBoard/Distribute"
+	MavlinkBoard "MavlinkProject/Server/backend/Utils/CentralBoard/MavlinkCommand"
 
 	"github.com/bluenviron/gomavlib/v3/pkg/dialects/common"
 )
