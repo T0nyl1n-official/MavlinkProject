@@ -5,7 +5,7 @@ import (
 
 	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 
-	Board "MavlinkProject/Server/Backend/Shared/Boards"
+	Board "MavlinkProject/Server/backend/Shared/Boards"
 )
 
 type BoardHandler struct {

@@ -49,3 +49,4 @@
 [2026-03-22 12:01:32] INFO GET /api/board/list 200 0ms
 [2026-03-22 12:01:32] INFO POST /api/board/send 200 5ms
 [2026-03-22 12:01:33] INFO DELETE /api/board/delete/test_board_1774152092 200 891ms
+[2026-03-22 12:06:16] INFO 监控数据已重置
