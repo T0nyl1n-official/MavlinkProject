@@ -15,6 +15,7 @@ import (
 	"github.com/bluenviron/gomavlib/v3/pkg/dialects/common"
 )
 
+// 后端配置
 const (
 	backendAddress = "localhost"
 	backendPort    = "8080"
@@ -554,10 +555,10 @@ func (cs *CentralServer) GetAllChains() []*ProgressChain {
 
 func main() {
 	// 创建中央调度服务器
-	server := NewCentralServer(backendAddress, backendPort)
+	central := NewCentralServer(backendAddress, backendPort)
 
 	// 启动服务器
-	if err := server.Start(); err != nil {
+	if err := central.Start(); err != nil {
 		log.Fatalf("Failed to start CentralServer: %v", err)
 	}
 
@@ -565,9 +566,9 @@ func main() {
 	log.Printf("等待接收ProgressChain任务链...")
 
 	// 等待中断信号
-	<-server.stopChan
+	<-central.stopChan
 
 	log.Printf("Central调度系统正在关闭...")
-	server.Stop()
+	central.Stop()
 	log.Printf("Central调度系统已关闭")
 }
