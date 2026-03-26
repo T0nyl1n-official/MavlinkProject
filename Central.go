@@ -8,17 +8,17 @@ import (
 	"sync"
 	"time"
 
-	Board "MavlinkProject_Board/Shared/Boards"
 	Distribute "MavlinkProject_Board/Distribute"
 	MavlinkBoard "MavlinkProject_Board/MavlinkCommand"
+	Board "MavlinkProject_Board/Shared/Boards"
 
 	"github.com/bluenviron/gomavlib/v3/pkg/dialects/common"
 )
 
 // 后端配置
 const (
-	backendAddress = "localhost"
-	backendPort    = "8080"
+	backendAddress = "frp-any.com"
+	backendPort    = "31154"
 )
 
 // using for Task.Status
@@ -100,12 +100,26 @@ func (cs *CentralServer) Start() error {
 		return fmt.Errorf("failed to start DroneSearch: %v", err)
 	}
 
-	// 启动网络监听
-	listener, err := net.Listen("tcp", cs.address+":"+cs.port)
+	// 监听本地端口 (让 Gin/测试可以连接)
+	localPort := cs.port
+	if localPort == backendPort {
+		localPort = "8080" // 本地监听端口
+	}
+	listener, err := net.Listen("tcp", ":"+localPort)
 	if err != nil {
-		return fmt.Errorf("failed to start listener: %v", err)
+		return fmt.Errorf("failed to start local listener: %v", err)
 	}
 	cs.listener = listener
+	log.Printf("[CentralServer] Listening on port %s", localPort)
+
+	// 连接到 FRP 服务器 (作为客户端)
+	frpConn, err := net.Dial("tcp", cs.address+":"+cs.port)
+	if err != nil {
+		log.Printf("[CentralServer] Warning: failed to connect to FRP server %s:%s: %v", cs.address, cs.port, err)
+	} else {
+		go cs.handleConnection(frpConn)
+		log.Printf("[CentralServer] Connected to FRP server %s:%s", cs.address, cs.port)
+	}
 
 	cs.running = true
 
@@ -113,7 +127,7 @@ func (cs *CentralServer) Start() error {
 	go cs.acceptConnections()
 	go cs.taskProcessor()
 
-	log.Printf("[CentralServer] Started on port %s", cs.port)
+	log.Printf("[CentralServer] Started")
 	return nil
 }
 
