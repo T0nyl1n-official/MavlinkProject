@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	Board "MavlinkProject/Server/Backend/Shared/Boards"
+	Board "MavlinkProject/Server/backend/Shared/Boards"
 	WarningHandler "MavlinkProject/Server/Backend/Utils/WarningHandle"
 )
 

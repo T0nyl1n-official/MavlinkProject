@@ -172,15 +172,29 @@ func (cs *CentralServer) handleConnection(conn net.Conn) {
 		}
 
 		if n > 0 {
+			log.Printf("[CentralServer] Received %d bytes from %s", n, conn.RemoteAddr())
+
 			var boardMsg Board.BoardMessage
 			if err := json.Unmarshal(buffer[:n], &boardMsg); err != nil {
 				log.Printf("[CentralServer] JSON unmarshal error: %v", err)
+				// 发送错误响应
+				resp := map[string]interface{}{"status": "error", "message": err.Error()}
+				respData, _ := json.Marshal(resp)
+				conn.Write(respData)
 				continue
 			}
+
+			log.Printf("[CentralServer] Received message: Command=%s, FromID=%s", 
+				boardMsg.Message.Command, boardMsg.FromID)
 
 			// 处理接收到的消息
 			if err := cs.handleBoardMessage(&boardMsg); err != nil {
 				log.Printf("[CentralServer] Handle message error: %v", err)
+				// 发送错误响应
+				resp := map[string]interface{}{"status": "error", "message": err.Error()}
+				respData, _ := json.Marshal(resp)
+				conn.Write(respData)
+				continue
 			}
 
 			// 发送响应
@@ -189,7 +203,9 @@ func (cs *CentralServer) handleConnection(conn net.Conn) {
 				"message": "Task chain received and queued",
 			}
 			respData, _ := json.Marshal(response)
+			log.Printf("[CentralServer] Sending response to %s", conn.RemoteAddr())
 			conn.Write(respData)
+			log.Printf("[CentralServer] Response sent successfully")
 		}
 	}
 }

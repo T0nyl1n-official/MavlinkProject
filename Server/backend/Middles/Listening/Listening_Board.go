@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	BoardHandler "MavlinkProject/Server/Backend/Handler/Boards"
-	Board "MavlinkProject/Server/Backend/Shared/Boards"
+	Board "MavlinkProject/Server/backend/Shared/Boards"
 	BoardClassifier "MavlinkProject/Server/Backend/Utils/BoardClassifier"
 )
 
