@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const CentralServerAddress = "frp-sea.com:34565"
+const CentralServerAddress = "frp-put.com:14465"
 
 type BoardMessage struct {
 	MessageID   string      `json:"message_id"`
