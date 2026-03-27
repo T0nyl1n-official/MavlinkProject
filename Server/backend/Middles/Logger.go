@@ -1,7 +1,6 @@
 package MiddleWare
 
 import (
-	
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -43,10 +42,10 @@ const (
 
 // 阈值配置
 const (
-	IPAccessThreshold    = 50                // IP访问阈值
+	IPAccessThreshold    = 1000              // IP访问阈值
 	URLErrorThreshold    = 50                // URL错误阈值
 	SlowRequestThreshold = 1 * time.Second   // 慢请求阈值
-	MonitorWindow        = 5 * time.Minute   // 监控窗口
+	MonitorWindow        = 1 * time.Minute   // 监控窗口
 	MaxLogFileSize       = 100 * 1024 * 1024 // 100MB 最大日志文件大小
 )
 
