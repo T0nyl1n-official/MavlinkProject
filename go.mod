@@ -2,7 +2,10 @@ module MavlinkProject_Board
 
 go 1.24.0
 
-require github.com/bluenviron/gomavlib/v3 v3.3.0
+require (
+	github.com/bluenviron/gomavlib/v3 v3.3.0
+	gopkg.in/yaml.v3 v3.0.1
+)
 
 require (
 	github.com/creack/goselect v0.1.2 // indirect

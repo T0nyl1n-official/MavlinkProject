@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,12 +15,27 @@ import (
 	Board "MavlinkProject_Board/Shared/Boards"
 
 	"github.com/bluenviron/gomavlib/v3/pkg/dialects/common"
+	"gopkg.in/yaml.v3"
 )
 
-// 后端配置
-const (
-	backendAddress = "frp-any.com"
-	backendPort    = "31154"
+type Config struct {
+	Backend struct {
+		Address string `yaml:"address"`
+		Port    string `yaml:"port"`
+	} `yaml:"backend"`
+	Central struct {
+		LocalPort string `yaml:"local_port"`
+	} `yaml:"central"`
+	Drone struct {
+		Search struct {
+			Interval int `yaml:"interval"`
+			Timeout  int `yaml:"timeout"`
+		} `yaml:"search"`
+	} `yaml:"drone"`
+}
+
+var (
+	appConfig *Config
 )
 
 // using for Task.Status
@@ -62,6 +79,7 @@ type CentralServer struct {
 	listener     net.Listener
 	address      string
 	port         string
+	localPort    string
 	running      bool
 	stopChan     chan bool
 }
@@ -72,9 +90,12 @@ const (
 	TaskTimeout = 30 * time.Second
 )
 
-func NewCentralServer(address, port string) *CentralServer {
+func NewCentralServer(address, port, localPort string) *CentralServer {
 	if port == "" {
 		port = DefaultPort
+	}
+	if localPort == "" {
+		localPort = "8080"
 	}
 
 	return &CentralServer{
@@ -83,6 +104,7 @@ func NewCentralServer(address, port string) *CentralServer {
 		activeChains: make(map[string]*ProgressChain),
 		address:      address,
 		port:         port,
+		localPort:    localPort,
 		stopChan:     make(chan bool),
 	}
 }
@@ -101,16 +123,12 @@ func (cs *CentralServer) Start() error {
 	}
 
 	// 监听本地端口 (让 Gin/测试可以连接)
-	localPort := cs.port
-	if localPort == backendPort {
-		localPort = "8080" // 本地监听端口
-	}
-	listener, err := net.Listen("tcp", ":"+localPort)
+	listener, err := net.Listen("tcp", ":"+cs.localPort)
 	if err != nil {
 		return fmt.Errorf("failed to start local listener: %v", err)
 	}
 	cs.listener = listener
-	log.Printf("[CentralServer] Listening on port %s", localPort)
+	log.Printf("[CentralServer] Listening on port %s", cs.localPort)
 
 	// 连接到 FRP 服务器 (作为客户端)
 	frpConn, err := net.Dial("tcp", cs.address+":"+cs.port)
@@ -182,6 +200,13 @@ func (cs *CentralServer) handleConnection(conn net.Conn) {
 		n, err := conn.Read(buffer)
 		if err != nil {
 			log.Printf("[CentralServer] Read error from %s: %v", conn.RemoteAddr(), err)
+
+			// 检查是否为 EOF 或连接关闭，进行重连
+			if err.Error() == "EOF" ||
+				strings.Contains(err.Error(), "use of closed network connection") {
+				log.Printf("[CentralServer] Connection closed, attempting to reconnect...")
+				cs.reconnectFRP()
+			}
 			return
 		}
 
@@ -205,6 +230,27 @@ func (cs *CentralServer) handleConnection(conn net.Conn) {
 			respData, _ := json.Marshal(response)
 			conn.Write(respData)
 		}
+	}
+}
+
+func (cs *CentralServer) reconnectFRP() {
+	for {
+		select {
+		case <-cs.stopChan:
+			return
+		case <-time.After(3 * time.Second):
+		}
+
+		log.Printf("[CentralServer] Attempting to reconnect to FRP server %s:%s...", cs.address, cs.port)
+		conn, err := net.Dial("tcp", cs.address+":"+cs.port)
+		if err != nil {
+			log.Printf("[CentralServer] Reconnect failed: %v", err)
+			continue
+		}
+
+		log.Printf("[CentralServer] Successfully reconnected to FRP server")
+		cs.handleConnection(conn)
+		return
 	}
 }
 
@@ -567,16 +613,54 @@ func (cs *CentralServer) GetAllChains() []*ProgressChain {
 	return chains
 }
 
+func loadConfig(configPath string) (*Config, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %v", err)
+	}
+
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %v", err)
+	}
+
+	if cfg.Backend.Address == "" {
+		cfg.Backend.Address = "frp-any.com"
+	}
+	if cfg.Backend.Port == "" {
+		cfg.Backend.Port = "31154"
+	}
+	if cfg.Central.LocalPort == "" {
+		cfg.Central.LocalPort = "8081"
+	}
+
+	return &cfg, nil
+}
+
 func main() {
-	// 创建中央调度服务器
-	central := NewCentralServer(backendAddress, backendPort)
+	configPath := "config.yaml"
+	if len(os.Args) > 1 {
+		configPath = os.Args[1]
+	}
+
+	cfg, err := loadConfig(configPath)
+	if err != nil {
+		log.Printf("Warning: failed to load config: %v, using defaults", err)
+		cfg = &Config{}
+		cfg.Backend.Address = "frp-any.com"
+		cfg.Backend.Port = "31154"
+		cfg.Central.LocalPort = "8081"
+	}
+	appConfig = cfg
+
+	central := NewCentralServer(cfg.Backend.Address, cfg.Backend.Port, cfg.Central.LocalPort)
 
 	// 启动服务器
 	if err := central.Start(); err != nil {
 		log.Fatalf("Failed to start CentralServer: %v", err)
 	}
 
-	log.Printf("Central调度系统已启动, 监听端口 %s", backendPort)
+	log.Printf("Central调度系统已启动, 本地监听端口 %s, FRP目标 %s:%s", cfg.Central.LocalPort, cfg.Backend.Address, cfg.Backend.Port)
 	log.Printf("等待接收ProgressChain任务链...")
 
 	// 等待中断信号

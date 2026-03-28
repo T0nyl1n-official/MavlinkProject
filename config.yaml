@@ -1,0 +1,15 @@
+backend:
+  # FRP 服务器地址
+  address: "frp-any.com"
+  # FRP 服务器端口
+  port: "31154"
+  
+central:
+  # 本地监听端口 (供 Gin/测试连接)
+  local_port: "8081"
+  
+drone:
+  # 无人机搜索配置
+  search:
+    interval: 5
+    timeout: 10
