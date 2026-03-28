@@ -1,25 +1,4 @@
-central:
-  # Central 服务器监听地址和端口
-  address: "0.0.0.0"
-  port: "8081"
-
-  # 任务链配置
-  task:
-    # 单个任务最大重试次数
-    max_retries: 5
-    # 单个任务超时时间（秒）
-    timeout: 30
-
-  # 无人机调度配置
-  drone:
-    # 最小电量阈值（%）
-    min_battery_level: 30.0
-    # 最大距离阈值（米）
-    max_drone_distance: 1000.0
-    # 状态检查超时时间（秒）
-    status_check_timeout: 5
-
-# 后端配置（用于连接 BoardConnection）
+# 后端服务器配置
 backend:
   # 后端 API 地址
   address: "localhost"

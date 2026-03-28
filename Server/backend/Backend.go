@@ -94,14 +94,29 @@ func (bs *BackendServer) New() {
 func (bs *BackendServer) Run(port string) {
 	Routes.InitAllRoutes(bs.Router, bs.JWTManager, bs.TokenManager, bs.Mysql)
 
-	// HTTPS-SSL/TLS
 	addr := ":" + port
-	bs.Router.RunTLS(addr, "cert.pem", "key.pem")
-	log.Printf("Backend server started on port %s", port)
+
+	// 尝试 HTTPS
+	log.Printf("尝试启动 HTTPS 服务器: %s", addr)
+	err := bs.Router.RunTLS(addr, "cert.pem", "key.pem")
+	if err != nil {
+		log.Printf("HTTPS 启动失败: %v", err)
+		log.Printf("尝试启动 HTTP 服务器: %s", addr)
+		// 回退到 HTTP
+		err = bs.Router.Run(addr)
+		if err != nil {
+			log.Printf("HTTP 启动失败: %v", err)
+		} else {
+			log.Printf("Backend server started on port %s (HTTP)", port)
+		}
+	} else {
+		log.Printf("Backend server started on port %s (HTTPS)", port)
+	}
 }
 
-func (bs *BackendServer) Start(port string) *BackendServer {
+func (bs *BackendServer) Start(addr, port string) *BackendServer {
 	bs.New()
 	bs.Run(port)
+	log.Printf("Backend server starting on port %s (HTTPS)", port)
 	return bs
 }

@@ -26,7 +26,7 @@ func Test_Routes(r *gin.Engine) {
 		c.JSON(200, gin.H{
 			"status":  "success",
 			"message": "Hello world! - Welcome to The Mavlink Project!",
-			"version": "Pre-Release 0.1.1",
+			"version": "Pre-Release 0.1.2",
 		})
 	})
 }
