@@ -94,17 +94,14 @@ func (bs *BackendServer) New() {
 func (bs *BackendServer) Run(port string) {
 	Routes.InitAllRoutes(bs.Router, bs.JWTManager, bs.TokenManager, bs.Mysql)
 
-	bs.Router.Run(port)
+	// HTTPS-SSL/TLS
+	addr := ":" + port
+	bs.Router.RunTLS(addr, "cert.pem", "key.pem")
 	log.Printf("Backend server started on port %s", port)
 }
 
 func (bs *BackendServer) Start(port string) *BackendServer {
 	bs.New()
-
-	// HTTPS-SSL/TLS
-	if err := bs.Router.RunTLS(":443", "cert.pem", "key.pem"); err != nil {
-		log.Fatalf("MavlinkProject - Backend : 启动TLS失败 : %v", err)
-	}
 	bs.Run(port)
 	return bs
 }

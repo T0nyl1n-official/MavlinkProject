@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -13,13 +14,54 @@ import (
 	MavlinkBoard "MavlinkProject/Server/backend/Utils/CentralBoard/MavlinkCommand"
 
 	"github.com/bluenviron/gomavlib/v3/pkg/dialects/common"
+	"gopkg.in/yaml.v3"
 )
 
-// 后端配置
-const (
-	backendAddress = "localhost"
-	backendPort    = "8080"
-)
+// 配置文件结构
+type ServerConfig struct {
+	Central struct {
+		Address string `yaml:"address"`
+		Port    string `yaml:"port"`
+		Task    struct {
+			MaxRetries int `yaml:"max_retries"`
+			Timeout    int `yaml:"timeout"`
+		} `yaml:"task"`
+		Drone struct {
+			MinBatteryLevel    float64 `yaml:"min_battery_level"`
+			MaxDroneDistance   float64 `yaml:"max_drone_distance"`
+			StatusCheckTimeout int     `yaml:"status_check_timeout"`
+		} `yaml:"drone"`
+	} `yaml:"central"`
+	Backend struct {
+		Address string `yaml:"address"`
+		Port    string `yaml:"port"`
+	} `yaml:"backend"`
+}
+
+var config ServerConfig
+
+// GetConfig 获取全局配置
+func GetConfig() *ServerConfig {
+	return &config
+}
+
+func loadConfig(configPath string) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %v", err)
+	}
+
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("failed to parse config file: %v", err)
+	}
+
+	log.Printf("[CentralServer] 配置文件加载成功: %s", configPath)
+	log.Printf("[CentralServer] Central监听地址: %s:%s", config.Central.Address, config.Central.Port)
+	log.Printf("[CentralServer] 任务配置: 最大重试=%d, 超时=%d秒", config.Central.Task.MaxRetries, config.Central.Task.Timeout)
+	log.Printf("[CentralServer] 无人机配置: 最小电量=%.1f%%, 最大距离=%.1f米", config.Central.Drone.MinBatteryLevel, config.Central.Drone.MaxDroneDistance)
+
+	return nil
+}
 
 // using for Task.Status
 const (
@@ -184,7 +226,7 @@ func (cs *CentralServer) handleConnection(conn net.Conn) {
 				continue
 			}
 
-			log.Printf("[CentralServer] Received message: Command=%s, FromID=%s", 
+			log.Printf("[CentralServer] Received message: Command=%s, FromID=%s",
 				boardMsg.Message.Command, boardMsg.FromID)
 
 			// 处理接收到的消息
@@ -570,15 +612,28 @@ func (cs *CentralServer) GetAllChains() []*ProgressChain {
 }
 
 func main() {
+	// 加载配置文件
+	configPath := "config/Server_Config.yaml"
+	if err := loadConfig(configPath); err != nil {
+		log.Printf("警告: 加载配置文件失败: %v, 使用默认配置", err)
+	}
+
 	// 创建中央调度服务器
-	central := NewCentralServer(backendAddress, backendPort)
+	central := NewCentralServer(config.Central.Address, config.Central.Port)
+
+	// 更新 DroneSearch 配置
+	central.droneSearch.UpdateConfig(Distribute.DroneConfig{
+		MinBatteryLevel:    config.Central.Drone.MinBatteryLevel,
+		MaxDroneDistance:   config.Central.Drone.MaxDroneDistance,
+		StatusCheckTimeout: time.Duration(config.Central.Drone.StatusCheckTimeout) * time.Second,
+	})
 
 	// 启动服务器
 	if err := central.Start(); err != nil {
 		log.Fatalf("Failed to start CentralServer: %v", err)
 	}
 
-	log.Printf("Central调度系统已启动, 监听端口 %s", backendPort)
+	log.Printf("Central调度系统已启动, 监听端口 %s", config.Central.Port)
 	log.Printf("等待接收ProgressChain任务链...")
 
 	// 等待中断信号

@@ -16,12 +16,17 @@ import (
 
 type MavlinkCommander = MavlinkBoard.MavlinkCommander
 
-// 无人机状态阈值
-const (
-	MinBatteryLevel    float64       = 20.0
-	MaxDroneDistance   float64       = 1000.0
-	StatusCheckTimeout time.Duration = 5 * time.Second
-)
+type DroneConfig struct {
+	MinBatteryLevel    float64
+	MaxDroneDistance   float64
+	StatusCheckTimeout time.Duration
+}
+
+var defaultDroneConfig = DroneConfig{
+	MinBatteryLevel:    30.0,
+	MaxDroneDistance:   1000.0,
+	StatusCheckTimeout: 5 * time.Second,
+}
 
 type DroneStatus struct {
 	BoardID      string
@@ -45,12 +50,34 @@ type DroneSearch struct {
 	messageChan  chan *Board.BoardMessage
 	stopChan     chan bool
 	running      bool
+	config       DroneConfig
 }
 
 var (
 	droneSearch     *DroneSearch
 	droneSearchOnce sync.Once
 )
+
+// UpdateConfig 更新无人机配置
+func (ds *DroneSearch) UpdateConfig(cfg DroneConfig) {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+	ds.config = cfg
+	log.Printf("[DroneSearch] 配置已更新: MinBatteryLevel=%.1f, MaxDroneDistance=%.1f, StatusCheckTimeout=%v",
+		cfg.MinBatteryLevel, cfg.MaxDroneDistance, cfg.StatusCheckTimeout)
+}
+
+// getConfig 获取当前配置（线程安全）
+func (ds *DroneSearch) getConfig() DroneConfig {
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
+
+	// 如果未设置 认为小于等于0不可取
+	if ds.config.MinBatteryLevel <= 0.0 || ds.config.MaxDroneDistance <= 0 || ds.config.StatusCheckTimeout <= 0 {
+		return defaultDroneConfig
+	}
+	return ds.config
+}
 
 func GetDroneSearch() *DroneSearch {
 	droneSearchOnce.Do(func() {
@@ -173,7 +200,8 @@ func (ds *DroneSearch) checkDroneStatus() {
 
 	now := time.Now()
 	for boardID, drone := range ds.drones {
-		if now.Sub(drone.LastUpdate) > StatusCheckTimeout {
+		cfg := ds.getConfig()
+		if now.Sub(drone.LastUpdate) > cfg.StatusCheckTimeout {
 			log.Printf("[DroneSearch] Drone %s timeout, marking as unavailable", boardID)
 			drone.IsIdle = false
 		}
@@ -184,6 +212,8 @@ func (ds *DroneSearch) FindBestDrone() (*DroneStatus, error) {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 
+	cfg := ds.getConfig()
+
 	var bestDrone *DroneStatus
 	var bestScore float64 = -1
 
@@ -192,7 +222,7 @@ func (ds *DroneSearch) FindBestDrone() (*DroneStatus, error) {
 			continue
 		}
 
-		if drone.BatteryLevel < MinBatteryLevel {
+		if drone.BatteryLevel < cfg.MinBatteryLevel {
 			continue
 		}
 
@@ -314,9 +344,11 @@ func (ds *DroneSearch) GetAvailableDrones() []*DroneStatus {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 
+	cfg := ds.getConfig()
+
 	var drones []*DroneStatus
 	for _, drone := range ds.drones {
-		if drone.IsIdle && drone.BatteryLevel >= MinBatteryLevel {
+		if drone.IsIdle && drone.BatteryLevel >= cfg.MinBatteryLevel {
 			drones = append(drones, drone)
 		}
 	}
@@ -366,7 +398,8 @@ func (ds *DroneSearch) AssignTaskToDrone(boardID string, taskChainID string) err
 		return fmt.Errorf("drone %s is not idle", boardID)
 	}
 
-	if drone.BatteryLevel < MinBatteryLevel {
+	cfg := ds.getConfig()
+	if drone.BatteryLevel < cfg.MinBatteryLevel {
 		return fmt.Errorf("drone %s battery level too low: %.1f%%", boardID, drone.BatteryLevel)
 	}
 
@@ -416,17 +449,19 @@ func (ds *DroneSearch) IsDroneAvailable(boardID string) bool {
 		return false
 	}
 
-	// 检查无人机是否空闲且电量充足
-	return drone.IsIdle && drone.BatteryLevel >= MinBatteryLevel
+	cfg := ds.getConfig()
+	return drone.IsIdle && drone.BatteryLevel >= cfg.MinBatteryLevel
 }
 
 func (ds *DroneSearch) GetAvailableDroneCount() int {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 
+	cfg := ds.getConfig()
+
 	count := 0
 	for _, drone := range ds.drones {
-		if drone.IsIdle && drone.BatteryLevel >= MinBatteryLevel {
+		if drone.IsIdle && drone.BatteryLevel >= cfg.MinBatteryLevel {
 			count++
 		}
 	}
