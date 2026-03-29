@@ -1,10 +1,7 @@
 package Backend
 
 import (
-	"crypto/tls"
 	"log"
-	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -51,15 +48,12 @@ func (bs *BackendServer) New() {
 	for _, db := range redisDB {
 		redisConfig := &DBConfig.RedisClientConfig{}
 		redisConfig = redisConfig.RedisConfig_Default(db)
-		redisClient, verification := DBService.InitRedis(redisConfig)
+		redisClient, _ := DBService.InitRedis(redisConfig)
 		if redisClient == nil {
 			log.Fatalf("MavlinkProject - Backend : 初始化Redis失败: DB=%d", db)
 		}
 		redisClients = append(redisClients, *redisClient)
 
-		if db == DBConfig.Verification && verification != nil {
-			verification = verification
-		}
 	}
 
 	tokenRedis := redisClients[len(redisClients)-2]
@@ -91,62 +85,23 @@ func (bs *BackendServer) New() {
 }
 
 func (bs *BackendServer) Run(port string) {
+
 	Routes.InitAllRoutes(bs.Router, bs.JWTManager, bs.TokenManager, bs.Mysql)
 
-	certPath := "cert.pem"
-	keyPath := "key.pem"
+	addr := "0.0.0.0:" + port
+	log.Printf("启动 HTTP 服务器: %s", addr)
 
-	certExists := false
-	if _, err := os.Stat(certPath); err == nil {
-		if _, err := os.Stat(keyPath); err == nil {
-			certExists = true
-		}
-	}
-
-	if certExists {
-		log.Printf("检测到证书文件，同时启动 HTTP 和 HTTPS 服务器")
-
-		httpAddr := ":8080"
-		httpsAddr := ":443"
-
-		go func() {
-			log.Printf("启动 HTTP 服务器: %s", httpAddr)
-			err := bs.Router.Run(httpAddr)
-			if err != nil {
-				log.Printf("HTTP 服务器启动失败: %v", err)
-			}
-		}()
-
-		srv := &http.Server{
-			Addr: httpsAddr,
-			TLSConfig: &tls.Config{
-				MinVersion: tls.VersionTLS12,
-				MaxVersion: tls.VersionTLS13,
-			},
-		}
-
-		log.Printf("启动 HTTPS 服务器: %s", httpsAddr)
-		err := srv.ListenAndServeTLS(certPath, keyPath)
-		if err != nil {
-			log.Printf("HTTPS 启动失败: %v", err)
-		} else {
-			log.Printf("Backend server started on port %s (HTTP) and %s (HTTPS)", httpAddr, httpsAddr)
-		}
+	err := bs.Router.RunTLS("0.0.0.0:8080", "cert.pem", "key.pem")
+	if err != nil {
+		log.Printf("HTTP 服务器启动失败: %v", err)
 	} else {
-		httpAddr := ":" + port
-		log.Printf("未检测到证书文件，启动 HTTP 服务器: %s", httpAddr)
-		err := bs.Router.Run(httpAddr)
-		if err != nil {
-			log.Printf("HTTP 启动失败: %v", err)
-		} else {
-			log.Printf("Backend server started on port %s (HTTP)", port)
-		}
+		log.Printf("Backend server started on port %s (HTTP)", port)
 	}
 }
 
 func (bs *BackendServer) Start(addr, port string) *BackendServer {
 	bs.New()
 	bs.Run(port)
-	log.Printf("Backend server starting on port %s", port)
+	log.Printf("Backend server starting on port %s (HTTP)", port)
 	return bs
 }
