@@ -10,14 +10,8 @@ import (
 
 type Config struct {
 	Backend struct {
-		Address     string `yaml:"address"`
-		Port        string `yaml:"port"`
-		LetsEncrypt struct {
-			Email      string   `yaml:"email"`
-			Domains    []string `yaml:"domains"`
-			Webroot    string   `yaml:"webroot"`
-			UseStaging bool     `yaml:"use_staging"`
-		} `yaml:"lets_encrypt"`
+		Address string `yaml:"address"`
+		Port    string `yaml:"port"`
 	} `yaml:"backend"`
 }
 
@@ -27,7 +21,7 @@ func Server_start() {
 	configPath := "config/Server_Config.yaml"
 	cfg := getConfig(configPath)
 
-	BackendServer.Start(cfg.Backend.Address, cfg.Backend.Port, cfg.Backend.LetsEncrypt)
+	BackendServer.Start(cfg.Backend.Address, cfg.Backend.Port)
 }
 
 func getConfig(configPath string) Config {

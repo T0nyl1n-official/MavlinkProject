@@ -3,11 +3,11 @@ backend:
   # 后端 API 地址
   address: "0.0.0.0"
   port: "8080"
-  
-  # Let's Encrypt 配置（使用本地IP进行验证）
-  lets_encrypt:
-    email: "n1l_th3_hedg3h0g@qq.com"
-    domains:
-      - "api.deeppulse.com"
-    webroot: "./webroot"
-    use_staging: true
+
+# HTTPS服务器配置
+https:
+  enabled: true
+  port: "443"
+  # 证书文件路径
+  cert_file: "cert.pem"
+  key_file: "key.pem"
