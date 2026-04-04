@@ -62,7 +62,9 @@ func (bs *BackendServer) New() {
 	jwtManager := Middleware.NewDefaultJWTManager()
 	tokenManager := Jwt.NewRedisTokenManager(&tokenRedis)
 
-	router.Use(Listening.ListeningErrorMiddleWare(),
+	router.Use(
+		Middleware.BanishCheck(),
+		Listening.ListeningErrorMiddleWare(),
 		Listening.BoardListenerMiddleware(),
 		Middleware.Logger(mysqlDB),
 	)

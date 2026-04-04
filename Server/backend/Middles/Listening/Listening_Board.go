@@ -26,11 +26,11 @@ type BoardListenerConfig struct {
 
 var defaultBoardListenerConfig = BoardListenerConfig{
 	EnableTCP:     true,
-	EnableUDP:     true,
-	TCPAddress:    "localhost",
-	TCPPort:       "14550",
+	EnableUDP:     false,
+	TCPAddress:    "0.0.0.0",
+	TCPPort:       "8081",
 	UDPAddress:    "0.0.0.0",
-	UDPPort:       "14551",
+	UDPPort:       "8082",
 	MaxBufferSize: 4096,
 }
 
