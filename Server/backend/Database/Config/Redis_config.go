@@ -1,19 +1,13 @@
 package DBConfig
 
+import (
+	"fmt"
+
+	Conf "MavlinkProject/Server/backend/Config"
+)
+
 type RedisDB_allocate int
 
-/*
-RedisDB_allocate 是 Redis 数据库的DB分配
-对应的DB编号根据const常量设置参见
-
-GeneralWarning 是通用警告/未知警告/未分配警告&日志
-Backend 是后端警告
-Frontend 是前端警告
-Agent 是AI/代理警告/日志
-Drone 是无人机警告/日志
-Sensor 是传感器警告/日志
-Verification 是验证数据库 (非错误)
-*/
 const (
 	GeneralWarning RedisDB_allocate = iota
 	Backend
@@ -34,11 +28,16 @@ type RedisClientConfig struct {
 }
 
 func (cfg *RedisClientConfig) RedisConfig_Default(db RedisDB_allocate) *RedisClientConfig {
+	setting := Conf.GetSetting()
+	redisCfg := setting.Redis
+
+	addr := fmt.Sprintf("%s:%s", redisCfg.Host, redisCfg.Port)
+
 	return &RedisClientConfig{
 		Network:    "tcp",
-		Addr:       "localhost:6379",
+		Addr:       addr,
 		ClientName: "MavlinkProject",
-		Password:   "",
+		Password:   redisCfg.Password,
 		DB:         db,
 	}
 }

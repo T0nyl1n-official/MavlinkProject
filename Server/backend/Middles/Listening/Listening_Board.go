@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"sync"
 
 	"github.com/gin-gonic/gin"
 
 	BoardHandler "MavlinkProject/Server/Backend/Handler/Boards"
-	Board "MavlinkProject/Server/backend/Shared/Boards"
 	BoardClassifier "MavlinkProject/Server/Backend/Utils/BoardClassifier"
+	Conf "MavlinkProject/Server/backend/Config"
 )
 
 type BoardListenerConfig struct {
@@ -24,14 +23,19 @@ type BoardListenerConfig struct {
 	MaxBufferSize int
 }
 
-var defaultBoardListenerConfig = BoardListenerConfig{
-	EnableTCP:     true,
-	EnableUDP:     true,
-	TCPAddress:    "localhost",
-	TCPPort:       "14550",
-	UDPAddress:    "0.0.0.0",
-	UDPPort:       "14551",
-	MaxBufferSize: 4096,
+func GetDefaultBoardListenerConfig() BoardListenerConfig {
+	setting := Conf.GetSetting()
+	boardCfg := setting.Board
+
+	return BoardListenerConfig{
+		EnableTCP:     boardCfg.TCP.Enabled,
+		EnableUDP:     boardCfg.UDP.Enabled,
+		TCPAddress:    boardCfg.TCP.Address,
+		TCPPort:       boardCfg.TCP.Port,
+		UDPAddress:    boardCfg.UDP.Address,
+		UDPPort:       boardCfg.UDP.Port,
+		MaxBufferSize: boardCfg.TCP.MaxBufferSize,
+	}
 }
 
 var (
@@ -42,7 +46,7 @@ var (
 )
 
 func BoardListenerMiddleware() gin.HandlerFunc {
-	return BoardListenerWithConfig(defaultBoardListenerConfig)
+	return BoardListenerWithConfig(GetDefaultBoardListenerConfig())
 }
 
 func BoardListenerWithConfig(config BoardListenerConfig) gin.HandlerFunc {
@@ -79,7 +83,7 @@ func (bl *BoardListener) Start() error {
 	defer bl.mu.Unlock()
 
 	if bl.running {
-		return fmt.Errorf("board listener already running")
+		return fmt.Errorf(fmt.Sprintf("[BoardListener] board %s listener already running", ))
 	}
 
 	if bl.config.EnableTCP {
@@ -100,10 +104,7 @@ func (bl *BoardListener) Start() error {
 		}
 	}
 
-	bl.classifier.StartProcessor(bl.manager.GetMessageChan())
-
 	bl.running = true
-	log.Printf("[BoardListener] All listeners started successfully")
 	return nil
 }
 
@@ -115,9 +116,8 @@ func (bl *BoardListener) Stop() error {
 		return fmt.Errorf("board listener not running")
 	}
 
-	bl.manager.StopAll()
 	bl.running = false
-	log.Printf("[BoardListener] All listeners stopped")
+	log.Printf("[BoardListener] Stopped")
 	return nil
 }
 
@@ -127,8 +127,42 @@ func (bl *BoardListener) IsRunning() bool {
 	return bl.running
 }
 
-func GetBoardListener() *BoardListener {
-	return boardListener
+func (bl *BoardListener) GetConfig() BoardListenerConfig {
+	return bl.config
+}
+
+func (bl *BoardListener) SetConfig(config BoardListenerConfig) error {
+	bl.mu.Lock()
+	defer bl.mu.Unlock()
+
+	if bl.running {
+		return fmt.Errorf("cannot update config while running")
+	}
+
+	bl.config = config
+	log.Printf("[BoardListener] Config updated - TCP: %s:%s, UDP: %s:%s",
+		config.TCPAddress, config.TCPPort, config.UDPAddress, config.UDPPort)
+	return nil
+}
+
+func (bl *BoardListener) GetStatus() string {
+	bl.mu.RLock()
+	defer bl.mu.RUnlock()
+
+	config := bl.config
+	running := bl.running
+
+	return fmt.Sprintf(`{"running":%v,"tcp":{"enabled":%v,"address":"%s","port":"%s"},"udp":{"enabled":%v,"address":"%s","port":"%s"}}`,
+		running,
+		config.EnableTCP, config.TCPAddress, config.TCPPort,
+		config.EnableUDP, config.UDPAddress, config.UDPPort)
+}
+
+func GetBoardListenerStatus() string {
+	if boardListener == nil {
+		return `{"error":"board listener not initialized"}`
+	}
+	return boardListener.GetStatus()
 }
 
 func StartBoardListener() error {
@@ -145,67 +179,19 @@ func StopBoardListener() error {
 	return boardListener.Stop()
 }
 
-type BoardTCPHandler struct {
-	conn       net.Conn
-	boardID    string
-	parser     *json.Decoder
-	buffer     []byte
-	classifier *BoardClassifier.BoardMessageClassifier
-}
-
-func NewBoardTCPHandler(conn net.Conn, classifier *BoardClassifier.BoardMessageClassifier) *BoardTCPHandler {
-	return &BoardTCPHandler{
-		conn:       conn,
-		parser:     json.NewDecoder(conn),
-		buffer:     make([]byte, 4096),
-		classifier: classifier,
+func UpdateBoardListenerConfig(config BoardListenerConfig) error {
+	if boardListener == nil {
+		return fmt.Errorf("board listener not initialized")
 	}
+	return boardListener.SetConfig(config)
 }
 
-func (h *BoardTCPHandler) Start() {
-	defer h.conn.Close()
-
-	log.Printf("[BoardTCPHandler] New connection from %s", h.conn.RemoteAddr().String())
-
-	for {
-		var msg Board.BoardMessage
-		if err := h.parser.Decode(&msg); err != nil {
-			log.Printf("[BoardTCPHandler] Decode error: %v", err)
-			return
-		}
-
-		log.Printf("[BoardTCPHandler] Received: From=%s, Command=%s", msg.FromID, msg.Message.Command)
-
-		h.classifier.ClassifyAndProcess(&msg)
+func BoardListenerJSON(c *gin.Context) {
+	status := GetBoardListenerStatus()
+	var jsonData interface{}
+	if err := json.Unmarshal([]byte(status), &jsonData); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
 	}
-}
-
-type BoardUDPHandler struct {
-	addr       *net.UDPAddr
-	boardID    string
-	classifier *BoardClassifier.BoardMessageClassifier
-}
-
-func (h *BoardUDPHandler) Start(listener *net.UDPConn) {
-	defer listener.Close()
-
-	buffer := make([]byte, 4096)
-	for {
-		n, addr, err := listener.ReadFromUDP(buffer)
-		if err != nil {
-			log.Printf("[BoardUDPHandler] Read error: %v", err)
-			return
-		}
-
-		var msg Board.BoardMessage
-		if err := json.Unmarshal(buffer[:n], &msg); err != nil {
-			log.Printf("[BoardUDPHandler] Unmarshal error: %v", err)
-			continue
-		}
-
-		log.Printf("[BoardUDPHandler] Received from %s: From=%s, Command=%s",
-			addr.String(), msg.FromID, msg.Message.Command)
-
-		h.classifier.ClassifyAndProcess(&msg)
-	}
+	c.JSON(200, jsonData)
 }

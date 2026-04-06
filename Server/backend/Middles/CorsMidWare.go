@@ -5,25 +5,20 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+
+	Conf "MavlinkProject/Server/backend/Config"
 )
 
 func CORSMiddleware() gin.HandlerFunc {
+	setting := Conf.GetSetting()
+	cfg := setting.CORS
+
 	return cors.New(cors.Config{
-		AllowOrigins: []string{
-			"http://localhost:3000", // 前端开发服务器地址(默认)
-		},
-
-		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders: []string{
-			"Origin",
-			"Content-Type", // context-JSON
-			"Accept",
-			"Authorization",
-			"X-Requested-With", // 跨域请求时需要的头信息
-		},
-
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,           // 必须带cookies
-		MaxAge:           12 * time.Hour, // 控制浏览器缓存预检请求（OPTIONS）结果的时间
+		AllowOrigins:     cfg.AllowOrigins,
+		AllowMethods:     cfg.AllowMethods,
+		AllowHeaders:     cfg.AllowHeaders,
+		ExposeHeaders:    cfg.ExposeHeaders,
+		AllowCredentials: cfg.AllowCredentials,
+		MaxAge:           time.Duration(cfg.MaxAge) * time.Second,
 	})
 }

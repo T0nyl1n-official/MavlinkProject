@@ -8,12 +8,14 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	Conf "MavlinkProject/Server/backend/Config"
 	ErrorsMgr "MavlinkProject/Server/backend/Middles/ErrorMiddleHandle/ErrorsMgr"
 )
 
@@ -30,7 +32,13 @@ type AccessMonitor struct {
 var (
 	accessMonitor *AccessMonitor
 	monitorOnce   sync.Once
+	loggerConfig  Conf.LoggerConfig
 )
+
+func initLoggerConfig() {
+	setting := Conf.GetSetting()
+	loggerConfig = setting.Logger
+}
 
 // 日志级别
 const (
@@ -40,18 +48,64 @@ const (
 	LogLevelError = "ERROR"
 )
 
-// 阈值配置
-const (
-	IPAccessThreshold    = 1000              // IP访问阈值
-	URLErrorThreshold    = 50                // URL错误阈值
-	SlowRequestThreshold = 1 * time.Second   // 慢请求阈值
-	MonitorWindow        = 1 * time.Minute   // 监控窗口
-	MaxLogFileSize       = 100 * 1024 * 1024 // 100MB 最大日志文件大小
-)
+func IPAccessThresholdFunc() int {
+	return loggerConfig.AccessThreshold
+}
 
-var (
-	logDir = "./OutputLogs"
-)
+func URLErrorThresholdFunc() int {
+	return loggerConfig.URLErrorThreshold
+}
+
+func SlowRequestThresholdFunc() time.Duration {
+	return time.Duration(loggerConfig.SlowRequestThreshold * float64(time.Second))
+}
+
+func MonitorWindowFunc() time.Duration {
+	monitorWindow := loggerConfig.MonitorWindow
+	if monitorWindow <= 0 {
+		monitorWindow = 15
+	}
+	return time.Duration(monitorWindow) * time.Minute
+}
+
+func MaxLogFileSizeFunc() int64 {
+	return int64(loggerConfig.MaxFileSize)
+}
+
+func LogDirFunc() string {
+	return loggerConfig.LogDir
+}
+
+// 可疑访问关键词列表
+var SuspiciousKeywords = []string{
+	".env",
+	".env.bak",
+	".env.old",
+	".env.example",
+	".env.save",
+	".git/config",
+	"actuator/env",
+	"debug/default/view",
+	".vercel/.env.production.local",
+	"_next/static/env.js",
+	"/core/.env",
+	"/api/.env",
+	"/backend/.env",
+	"/laravel/.env",
+	"/app/.env",
+	"/web/.env",
+	"/src/.env",
+	"/server/.env",
+	"/config/.env",
+	"/shared/.env",
+	"/public/.env",
+	"banish",
+	"banishIP",
+	"banishMap",
+	"banned",
+	"banishTime",
+	"ban",
+}
 
 // 初始化访问监控器
 func initAccessMonitor() {
@@ -63,7 +117,7 @@ func initAccessMonitor() {
 		}
 
 		// 创建日志目录
-		if err := os.MkdirAll(logDir, 0755); err != nil {
+		if err := os.MkdirAll(LogDirFunc(), 0755); err != nil {
 			log.Printf("创建日志目录失败: %v", err)
 		}
 
@@ -74,7 +128,7 @@ func initAccessMonitor() {
 
 // 定时清理过期数据
 func (am *AccessMonitor) cleanupTask() {
-	ticker := time.NewTicker(MonitorWindow)
+	ticker := time.NewTicker(MonitorWindowFunc())
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -98,7 +152,7 @@ func (am *AccessMonitor) logToFile(level, message string) {
 			am.logFile.Close()
 		}
 
-		logPath := filepath.Join(logDir,
+		logPath := filepath.Join(LogDirFunc(),
 			fmt.Sprintf("log_%s.log", currentDate))
 
 		file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -130,7 +184,7 @@ func (am *AccessMonitor) shouldRotateLogFile() bool {
 		return false
 	}
 
-	return fileInfo.Size() >= MaxLogFileSize
+	return fileInfo.Size() >= MaxLogFileSizeFunc()
 }
 
 // 检查IP访问频率
@@ -140,14 +194,69 @@ func (am *AccessMonitor) checkIPAccess(ip string) {
 
 	am.ipAccessCount[ip]++
 
-	if am.ipAccessCount[ip] >= IPAccessThreshold {
+	if am.ipAccessCount[ip] >= IPAccessThresholdFunc() {
 		warningMsg := fmt.Sprintf("🚨 IP频率警告: %s 在5分钟内访问了%d次", ip, am.ipAccessCount[ip])
 		log.Printf("%s", warningMsg)
 		am.logToFile("WARN", warningMsg)
 	}
 }
 
-// 检查URL错误频率
+// 获取客户端真实IP (支持IPv4/IPv6)
+func getRealClientIP(c *gin.Context) string {
+	// 尝试从X-Real-IP获取
+	if xRealIP := c.GetHeader("X-Real-IP"); xRealIP != "" {
+		return xRealIP
+	}
+	// 尝试从X-Forwarded-For获取 (取第一个非空的)
+	if xForwardedFor := c.GetHeader("X-Forwarded-For"); xForwardedFor != "" {
+		ips := splitIPs(xForwardedFor)
+		if len(ips) > 0 && ips[0] != "" {
+			return ips[0]
+		}
+	}
+	// 尝试从X-Forwarded-For获取 IPv6
+	if xForwardedFor := c.GetHeader("X-Forwarded-For"); xForwardedFor != "" {
+		return xForwardedFor
+	}
+	// 默认使用gin的ClientIP
+	return c.ClientIP()
+}
+
+// splitIPs 分割IP地址列表
+func splitIPs(ipStr string) []string {
+	var ips []string
+	for _, ip := range strings.Split(ipStr, ",") {
+		trimmed := strings.TrimSpace(ip)
+		if trimmed != "" {
+			ips = append(ips, trimmed)
+		}
+	}
+	return ips
+}
+
+// 检查是否为可疑访问
+func checkSuspiciousAccess(urlPath string) bool {
+	lowerPath := strings.ToLower(urlPath)
+	for _, keyword := range SuspiciousKeywords {
+		if strings.Contains(lowerPath, strings.ToLower(keyword)) {
+			return true
+		}
+	}
+	return false
+}
+
+// 记录可疑访问警告
+func (am *AccessMonitor) logSuspiciousAccess(clientIP, urlPath, requestBody string) {
+	warningMsg := fmt.Sprintf("🚨 可疑访问警告: IP[%s] 访问敏感路径[%s]", clientIP, urlPath)
+	log.Printf("%s", warningMsg)
+	am.logToFile("WARN", warningMsg)
+
+	if requestBody != "" {
+		bodyMsg := fmt.Sprintf("可疑访问请求体: %s", requestBody)
+		log.Printf("%s", bodyMsg)
+		am.logToFile("WARN", bodyMsg)
+	}
+}
 func (am *AccessMonitor) checkURLError(url string, statusCode int) {
 	if statusCode < 400 {
 		return // 只监控错误状态码
@@ -158,7 +267,7 @@ func (am *AccessMonitor) checkURLError(url string, statusCode int) {
 
 	am.urlErrorCount[url]++
 
-	if am.urlErrorCount[url] >= URLErrorThreshold {
+	if am.urlErrorCount[url] >= URLErrorThresholdFunc() {
 		warningMsg := fmt.Sprintf("🚨 URL错误警告: %s 在5分钟内出现%d次错误(状态码: %d)",
 			url, am.urlErrorCount[url], statusCode)
 		log.Printf("%s", warningMsg)
@@ -219,6 +328,8 @@ func (am *AccessMonitor) logErrorMgrError(c *gin.Context) {
 
 // 结构化日志中间件
 func Logger(mysql *gorm.DB) gin.HandlerFunc {
+	// 初始化配置
+	initLoggerConfig()
 	// 初始化监控器
 	initAccessMonitor()
 
@@ -238,7 +349,7 @@ func Logger(mysql *gorm.DB) gin.HandlerFunc {
 		// 记录响应
 		duration := time.Since(start)
 		statusCode := c.Writer.Status()
-		clientIP := c.ClientIP()
+		clientIP := getRealClientIP(c)
 		urlPath := c.Request.URL.Path
 
 		logEntry := map[string]interface{}{
@@ -282,8 +393,27 @@ func Logger(mysql *gorm.DB) gin.HandlerFunc {
 		// 检查IP访问频率
 		accessMonitor.checkIPAccess(clientIP)
 
+		// 高频访问检测并封禁
+		if RecordHighFreqAccess(clientIP) {
+			warningMsg := fmt.Sprintf("🚨 高频访问封禁: IP[%s] 在1秒内访问超过250次", clientIP)
+			log.Printf("%s", warningMsg)
+			accessMonitor.logToFile("WARN", warningMsg)
+		}
+
 		// 检查URL错误频率
 		accessMonitor.checkURLError(urlPath, statusCode)
+
+		// 检查可疑访问
+		if checkSuspiciousAccess(urlPath) {
+			var bodyStr string
+			if len(requestBody) > 0 {
+				bodyStr = string(requestBody)
+			}
+			accessMonitor.logSuspiciousAccess(clientIP, urlPath, bodyStr)
+
+			// 可疑访问封禁
+			RecordSuspiciousAccess(clientIP)
+		}
 
 		// 记录ErrorMgr错误
 		accessMonitor.logErrorMgrError(c)
