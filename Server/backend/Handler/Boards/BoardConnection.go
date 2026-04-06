@@ -9,19 +9,21 @@ import (
 	"time"
 
 	WarningHandler "MavlinkProject/Server/Backend/Utils/WarningHandle"
+	Conf "MavlinkProject/Server/backend/Config"
 	Board "MavlinkProject/Server/backend/Shared/Boards"
 )
 
-const (
-	// 通道-心跳包传输相关参数 心跳包间隔
-	KeepAliveInterval = 10 * time.Second
-	// 通道-心跳包传输相关参数 连接超时时间
-	ConnectionTimeout = 180 * time.Second
-	// 通道-心跳包传输相关参数 最大重试次数
-	MaxRetryAttempts = 3
-	// 通道-心跳包传输相关参数 重试延迟时间
-	RetryDelay = 5 * time.Second
-)
+func GetBoardConnectionConfig() (keepAliveInterval, connectionTimeout time.Duration, maxRetryAttempts int, retryDelay time.Duration) {
+	setting := Conf.GetSetting()
+	cfg := setting.Board.Connection
+
+	keepAliveInterval = time.Duration(cfg.KeepaliveInterval) * time.Second
+	connectionTimeout = time.Duration(cfg.Timeout) * time.Second
+	maxRetryAttempts = cfg.MaxRetryAttempts
+	retryDelay = time.Duration(cfg.RetryDelay) * time.Second
+
+	return
+}
 
 // BoardConnectionManager 板连接-通道管理器 (总控管理)
 type BoardConnectionManager struct {
@@ -36,16 +38,20 @@ type BoardConnectionManager struct {
 
 // BoardServer 后端-主控板服务器
 type BoardServer struct {
-	boardID     string
-	listener    net.Listener
-	udpConn     *net.UDPConn
-	connection  string
-	protocol    string
-	addr        string
-	port        string
-	messageChan chan *Board.BoardMessage
-	stopChan    chan bool
-	wg          sync.WaitGroup
+	boardID           string
+	listener          net.Listener
+	udpConn           *net.UDPConn
+	connection        string
+	protocol          string
+	addr              string
+	port              string
+	messageChan       chan *Board.BoardMessage
+	stopChan          chan bool
+	wg                sync.WaitGroup
+	keepAliveInterval time.Duration
+	connectionTimeout time.Duration
+	maxRetryAttempts  int
+	retryDelay        time.Duration
 }
 
 // 心跳包
@@ -90,14 +96,20 @@ func (bm *BoardConnectionManager) StartTCPServer(boardID, addr string, port stri
 		return fmt.Errorf("failed to start TCP server: %v", err)
 	}
 
+	keepAliveInterval, connectionTimeout, maxRetryAttempts, retryDelay := GetBoardConnectionConfig()
+
 	bs := &BoardServer{
-		boardID:     boardID,
-		listener:    listener,
-		connection:  Board.Connection_TCP,
-		addr:        addr,
-		port:        port,
-		messageChan: bm.messageChan,
-		stopChan:    make(chan bool),
+		boardID:           boardID,
+		listener:          listener,
+		connection:        Board.Connection_TCP,
+		addr:              addr,
+		port:              port,
+		messageChan:       bm.messageChan,
+		stopChan:          make(chan bool),
+		keepAliveInterval: keepAliveInterval,
+		connectionTimeout: connectionTimeout,
+		maxRetryAttempts:  maxRetryAttempts,
+		retryDelay:        retryDelay,
 	}
 
 	bm.boards[boardID] = bs
@@ -127,14 +139,20 @@ func (bm *BoardConnectionManager) StartUDPServer(boardID, addr string, port stri
 		return fmt.Errorf("failed to start UDP server: %v", err)
 	}
 
+	keepAliveInterval, connectionTimeout, maxRetryAttempts, retryDelay := GetBoardConnectionConfig()
+
 	bs := &BoardServer{
-		boardID:     boardID,
-		udpConn:     listener,
-		connection:  Board.Connection_UDP,
-		addr:        addr,
-		port:        port,
-		messageChan: bm.messageChan,
-		stopChan:    make(chan bool),
+		boardID:           boardID,
+		udpConn:           listener,
+		connection:        Board.Connection_UDP,
+		addr:              addr,
+		port:              port,
+		messageChan:       bm.messageChan,
+		stopChan:          make(chan bool),
+		keepAliveInterval: keepAliveInterval,
+		connectionTimeout: connectionTimeout,
+		maxRetryAttempts:  maxRetryAttempts,
+		retryDelay:        retryDelay,
 	}
 
 	bm.boards[boardID] = bs
@@ -231,7 +249,7 @@ func (bs *BoardServer) acceptConnections() {
 
 // 心跳包发送函数 获取信息函数(子函数)
 func (bs *BoardServer) keepAliveWriter(conn net.Conn, stopChan chan bool) {
-	ticker := time.NewTicker(KeepAliveInterval)
+	ticker := time.NewTicker(bs.keepAliveInterval)
 	defer ticker.Stop()
 
 	for {
@@ -289,19 +307,19 @@ func (bs *BoardServer) handleConnection(conn net.Conn) {
 		default:
 		}
 
-		conn.SetDeadline(time.Now().Add(ConnectionTimeout))
+		conn.SetDeadline(time.Now().Add(bs.connectionTimeout))
 		n, err := conn.Read(buffer)
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				log.Printf("[BoardServer] Connection timeout for board %s, retrying...", bs.boardID)
 
-				for retryCount < MaxRetryAttempts {
+				for retryCount < bs.maxRetryAttempts {
 					retryCount++
-					log.Printf("[BoardServer] Reconnection attempt %d/%d for board %s", retryCount, MaxRetryAttempts, bs.boardID)
+					log.Printf("[BoardServer] Reconnection attempt %d/%d for board %s", retryCount, bs.maxRetryAttempts, bs.boardID)
 
-					time.Sleep(RetryDelay)
+					time.Sleep(bs.retryDelay)
 
-					newConn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", bs.addr, bs.port), ConnectionTimeout)
+					newConn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", bs.addr, bs.port), bs.connectionTimeout)
 					if err != nil {
 						log.Printf("[BoardServer] Reconnection failed for board %s: %v", bs.boardID, err)
 						continue
@@ -315,10 +333,10 @@ func (bs *BoardServer) handleConnection(conn net.Conn) {
 					break
 				}
 
-				if retryCount >= MaxRetryAttempts {
+				if retryCount >= bs.maxRetryAttempts {
 					log.Printf("[BoardServer] Max retry attempts reached for board %s, reporting to WarningHandler", bs.boardID)
 					WarningHandler.HandleBackendError(
-						fmt.Sprintf("Board connection lost after %d reconnection attempts", MaxRetryAttempts),
+						fmt.Sprintf("Board connection lost after %d reconnection attempts", bs.maxRetryAttempts),
 						"BoardConnection",
 						fmt.Sprintf("board_id=%s, addr=%s:%s", bs.boardID, bs.addr, bs.port),
 					)
@@ -339,7 +357,7 @@ func (bs *BoardServer) handleConnection(conn net.Conn) {
 		}
 
 		bs.processMessage(buffer[:n])
-		conn.SetDeadline(time.Now().Add(ConnectionTimeout))
+		conn.SetDeadline(time.Now().Add(bs.connectionTimeout))
 	}
 }
 

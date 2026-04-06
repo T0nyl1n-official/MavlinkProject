@@ -8,8 +8,8 @@ database:
     host: "localhost"
     port: "3306"
     user: "root"
-    password: ""
-    database: "mavlink_project"
+    password: "lyx@0051229L"
+    database: "mavlinkproject"
     charset: "utf8mb4"
     max_idle_conns: 10
     max_open_conns: 100
@@ -32,7 +32,7 @@ redis:
 
 # JWT 认证配置
 jwt:
-  secret_key: "your-secret-key-change-in-production"
+  secret_key: "MavlinkBackendMadeByTonyl1n"
   expire_time: 3600          # 秒 (1小时)
   refresh_time: 86400        # 秒 (24小时)
   identity_key: "user_id"
@@ -88,3 +88,33 @@ verification:
   code_length: 6
   code_expire_time: 300       # 秒 (5分钟)
   max_request_per_minute: 5
+
+# 错误监听配置
+error_listener:
+  enable_panic_recovery: true
+  enable_error_logging: true
+  enable_warning_push: true
+  sources:
+    - "handler"
+    - "middleware"
+    - "route"
+    - "database"
+    - "chain"
+
+# 主板通信配置
+board:
+  tcp:
+    enabled: true
+    address: "0.0.0.0"
+    port: "8081"
+    max_buffer_size: 4096
+  udp:
+    enabled: false
+    address: "0.0.0.0"
+    port: "8082"
+    max_buffer_size: 4096
+  connection:
+    timeout: 180             # 秒 (连接超时时间)
+    max_retry_attempts: 3    # 最大重试次数
+    retry_delay: 5           # 秒 (重试延迟时间)
+    keepalive_interval: 10   # 秒 (心跳包间隔)

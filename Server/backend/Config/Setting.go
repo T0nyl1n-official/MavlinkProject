@@ -8,14 +8,16 @@ import (
 )
 
 type Setting struct {
-	Database     DatabaseConfig     `yaml:"database"`
-	Redis        RedisConfig        `yaml:"redis"`
-	JWT          JWTConfig          `yaml:"jwt"`
-	CORS         CORSConfig         `yaml:"cors"`
-	RateLimit    RateLimitConfig    `yaml:"rate_limit"`
-	Logger       LoggerConfig       `yaml:"logger"`
-	Resources    ResourcesConfig    `yaml:"resources"`
-	Verification VerificationConfig `yaml:"verification"`
+	Database      DatabaseConfig      `yaml:"database"`
+	Redis         RedisConfig         `yaml:"redis"`
+	JWT           JWTConfig           `yaml:"jwt"`
+	CORS          CORSConfig          `yaml:"cors"`
+	RateLimit     RateLimitConfig     `yaml:"rate_limit"`
+	Logger        LoggerConfig        `yaml:"logger"`
+	Resources     ResourcesConfig     `yaml:"resources"`
+	Verification  VerificationConfig  `yaml:"verification"`
+	ErrorListener ErrorListenerConfig `yaml:"error_listener"`
+	Board         BoardConfig         `yaml:"board"`
 }
 
 type DatabaseConfig struct {
@@ -102,6 +104,40 @@ type VerificationConfig struct {
 	MaxRequestPerMinute int `yaml:"max_request_per_minute"`
 }
 
+type ErrorListenerConfig struct {
+	EnablePanicRecovery bool     `yaml:"enable_panic_recovery"`
+	EnableErrorLogging  bool     `yaml:"enable_error_logging"`
+	EnableWarningPush   bool     `yaml:"enable_warning_push"`
+	Sources             []string `yaml:"sources"`
+}
+
+type BoardConfig struct {
+	TCP        BoardTCPConfig        `yaml:"tcp"`
+	UDP        BoardUDPConfig        `yaml:"udp"`
+	Connection BoardConnectionConfig `yaml:"connection"`
+}
+
+type BoardTCPConfig struct {
+	Enabled       bool   `yaml:"enabled"`
+	Address       string `yaml:"address"`
+	Port          string `yaml:"port"`
+	MaxBufferSize int    `yaml:"max_buffer_size"`
+}
+
+type BoardUDPConfig struct {
+	Enabled       bool   `yaml:"enabled"`
+	Address       string `yaml:"address"`
+	Port          string `yaml:"port"`
+	MaxBufferSize int    `yaml:"max_buffer_size"`
+}
+
+type BoardConnectionConfig struct {
+	Timeout           int `yaml:"timeout"`
+	MaxRetryAttempts  int `yaml:"max_retry_attempts"`
+	RetryDelay        int `yaml:"retry_delay"`
+	KeepaliveInterval int `yaml:"keepalive_interval"`
+}
+
 var (
 	setting     *Setting
 	settingOnce sync.Once
@@ -117,8 +153,18 @@ func LoadSetting(path string) (*Setting, error) {
 		}
 		setting = &Setting{}
 		err = yaml.Unmarshal(data, setting)
+		if err != nil {
+			return
+		}
+		setDefaults()
 	})
 	return setting, err
+}
+
+func setDefaults() {
+	if setting.Logger.MonitorWindow <= 0 {
+		setting.Logger.MonitorWindow = 15
+	}
 }
 
 func GetSetting() *Setting {

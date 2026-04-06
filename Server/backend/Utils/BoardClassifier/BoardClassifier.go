@@ -60,7 +60,7 @@ var (
 
 func NewBoardMessageClassifier() *BoardMessageClassifier {
 	classifierOnce.Do(func() {
-		logDir := filepath.Join(".", "logs", "boards")
+		logDir := filepath.Join(".", "OutputLogs", "boards")
 		if err := os.MkdirAll(logDir, 0755); err != nil {
 			log.Printf("[BoardClassifier] Failed to create log directory: %v", err)
 			logDir = "."
@@ -246,6 +246,11 @@ func (bc *BoardMessageClassifier) rescheduleTasks(processed *ProcessedMessage) {
 func (bc *BoardMessageClassifier) logToFile(processed *ProcessedMessage) {
 	dateStr := time.Now().Format("2006-01-02")
 	logFile := filepath.Join(bc.logDir, fmt.Sprintf("board_messages_%s.log", dateStr))
+
+	if err := os.MkdirAll(bc.logDir, 0755); err != nil {
+		log.Printf("[BoardClassifier] Failed to create log directory: %v", err)
+		return
+	}
 
 	file, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {

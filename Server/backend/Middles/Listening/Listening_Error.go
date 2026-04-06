@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	Conf "MavlinkProject/Server/backend/Config"
 	WarningHandler "MavlinkProject/Server/Backend/Utils/WarningHandle"
 )
 
@@ -25,15 +26,20 @@ type ListeningConfig struct {
 	Sources             []string
 }
 
-var defaultListeningConfig = ListeningConfig{
-	EnablePanicRecovery: true,
-	EnableErrorLogging:  true,
-	EnableWarningPush:   true,
-	Sources:             []string{"handler", "middleware", "route", "database", "chain"},
+func GetDefaultListeningConfig() ListeningConfig {
+	setting := Conf.GetSetting()
+	errCfg := setting.ErrorListener
+
+	return ListeningConfig{
+		EnablePanicRecovery: errCfg.EnablePanicRecovery,
+		EnableErrorLogging:  errCfg.EnableErrorLogging,
+		EnableWarningPush:   errCfg.EnableWarningPush,
+		Sources:             errCfg.Sources,
+	}
 }
 
 func ListeningErrorMiddleWare() gin.HandlerFunc {
-	return ListeningErrorWithConfig(defaultListeningConfig)
+	return ListeningErrorWithConfig(GetDefaultListeningConfig())
 }
 
 // ListeningErrorWithConfig 配置监听错误中间件

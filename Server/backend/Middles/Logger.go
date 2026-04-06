@@ -61,7 +61,11 @@ func SlowRequestThresholdFunc() time.Duration {
 }
 
 func MonitorWindowFunc() time.Duration {
-	return time.Duration(loggerConfig.MonitorWindow) * time.Minute
+	monitorWindow := loggerConfig.MonitorWindow
+	if monitorWindow <= 0 {
+		monitorWindow = 15
+	}
+	return time.Duration(monitorWindow) * time.Minute
 }
 
 func MaxLogFileSizeFunc() int64 {
@@ -324,6 +328,8 @@ func (am *AccessMonitor) logErrorMgrError(c *gin.Context) {
 
 // 结构化日志中间件
 func Logger(mysql *gorm.DB) gin.HandlerFunc {
+	// 初始化配置
+	initLoggerConfig()
 	// 初始化监控器
 	initAccessMonitor()
 
