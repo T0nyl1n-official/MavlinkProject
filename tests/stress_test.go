@@ -17,7 +17,7 @@ import (
 // 压测配置
 // =======================
 const (
-    StressBaseURL   = "http://127.0.0.1:8080"
+    StressBaseURL   = "https://api.deeppluse.dpdns.org"
     ConcurrentUsers = 50              // 并发用户数
     LoopsPerUser    = 10              // 单用户循环次数
     RequestTimeout  = 5 * time.Second // 请求超时
