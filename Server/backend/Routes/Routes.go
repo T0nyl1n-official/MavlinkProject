@@ -6,6 +6,7 @@ import (
 
 	BoardsRoutes "MavlinkProject/Server/backend/Routes/Boards"
 	MavlinkRoutes "MavlinkProject/Server/backend/Routes/Mavlink"
+	MiscRoutes "MavlinkProject/Server/backend/Routes/Misc"
 	UsersRoutes "MavlinkProject/Server/backend/Routes/User"
 
 	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
@@ -14,6 +15,7 @@ import (
 
 func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager, mysqlDB *gorm.DB) {
 	Test_Routes(r)
+	MiscRoutes.SetMiscRoutes(r)
 	UsersRoutes.SetUsersRoutes(r, jwtManager, tokenManager, mysqlDB)
 	BoardsRoutes.SetupBoardRoutes(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupChainRoutes(r, jwtManager, tokenManager)
