@@ -83,7 +83,7 @@ func (bl *BoardListener) Start() error {
 	defer bl.mu.Unlock()
 
 	if bl.running {
-		return fmt.Errorf("board listener already running")
+		return fmt.Errorf(fmt.Sprintf("[BoardListener] board %s listener already running", ))
 	}
 
 	if bl.config.EnableTCP {

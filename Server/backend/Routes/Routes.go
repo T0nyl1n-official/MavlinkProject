@@ -4,6 +4,7 @@ import (
 	gin "github.com/gin-gonic/gin"
 	gorm "gorm.io/gorm"
 
+	Conf "MavlinkProject/Server/backend/Config"
 	BoardsRoutes "MavlinkProject/Server/backend/Routes/Boards"
 	MavlinkRoutes "MavlinkProject/Server/backend/Routes/Mavlink"
 	MiscRoutes "MavlinkProject/Server/backend/Routes/Misc"
@@ -13,7 +14,7 @@ import (
 	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 )
 
-func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager, mysqlDB *gorm.DB) {
+func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager, mysqlDB *gorm.DB, settingManager *Conf.SettingManager) {
 	r.StaticFile("/favicon.ico", "./Resources/favicon.ico")
 
 	Test_Routes(r)
@@ -23,6 +24,7 @@ func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager 
 	MavlinkRoutes.SetupChainRoutes(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupDefaultMavlinkRoutesV2(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupMavlinkV1Routes(r, jwtManager, tokenManager)
+	InitSystemRoutes(r, settingManager)
 }
 
 func Test_Routes(r *gin.Engine) {

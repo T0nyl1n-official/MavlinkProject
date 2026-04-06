@@ -20,6 +20,14 @@ import (
 	Verification "MavlinkProject/Server/backend/Utils/Verification"
 )
 
+func (bs *BackendServer) onBoardConfigChange(newSetting *Conf.Setting) error {
+	log.Printf("[Setting] Board config changed, restarting board listener...")
+	Listening.StopBoardListener()
+	Listening.StartBoardListener()
+	log.Printf("[Setting] Board listener restarted")
+	return nil
+}
+
 type BackendServer struct {
 	Router            *gin.Engine
 	Mysql             *gorm.DB
@@ -28,15 +36,19 @@ type BackendServer struct {
 	JWTManager        *jwtUtils.JWTManager
 	TokenManager      *Jwt.RedisTokenManager
 	Verification      Verification.VerificationManager
+	SettingManager    *Conf.SettingManager
 }
 
 func (bs *BackendServer) New() {
 	router := gin.Default()
 
-	_, err := Conf.LoadSetting("config/Setting.yaml")
+	bs.SettingManager = Conf.GetSettingManager()
+	err := bs.SettingManager.LoadSetting("config/Setting.yaml")
 	if err != nil {
 		log.Fatalf("MavlinkProject - Backend : 加载配置文件失败 : %v", err)
 	}
+
+	bs.SettingManager.RegisterChangeCallback("board", bs.onBoardConfigChange)
 
 	redisClients := make([]redis.Client, 0)
 	verification := Verification.VerificationManager{}
@@ -95,7 +107,7 @@ func (bs *BackendServer) New() {
 
 func (bs *BackendServer) Run(port string) {
 
-	Routes.InitAllRoutes(bs.Router, bs.JWTManager, bs.TokenManager, bs.Mysql)
+	Routes.InitAllRoutes(bs.Router, bs.JWTManager, bs.TokenManager, bs.Mysql, bs.SettingManager)
 
 	addr := "0.0.0.0:" + port
 	log.Printf("启动 HTTP 服务器: %s", addr)
