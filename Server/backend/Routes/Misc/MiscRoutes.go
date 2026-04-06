@@ -6,5 +6,4 @@ import (
 
 func SetMiscRoutes(r *gin.Engine) {
 	r.StaticFile("/robots.txt", "./Resources/robots.txt")
-	r.StaticFile("/favicon.ico", "./Resources/favicon.ico")
 }

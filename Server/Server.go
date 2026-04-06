@@ -8,11 +8,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type ServerConfig struct {
+	Address string `yaml:"address"`
+	Port    string `yaml:"port"`
+}
+
 type Config struct {
-	Backend struct {
-		Address string `yaml:"address"`
-		Port    string `yaml:"port"`
-	} `yaml:"backend"`
+	Backend ServerConfig `yaml:"backend"`
 }
 
 var BackendServer Backend.BackendServer

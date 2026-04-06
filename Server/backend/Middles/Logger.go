@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	Conf "MavlinkProject/Server/backend/Config"
 	ErrorsMgr "MavlinkProject/Server/backend/Middles/ErrorMiddleHandle/ErrorsMgr"
 )
 
@@ -31,7 +32,13 @@ type AccessMonitor struct {
 var (
 	accessMonitor *AccessMonitor
 	monitorOnce   sync.Once
+	loggerConfig  Conf.LoggerConfig
 )
+
+func initLoggerConfig() {
+	setting := Conf.GetSetting()
+	loggerConfig = setting.Logger
+}
 
 // 日志级别
 const (
@@ -41,18 +48,29 @@ const (
 	LogLevelError = "ERROR"
 )
 
-// 阈值配置
-const (
-	IPAccessThreshold    = 1000              // IP访问阈值
-	URLErrorThreshold    = 50                // URL错误阈值
-	SlowRequestThreshold = 1 * time.Second   // 慢请求阈值
-	MonitorWindow        = 15 * time.Minute  // 监控窗口 (15分钟)
-	MaxLogFileSize       = 100 * 1024 * 1024 // 100MB 最大日志文件大小
-)
+func IPAccessThresholdFunc() int {
+	return loggerConfig.AccessThreshold
+}
 
-var (
-	logDir = "./OutputLogs"
-)
+func URLErrorThresholdFunc() int {
+	return loggerConfig.URLErrorThreshold
+}
+
+func SlowRequestThresholdFunc() time.Duration {
+	return time.Duration(loggerConfig.SlowRequestThreshold * float64(time.Second))
+}
+
+func MonitorWindowFunc() time.Duration {
+	return time.Duration(loggerConfig.MonitorWindow) * time.Minute
+}
+
+func MaxLogFileSizeFunc() int64 {
+	return int64(loggerConfig.MaxFileSize)
+}
+
+func LogDirFunc() string {
+	return loggerConfig.LogDir
+}
 
 // 可疑访问关键词列表
 var SuspiciousKeywords = []string{
@@ -95,7 +113,7 @@ func initAccessMonitor() {
 		}
 
 		// 创建日志目录
-		if err := os.MkdirAll(logDir, 0755); err != nil {
+		if err := os.MkdirAll(LogDirFunc(), 0755); err != nil {
 			log.Printf("创建日志目录失败: %v", err)
 		}
 
@@ -106,7 +124,7 @@ func initAccessMonitor() {
 
 // 定时清理过期数据
 func (am *AccessMonitor) cleanupTask() {
-	ticker := time.NewTicker(MonitorWindow)
+	ticker := time.NewTicker(MonitorWindowFunc())
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -130,7 +148,7 @@ func (am *AccessMonitor) logToFile(level, message string) {
 			am.logFile.Close()
 		}
 
-		logPath := filepath.Join(logDir,
+		logPath := filepath.Join(LogDirFunc(),
 			fmt.Sprintf("log_%s.log", currentDate))
 
 		file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -162,7 +180,7 @@ func (am *AccessMonitor) shouldRotateLogFile() bool {
 		return false
 	}
 
-	return fileInfo.Size() >= MaxLogFileSize
+	return fileInfo.Size() >= MaxLogFileSizeFunc()
 }
 
 // 检查IP访问频率
@@ -172,7 +190,7 @@ func (am *AccessMonitor) checkIPAccess(ip string) {
 
 	am.ipAccessCount[ip]++
 
-	if am.ipAccessCount[ip] >= IPAccessThreshold {
+	if am.ipAccessCount[ip] >= IPAccessThresholdFunc() {
 		warningMsg := fmt.Sprintf("🚨 IP频率警告: %s 在5分钟内访问了%d次", ip, am.ipAccessCount[ip])
 		log.Printf("%s", warningMsg)
 		am.logToFile("WARN", warningMsg)
@@ -245,7 +263,7 @@ func (am *AccessMonitor) checkURLError(url string, statusCode int) {
 
 	am.urlErrorCount[url]++
 
-	if am.urlErrorCount[url] >= URLErrorThreshold {
+	if am.urlErrorCount[url] >= URLErrorThresholdFunc() {
 		warningMsg := fmt.Sprintf("🚨 URL错误警告: %s 在5分钟内出现%d次错误(状态码: %d)",
 			url, am.urlErrorCount[url], statusCode)
 		log.Printf("%s", warningMsg)

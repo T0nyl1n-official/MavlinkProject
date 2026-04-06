@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 
-	Config "MavlinkProject/Server/backend/Middles/Jwt/Config"
-	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 	JwtRedis "MavlinkProject/Server/backend/Middles/Jwt"
+	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
+	Config "MavlinkProject/Server/backend/Middles/Jwt/Config"
 )
 
 // JwtAuthMiddleWareWithRedis 支持Redis token验证的JWT中间件
@@ -151,11 +151,11 @@ func setContext(c *gin.Context, claims *jwtUtils.JWTClaims) {
 }
 
 func NewDefaultJWTManager() *jwtUtils.JWTManager {
-	return jwtUtils.NewJWTManager(Config.DefaultJWTConfig)
+	return jwtUtils.NewJWTManager(*Config.LoadJWTConfig())
 }
 
-func NewCustomJWTManager(config Config.JWTConfig) *jwtUtils.JWTManager {
-	return jwtUtils.NewJWTManager(config)
+func NewCustomJWTManager(config *Config.JWTConfig) *jwtUtils.JWTManager {
+	return jwtUtils.NewJWTManager(*config)
 }
 
 // NewRedisClient 创建Redis客户端
@@ -163,7 +163,7 @@ func NewRedisClient() *redis.Client {
 	return redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379", // 默认Redis地址
 		Password: "",               // 无密码
-		DB:       0,                 // 默认数据库
+		DB:       0,                // 默认数据库
 	})
 }
 

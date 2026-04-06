@@ -14,6 +14,8 @@ import (
 )
 
 func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager, mysqlDB *gorm.DB) {
+	r.StaticFile("/favicon.ico", "./Resources/favicon.ico")
+
 	Test_Routes(r)
 	MiscRoutes.SetMiscRoutes(r)
 	UsersRoutes.SetUsersRoutes(r, jwtManager, tokenManager, mysqlDB)

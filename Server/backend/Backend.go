@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	WarningHandler "MavlinkProject/Server/Backend/Utils/WarningHandle"
+	Conf "MavlinkProject/Server/backend/Config"
 	DBService "MavlinkProject/Server/backend/Database"
 	DBConfig "MavlinkProject/Server/backend/Database/Config"
 	UsersHandler "MavlinkProject/Server/backend/Handler/Users"
@@ -31,6 +32,12 @@ type BackendServer struct {
 
 func (bs *BackendServer) New() {
 	router := gin.Default()
+
+	_, err := Conf.LoadSetting("config/Setting.yaml")
+	if err != nil {
+		log.Fatalf("MavlinkProject - Backend : 加载配置文件失败 : %v", err)
+	}
+
 	redisClients := make([]redis.Client, 0)
 	verification := Verification.VerificationManager{}
 	redisDB := []DBConfig.RedisDB_allocate{
