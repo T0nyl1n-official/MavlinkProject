@@ -118,3 +118,14 @@ board:
     max_retry_attempts: 3    # 最大重试次数
     retry_delay: 5           # 秒 (重试延迟时间)
     keepalive_interval: 10   # 秒 (心跳包间隔)
+  frp:
+    timeout: 5
+    read_timeout: 10
+    max_retry_attempts: 3
+    central_servers:
+      - name: "central_1"
+        address: "frp-put.com"
+        port: 14465
+      - name: "central_2"
+        address: "frp-put.com"
+        port: 14465

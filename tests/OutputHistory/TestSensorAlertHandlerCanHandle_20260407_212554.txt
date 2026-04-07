@@ -1,0 +1,7 @@
+=== Test Output: TestSensorAlertHandlerCanHandle ===
+Time: 2026-04-07 21:25:54
+
+[PASS] Sensor FromType
+[PASS] ESP32 FromType
+[PASS] Warning Attribute with Alert Command
+[PASS] Board FromType (should not be handled by SensorAlertHandler)

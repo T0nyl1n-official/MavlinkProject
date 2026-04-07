@@ -11,11 +11,13 @@ import (
 	"sync"
 	"time"
 
-	WarningHandler "MavlinkProject/Server/backend/Utils/WarningHandle"
 	Conf "MavlinkProject/Server/backend/Config"
 	Board "MavlinkProject/Server/backend/Shared/Boards"
+	FRPHelper "MavlinkProject/Server/backend/Shared/FRPHelper"
+	WarningHandler "MavlinkProject/Server/backend/Utils/WarningHandle"
 )
 
+// 获取配置 From Setting.yaml
 func GetBoardConnectionConfig() (keepAliveInterval, connectionTimeout time.Duration, maxRetryAttempts int, retryDelay time.Duration) {
 	setting := Conf.GetSetting()
 	cfg := setting.Board.Connection
@@ -40,6 +42,57 @@ func GetBoardConnectionConfig() (keepAliveInterval, connectionTimeout time.Durat
 
 	return
 }
+
+type CentralServerInfo struct {
+	Name             string
+	Address          string
+	Port             int
+	Timeout          time.Duration
+	ReadTimeout      time.Duration
+	MaxRetryAttempts int
+}
+
+func GetFRPCentrals() []CentralServerInfo {
+	setting := Conf.GetSetting()
+	cfgs := setting.Board.FRP.CentralServers
+	frpCfg := setting.Board.FRP
+
+	if len(cfgs) == 0 {
+		return []CentralServerInfo{}
+	}
+
+	timeout := time.Duration(frpCfg.Timeout) * time.Second
+	readTimeout := time.Duration(frpCfg.ReadTimeout) * time.Second
+	maxRetryAttempts := frpCfg.MaxRetryAttempts
+
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	if readTimeout <= 0 {
+		readTimeout = 10 * time.Second
+	}
+	if maxRetryAttempts <= 0 {
+		maxRetryAttempts = 3
+	}
+
+	servers := make([]CentralServerInfo, 0, len(cfgs))
+	for _, cfg := range cfgs {
+		servers = append(servers, CentralServerInfo{
+			Name:             cfg.Name,
+			Address:          cfg.Address,
+			Port:             cfg.Port,
+			Timeout:          timeout,
+			ReadTimeout:      readTimeout,
+			MaxRetryAttempts: maxRetryAttempts,
+		})
+	}
+
+	return servers
+}
+
+// ============================
+// BoardConnectionManager
+// ============================
 
 type BoardConnectionManager struct {
 	boards      map[string]*BoardServer
@@ -67,6 +120,7 @@ type BoardServer struct {
 	connectionTimeout time.Duration
 	maxRetryAttempts  int
 	retryDelay        time.Duration
+	dispatcher        *MessageDispatcher
 }
 
 type Message_HeartBeat struct {
@@ -121,6 +175,7 @@ func (bm *BoardConnectionManager) StartTCPServer(boardID, addr string, port stri
 		connectionTimeout: connectionTimeout,
 		maxRetryAttempts:  maxRetryAttempts,
 		retryDelay:        retryDelay,
+		dispatcher:        NewMessageDispatcher(),
 	}
 
 	bm.boards[boardID] = bs
@@ -163,6 +218,7 @@ func (bm *BoardConnectionManager) StartUDPServer(boardID, addr string, port stri
 		connectionTimeout: connectionTimeout,
 		maxRetryAttempts:  maxRetryAttempts,
 		retryDelay:        retryDelay,
+		dispatcher:        NewMessageDispatcher(),
 	}
 
 	bm.boards[boardID] = bs
@@ -199,15 +255,17 @@ func (bm *BoardConnectionManager) SendMessageToBoardByFromID(fromID string, msg 
 }
 
 func (bm *BoardConnectionManager) SendMessageToBoard(boardID string, msg *Board.BoardMessage) error {
-	bm.mu.RLock()
-	defer bm.mu.RUnlock()
-
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %v", err)
 	}
 
-	if conn, ok := bm.tcpConns[boardID]; ok && conn != nil {
+	bm.mu.RLock()
+	conn, connExists := bm.tcpConns[boardID]
+	addr, udpExists := bm.udpAddrs[boardID]
+	bm.mu.RUnlock()
+
+	if conn != nil && connExists {
 		_, err = conn.Write(data)
 		if err != nil {
 			return fmt.Errorf("failed to send TCP message to board %s: %v", boardID, err)
@@ -216,8 +274,10 @@ func (bm *BoardConnectionManager) SendMessageToBoard(boardID string, msg *Board.
 		return nil
 	}
 
-	if addr, ok := bm.udpAddrs[boardID]; ok && addr != nil {
+	if addr != nil && udpExists {
+		bm.mu.RLock()
 		bs := bm.boards["udp_board_listener"]
+		bm.mu.RUnlock()
 		if bs != nil && bs.udpConn != nil {
 			_, err = bs.udpConn.WriteToUDP(data, addr)
 			if err != nil {
@@ -228,7 +288,30 @@ func (bm *BoardConnectionManager) SendMessageToBoard(boardID string, msg *Board.
 		}
 	}
 
-	return fmt.Errorf("board %s connection not found", boardID)
+	centrals := FRPHelper.GetFRPCentrals()
+	if len(centrals) == 0 {
+		return fmt.Errorf("no FRP central servers configured")
+	}
+
+	log.Printf("[BoardManager] No existing connection for %s, trying %d central servers", boardID, len(centrals))
+
+	var lastErr error
+	for _, central := range centrals {
+		frpAddr := fmt.Sprintf("%s:%d", central.Address, central.Port)
+		log.Printf("[BoardManager] Trying central %s at %s (maxRetryAttempts: %d)", central.Name, frpAddr, central.MaxRetryAttempts)
+
+		response, err := FRPHelper.PushMessageToCentral(frpAddr, central.Timeout, central.ReadTimeout, central.MaxRetryAttempts, msg)
+		if err != nil {
+			lastErr = err
+			log.Printf("[BoardManager] FRP attempt to %s failed: %v", frpAddr, err)
+			continue
+		}
+		log.Printf("[BoardManager] Message sent via FRP to %s, response received", frpAddr)
+		_ = response
+		return nil
+	}
+
+	return fmt.Errorf("[BoardManager] failed to send message to any central server: %v", lastErr)
 }
 
 func (bm *BoardConnectionManager) RemoveBoardConnection(boardID string) {
@@ -484,7 +567,30 @@ func (bs *BoardServer) processMessage(data []byte, connKey string) {
 	msg.ToID = bs.boardID
 	msg.ToType = string(Board.Type_Control)
 
+	if bs.isSensorMessage(&msg) {
+		if bs.dispatcher != nil {
+			if err := bs.dispatcher.Dispatch(&msg); err != nil {
+				log.Printf("[BoardServer] Dispatch failed for message %s: %v", msg.MessageID, err)
+			}
+		}
+	} else {
+		log.Printf("[BoardServer] Board message from %s, using internal channel", msg.FromID)
+	}
+
 	bs.messageChan <- &msg
+}
+
+func (bs *BoardServer) isSensorMessage(msg *Board.BoardMessage) bool {
+	if msg.FromType == "sensor" || msg.FromType == "esp32" || msg.FromType == "alarm" {
+		return true
+	}
+	if msg.Message.Attribute == Board.MessageAttribute_Warning {
+		return true
+	}
+	if msg.Message.Command == "SensorAlert" || msg.Message.Command == "Alert" {
+		return true
+	}
+	return false
 }
 
 func (bm *BoardConnectionManager) StopBoard(boardID string) error {
@@ -528,6 +634,19 @@ func (bm *BoardConnectionManager) StopAll() {
 
 func (bm *BoardConnectionManager) GetMessageChan() chan *Board.BoardMessage {
 	return bm.messageChan
+}
+
+func (bm *BoardConnectionManager) GetDispatcher() *MessageDispatcher {
+	return bm.boards[bm.getFirstBoardKey()].dispatcher
+}
+
+func (bm *BoardConnectionManager) getFirstBoardKey() string {
+	bm.mu.RLock()
+	defer bm.mu.RUnlock()
+	for k := range bm.boards {
+		return k
+	}
+	return ""
 }
 
 func (bm *BoardConnectionManager) GetAllBoards() []BoardServerInfo {

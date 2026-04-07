@@ -1,0 +1,4 @@
+=== Test Output: TestDispatchSensorAlertMessage ===
+Time: 2026-04-07 22:47:56
+
+[PASS] Sensor alert message sent via TCP

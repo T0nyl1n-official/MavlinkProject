@@ -1,357 +1,354 @@
 package MavlinkRoute
 
 import (
-    "net/http"
-    "sync"
-    "time"
+	"net/http"
+	"sync"
+	"time"
 
-    "github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin"
 
-    Mavlink "MavlinkProject/Server/backend/Handler/Mavlink"
-    boardHandler "MavlinkProject/Server/backend/Handler/Boards"
-    JwtMiddleware "MavlinkProject/Server/backend/Middles"
-    Jwt "MavlinkProject/Server/backend/Middles/Jwt"
-    jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
+	Mavlink "MavlinkProject/Server/backend/Handler/Mavlink"
+	sensorHandler "MavlinkProject/Server/backend/Handler/Sensor"
+	JwtMiddleware "MavlinkProject/Server/backend/Middles"
+	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
+	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 )
 
 var v2HandlerPoolMux sync.Mutex
 
 func getHandlerFromContext(c *gin.Context) *Mavlink.MAVLinkHandlerV1 {
-    handlerID := c.GetString("handler_id")
-    if handlerID == "" {
-        handlerID = c.Query("handler_id")
-    }
-    if handlerID == "" {
-        return nil
-    }
-    return Mavlink.GetHandlerV1(handlerID)
+	handlerID := c.GetString("handler_id")
+	if handlerID == "" {
+		handlerID = c.Query("handler_id")
+	}
+	if handlerID == "" {
+		return nil
+	}
+	return Mavlink.GetHandlerV1(handlerID)
 }
 
 func SetupMavlinkV2Routes(router *gin.Engine, jwtManager interface{}, tokenManager interface{}) {
-    v2Group := router.Group("/mavlink/v2")
-    v2Group.Use(JwtMiddleware.JwtAuthMiddleWareWithRedis(jwtManager.(*jwtUtils.JWTManager), tokenManager.(*Jwt.RedisTokenManager), nil))
+	v2Group := router.Group("/mavlink/v2")
+	v2Group.Use(JwtMiddleware.JwtAuthMiddleWareWithRedis(jwtManager.(*jwtUtils.JWTManager), tokenManager.(*Jwt.RedisTokenManager), nil))
 
-    {
-        v2Group.POST("/takeoff", func(c *gin.Context) {
-            handler := getHandlerFromContext(c)
-            if handler == nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   "handler not found",
-                })
-                return
-            }
+	{
+		v2Group.POST("/takeoff", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
 
-            var req Mavlink.TakeoffRequest
-            if err := c.ShouldBindJSON(&req); err != nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   err.Error(),
-                })
-                return
-            }
+			var req Mavlink.TakeoffRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
 
-            handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
-            if handlerV2 == nil {
-                c.JSON(http.StatusInternalServerError, gin.H{
-                    "success": false,
-                    "error":   "Failed to initialize V2 handler",
-                })
-                return
-            }
-            resp := handlerV2.Takeoff(req)
-            c.JSON(http.StatusOK, resp)
-        })
+			handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
+			if handlerV2 == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"error":   "Failed to initialize V2 handler",
+				})
+				return
+			}
+			resp := handlerV2.Takeoff(req)
+			c.JSON(http.StatusOK, resp)
+		})
 
-        v2Group.POST("/land", func(c *gin.Context) {
-            handler := getHandlerFromContext(c)
-            if handler == nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   "handler not found",
-                })
-                return
-            }
+		v2Group.POST("/land", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
 
-            var req Mavlink.LandRequest
-            if err := c.ShouldBindJSON(&req); err != nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   err.Error(),
-                })
-                return
-            }
+			var req Mavlink.LandRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
 
-            handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
-            if handlerV2 == nil {
-                c.JSON(http.StatusInternalServerError, gin.H{
-                    "success": false,
-                    "error":   "Failed to initialize V2 handler",
-                })
-                return
-            }
-            resp := handlerV2.Land(req)
-            c.JSON(http.StatusOK, resp)
-        })
+			handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
+			if handlerV2 == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"error":   "Failed to initialize V2 handler",
+				})
+				return
+			}
+			resp := handlerV2.Land(req)
+			c.JSON(http.StatusOK, resp)
+		})
 
-        v2Group.POST("/move", func(c *gin.Context) {
-            handler := getHandlerFromContext(c)
-            if handler == nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   "handler not found",
-                })
-                return
-            }
+		v2Group.POST("/move", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
 
-            var req Mavlink.MoveRequest
-            if err := c.ShouldBindJSON(&req); err != nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   err.Error(),
-                })
-                return
-            }
+			var req Mavlink.MoveRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
 
-            handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
-            if handlerV2 == nil {
-                c.JSON(http.StatusInternalServerError, gin.H{
-                    "success": false,
-                    "error":   "Failed to initialize V2 handler",
-                })
-                return
-            }
-            resp := handlerV2.Move(req)
-            c.JSON(http.StatusOK, resp)
-        })
+			handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
+			if handlerV2 == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"error":   "Failed to initialize V2 handler",
+				})
+				return
+			}
+			resp := handlerV2.Move(req)
+			c.JSON(http.StatusOK, resp)
+		})
 
-        v2Group.POST("/return", func(c *gin.Context) {
-            handler := getHandlerFromContext(c)
-            if handler == nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   "handler not found",
-                })
-                return
-            }
+		v2Group.POST("/return", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
 
-            err := handler.SendReturnToLaunch()
-            if err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{
-                    "success": false,
-                    "error":   err.Error(),
-                })
-                return
-            }
-            c.JSON(http.StatusOK, gin.H{
-                "success": true,
-                "message": "Return to launch initiated",
-            })
-        })
+			err := handler.SendReturnToLaunch()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "Return to launch initiated",
+			})
+		})
 
-        v2Group.POST("/mode", func(c *gin.Context) {
-            handler := getHandlerFromContext(c)
-            if handler == nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   "handler not found",
-                })
-                return
-            }
+		v2Group.POST("/mode", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
 
-            var req struct {
-                Mode string `json:"mode" binding:"required"`
-            }
-            if err := c.ShouldBindJSON(&req); err != nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   err.Error(),
-                })
-                return
-            }
+			var req struct {
+				Mode string `json:"mode" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
 
-            err := handler.SetFlightMode(Mavlink.FlightMode(req.Mode))
-            if err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{
-                    "success": false,
-                    "error":   err.Error(),
-                })
-                return
-            }
-            c.JSON(http.StatusOK, gin.H{
-                "success": true,
-                "message": "Flight mode set to " + req.Mode,
-            })
-        })
+			err := handler.SetFlightMode(Mavlink.FlightMode(req.Mode))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "Flight mode set to " + req.Mode,
+			})
+		})
 
-        v2Group.GET("/status", func(c *gin.Context) {
-            handler := getHandlerFromContext(c)
-            if handler == nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   "handler not found",
-                })
-                return
-            }
+		v2Group.GET("/status", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
 
-            handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
-            if handlerV2 == nil {
-                c.JSON(http.StatusInternalServerError, gin.H{
-                    "success": false,
-                    "error":   "Failed to initialize V2 handler",
-                })
-                return
-            }
-            resp := handlerV2.GetStatus()
-            c.JSON(http.StatusOK, resp)
-        })
+			handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
+			if handlerV2 == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"error":   "Failed to initialize V2 handler",
+				})
+				return
+			}
+			resp := handlerV2.GetStatus()
+			c.JSON(http.StatusOK, resp)
+		})
 
-        v2Group.GET("/position", func(c *gin.Context) {
-            handler := getHandlerFromContext(c)
-            if handler == nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   "handler not found",
-                })
-                return
-            }
+		v2Group.GET("/position", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
 
-            position := handler.GetDronePosition()
-            c.JSON(http.StatusOK, gin.H{
-                "success": true,
-                "data":    position,
-            })
-        })
+			position := handler.GetDronePosition()
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"data":    position,
+			})
+		})
 
-        v2Group.GET("/battery", func(c *gin.Context) {
-            handler := getHandlerFromContext(c)
-            if handler == nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   "handler not found",
-                })
-                return
-            }
+		v2Group.GET("/battery", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
 
-            battery := handler.GetDroneBattery()
-            c.JSON(http.StatusOK, gin.H{
-                "success": true,
-                "data":    battery,
-            })
-        })
+			battery := handler.GetDroneBattery()
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"data":    battery,
+			})
+		})
 
-        v2Group.POST("/ground-station", func(c *gin.Context) {
-            handler := getHandlerFromContext(c)
-            if handler == nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   "handler not found",
-                })
-                return
-            }
+		v2Group.POST("/ground-station", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
 
-            var req struct {
-                Name      string  `json:"name" binding:"required"`
-                ID        string  `json:"id"`
-                Latitude  float64 `json:"latitude"`
-                Longitude float64 `json:"longitude"`
-                Altitude  float64 `json:"altitude"`
-            }
-            if err := c.ShouldBindJSON(&req); err != nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   err.Error(),
-                })
-                return
-            }
+			var req struct {
+				Name      string  `json:"name" binding:"required"`
+				ID        string  `json:"id"`
+				Latitude  float64 `json:"latitude"`
+				Longitude float64 `json:"longitude"`
+				Altitude  float64 `json:"altitude"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
 
-            handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
-            if handlerV2 == nil {
-                c.JSON(http.StatusInternalServerError, gin.H{
-                    "success": false,
-                    "error":   "Failed to initialize V2 handler",
-                })
-                return
-            }
-            handlerV2.SetGroundStation(req.Name, req.ID, req.Latitude, req.Longitude, req.Altitude)
-            c.JSON(http.StatusOK, gin.H{
-                "success": true,
-                "message": "地面站信息已设置",
-            })
-        })
+			handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
+			if handlerV2 == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"error":   "Failed to initialize V2 handler",
+				})
+				return
+			}
+			handlerV2.SetGroundStation(req.Name, req.ID, req.Latitude, req.Longitude, req.Altitude)
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "地面站信息已设置",
+			})
+		})
 
-        v2Group.POST("/sensor-alert", func(c *gin.Context) {
-            var req boardHandler.SensorAlertReq
-            if err := c.ShouldBindJSON(&req); err != nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   err.Error(),
-                })
-                return
-            }
+		v2Group.POST("/sensor-alert", func(c *gin.Context) {
+			var req sensorHandler.SensorAlertReq
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
 
-            // 获取你的FRP地址，也可以配置在环境变量或Setting里
-            frpAddress := "frp-put.com:14465"
-            
-            err := boardHandler.GenerateChainAndSendToCentral(req, frpAddress)
-            if err != nil {
-                c.JSON(http.StatusInternalServerError, gin.H{
-                    "success": false,
-                    "error":   err.Error(),
-                })
-                return
-            }
+			err := sensorHandler.GenerateChainAndSendToCentral(req)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
 
-            c.JSON(http.StatusOK, gin.H{
-                "success": true,
-                "message": "成功生成任务调度链并已发送至树莓派 (Central)",
-            })
-        })
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "成功生成任务调度链并已发送至树莓派 (Central)",
+			})
+		})
 
-        v2Group.POST("/return-charge", func(c *gin.Context) {
-            handler := getHandlerFromContext(c)
-            if handler == nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   "handler not found",
-                })
-                return
-            }
+		v2Group.POST("/return-charge", func(c *gin.Context) {
+			handler := getHandlerFromContext(c)
+			if handler == nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   "handler not found",
+				})
+				return
+			}
 
-            var req Mavlink.ReturnToChargeRequest
-            if err := c.ShouldBindJSON(&req); err != nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   err.Error(),
-                })
-                return
-            }
+			var req Mavlink.ReturnToChargeRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
 
-            handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
-            if handlerV2 == nil {
-                c.JSON(http.StatusInternalServerError, gin.H{
-                    "success": false,
-                    "error":   "Failed to initialize V2 handler",
-                })
-                return
-            }
-            resp := handlerV2.ReturnToCharge(req)
-            c.JSON(http.StatusOK, resp)
-        })
-    }
+			handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
+			if handlerV2 == nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"success": false,
+					"error":   "Failed to initialize V2 handler",
+				})
+				return
+			}
+			resp := handlerV2.ReturnToCharge(req)
+			c.JSON(http.StatusOK, resp)
+		})
+	}
 }
 
 func SetupDefaultMavlinkRoutesV2(router *gin.Engine, jwtManager interface{}, tokenManager interface{}) {
-    config := Mavlink.MAVLinkConfigV1{
-        ConnectionType:  Mavlink.ConnectionUDP,
-        UDPAddr:         "0.0.0.0",
-        UDPPort:         14550,
-        SystemID:        255,
-        ComponentID:     1,
-        ProtocolVersion: Mavlink.ProtocolVersionV2,
-        HeartbeatRate:   1 * time.Second,
-    }
-    _ = Mavlink.NewMAVLinkHandlerV1(config)
+	config := Mavlink.MAVLinkConfigV1{
+		ConnectionType:  Mavlink.ConnectionUDP,
+		UDPAddr:         "0.0.0.0",
+		UDPPort:         14550,
+		SystemID:        255,
+		ComponentID:     1,
+		ProtocolVersion: Mavlink.ProtocolVersionV2,
+		HeartbeatRate:   1 * time.Second,
+	}
+	_ = Mavlink.NewMAVLinkHandlerV1(config)
 
-    SetupMavlinkV2Routes(router, jwtManager, tokenManager)
+	SetupMavlinkV2Routes(router, jwtManager, tokenManager)
 }

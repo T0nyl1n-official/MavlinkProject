@@ -250,9 +250,9 @@ type ResourcesConfig struct {
 }
 
 type VerificationConfig struct {
-	CodeLength            int `yaml:"code_length"`
-	CodeExpireTime        int `yaml:"code_expire_time"`
-	MaxRequestPerMinute   int `yaml:"max_request_per_minute"`
+	CodeLength          int `yaml:"code_length"`
+	CodeExpireTime      int `yaml:"code_expire_time"`
+	MaxRequestPerMinute int `yaml:"max_request_per_minute"`
 }
 
 type ErrorListenerConfig struct {
@@ -266,6 +266,7 @@ type BoardConfig struct {
 	TCP        BoardTCPConfig        `yaml:"tcp"`
 	UDP        BoardUDPConfig        `yaml:"udp"`
 	Connection BoardConnectionConfig `yaml:"connection"`
+	FRP        BoardFRPConfig        `yaml:"frp"`
 }
 
 type BoardTCPConfig struct {
@@ -287,4 +288,17 @@ type BoardConnectionConfig struct {
 	MaxRetryAttempts  int `yaml:"max_retry_attempts"`
 	RetryDelay        int `yaml:"retry_delay"`
 	KeepaliveInterval int `yaml:"keepalive_interval"`
+}
+
+type CentralServerConfig struct {
+	Name    string `yaml:"name"`
+	Address string `yaml:"address"`
+	Port    int    `yaml:"port"`
+}
+
+type BoardFRPConfig struct {
+	Timeout          int                   `yaml:"timeout"`
+	ReadTimeout      int                   `yaml:"read_timeout"`
+	MaxRetryAttempts int                   `yaml:"max_retry_attempts"`
+	CentralServers   []CentralServerConfig `yaml:"central_servers"`
 }

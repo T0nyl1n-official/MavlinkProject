@@ -1,0 +1,7 @@
+=== Test Output: TestMessageDispatcherFlow ===
+Time: 2026-04-07 22:01:34
+
+[PASS] MessageDispatcher created successfully
+[PASS] AIAgentHandler retrieved
+[PASS] SensorAlertHandler retrieved
+[PASS] BoardHandler retrieved

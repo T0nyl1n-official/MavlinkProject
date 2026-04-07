@@ -1,0 +1,4 @@
+=== Test Output: TestDispatchBoardHeartbeatMessage ===
+Time: 2026-04-07 21:25:55
+
+[PASS] Heartbeat message sent via TCP
