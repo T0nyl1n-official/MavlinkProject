@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	BoardHandler "MavlinkProject/Server/Backend/Handler/Boards"
-	BoardClassifier "MavlinkProject/Server/Backend/Utils/BoardClassifier"
+	BoardHandler "MavlinkProject/Server/backend/Handler/Boards"
+	BoardClassifier "MavlinkProject/Server/backend/Utils/BoardClassifier"
 	Conf "MavlinkProject/Server/backend/Config"
 )
 

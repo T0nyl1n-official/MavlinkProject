@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	boardHandler "MavlinkProject/Server/Backend/Handler/Boards"
+	boardHandler "MavlinkProject/Server/backend/Handler/Boards"
 	Board "MavlinkProject/Server/backend/Shared/Boards"
 
 	JwtMiddleware "MavlinkProject/Server/backend/Middles"

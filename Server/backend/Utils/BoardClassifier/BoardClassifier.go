@@ -9,7 +9,7 @@ import (
 	"time"
 
 	Board "MavlinkProject/Server/backend/Shared/Boards"
-	WarningHandler "MavlinkProject/Server/Backend/Utils/WarningHandle"
+	WarningHandler "MavlinkProject/Server/backend/Utils/WarningHandle"
 )
 
 type MessageCategory string

@@ -8,6 +8,7 @@ import (
     "github.com/gin-gonic/gin"
 
     Mavlink "MavlinkProject/Server/backend/Handler/Mavlink"
+    boardHandler "MavlinkProject/Server/backend/Handler/Boards"
     JwtMiddleware "MavlinkProject/Server/backend/Middles"
     Jwt "MavlinkProject/Server/backend/Middles/Jwt"
     jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
@@ -280,16 +281,7 @@ func SetupMavlinkV2Routes(router *gin.Engine, jwtManager interface{}, tokenManag
         })
 
         v2Group.POST("/sensor-alert", func(c *gin.Context) {
-            handler := getHandlerFromContext(c)
-            if handler == nil {
-                c.JSON(http.StatusBadRequest, gin.H{
-                    "success": false,
-                    "error":   "handler not found",
-                })
-                return
-            }
-
-            var req Mavlink.SensorAlertRequest
+            var req boardHandler.SensorAlertReq
             if err := c.ShouldBindJSON(&req); err != nil {
                 c.JSON(http.StatusBadRequest, gin.H{
                     "success": false,
@@ -298,16 +290,22 @@ func SetupMavlinkV2Routes(router *gin.Engine, jwtManager interface{}, tokenManag
                 return
             }
 
-            handlerV2 := (&Mavlink.MavlinkHandlerV2{}).New(handler)
-            if handlerV2 == nil {
+            // 获取你的FRP地址，也可以配置在环境变量或Setting里
+            frpAddress := "frp-put.com:14465"
+            
+            err := boardHandler.GenerateChainAndSendToCentral(req, frpAddress)
+            if err != nil {
                 c.JSON(http.StatusInternalServerError, gin.H{
                     "success": false,
-                    "error":   "Failed to initialize V2 handler",
+                    "error":   err.Error(),
                 })
                 return
             }
-            resp := handlerV2.RespondToSensorAlert(req)
-            c.JSON(http.StatusOK, resp)
+
+            c.JSON(http.StatusOK, gin.H{
+                "success": true,
+                "message": "成功生成任务调度链并已发送至树莓派 (Central)",
+            })
         })
 
         v2Group.POST("/return-charge", func(c *gin.Context) {

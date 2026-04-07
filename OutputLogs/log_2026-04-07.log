@@ -1,0 +1,24 @@
+[2026-04-07 17:16:38] INFO POST /mavlink/v2/sensor-alert 400 0ms
+[2026-04-07 17:16:52] INFO POST /mavlink/v2/sensor-alert 400 0ms
+[2026-04-07 17:17:16] INFO POST /mavlink/v2/sensor-alert 400 0ms
+[2026-04-07 17:17:55] INFO POST /mavlink/v2/sensor-alert 400 0ms
+[2026-04-07 17:18:18] INFO POST /mavlink/v2/sensor-alert 400 0ms
+[2026-04-07 17:20:15] INFO POST /users/register 200 17ms
+[2026-04-07 17:20:21] INFO POST /users/login 500 6764ms
+[2026-04-07 17:20:21] WARN 🚨 慢请求警告: POST /users/login 耗时 6.7642312s
+[2026-04-07 17:20:41] INFO POST /users/register 200 19ms
+[2026-04-07 17:20:43] INFO POST /users/login 500 2144ms
+[2026-04-07 17:20:43] WARN 🚨 慢请求警告: POST /users/login 耗时 2.1442029s
+[2026-04-07 17:20:59] INFO POST /users/register 200 8ms
+[2026-04-07 17:21:01] INFO POST /users/login 500 2071ms
+[2026-04-07 17:21:01] WARN 🚨 慢请求警告: POST /users/login 耗时 2.0714483s
+[2026-04-07 17:29:36] INFO POST /users/register 200 17ms
+[2026-04-07 17:29:36] INFO POST /users/login 200 18ms
+[2026-04-07 17:29:36] INFO POST /mavlink/v2/sensor-alert 500 109ms
+[2026-04-07 17:31:26] INFO POST /users/register 200 8ms
+[2026-04-07 17:31:26] INFO POST /users/login 200 7ms
+[2026-04-07 17:31:26] INFO POST /mavlink/v2/sensor-alert 500 85ms
+[2026-04-07 17:32:13] INFO POST /users/register 200 5ms
+[2026-04-07 17:32:13] INFO POST /users/login 200 7ms
+[2026-04-07 17:32:23] INFO POST /mavlink/v2/sensor-alert 500 10054ms
+[2026-04-07 17:32:23] WARN 🚨 慢请求警告: POST /mavlink/v2/sensor-alert 耗时 10.054433s
