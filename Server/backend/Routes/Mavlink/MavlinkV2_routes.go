@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	sensorHandler "MavlinkProject/Server/backend/Handler/Boards/SensorBoard"
 	Mavlink "MavlinkProject/Server/backend/Handler/Mavlink"
-	sensorHandler "MavlinkProject/Server/backend/Handler/Sensor"
 	JwtMiddleware "MavlinkProject/Server/backend/Middles"
 	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
 	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"

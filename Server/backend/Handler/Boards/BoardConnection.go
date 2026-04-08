@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
+	FRP "MavlinkProject/Server/backend/Shared/FRPHelper"
 	Conf "MavlinkProject/Server/backend/Config"
 	Board "MavlinkProject/Server/backend/Shared/Boards"
-	FRPHelper "MavlinkProject/Server/backend/Shared/FRPHelper"
 	WarningHandler "MavlinkProject/Server/backend/Utils/WarningHandle"
 )
 
@@ -288,7 +288,7 @@ func (bm *BoardConnectionManager) SendMessageToBoard(boardID string, msg *Board.
 		}
 	}
 
-	centrals := FRPHelper.GetFRPCentrals()
+	centrals := FRP.GetFRPCentrals()
 	if len(centrals) == 0 {
 		return fmt.Errorf("no FRP central servers configured")
 	}
@@ -300,7 +300,7 @@ func (bm *BoardConnectionManager) SendMessageToBoard(boardID string, msg *Board.
 		frpAddr := fmt.Sprintf("%s:%d", central.Address, central.Port)
 		log.Printf("[BoardManager] Trying central %s at %s (maxRetryAttempts: %d)", central.Name, frpAddr, central.MaxRetryAttempts)
 
-		response, err := FRPHelper.PushMessageToCentral(frpAddr, central.Timeout, central.ReadTimeout, central.MaxRetryAttempts, msg)
+		response, err := FRP.PushMessageToCentral(frpAddr, central.Timeout, central.MaxRetryAttempts, msg)
 		if err != nil {
 			lastErr = err
 			log.Printf("[BoardManager] FRP attempt to %s failed: %v", frpAddr, err)

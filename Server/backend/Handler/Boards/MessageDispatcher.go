@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	sensorHandler "MavlinkProject/Server/backend/Handler/Sensor"
+	sensorHandler "MavlinkProject/Server/backend/Handler/Boards/SensorBoard"
 	Board "MavlinkProject/Server/backend/Shared/Boards"
 )
 
