@@ -55,6 +55,7 @@ func (sm *SettingManager) LoadSetting(path string) error {
 	return nil
 }
 
+// 提高鲁棒性, 这些if值会导致系统错误
 func (sm *SettingManager) setDefaults() {
 	if sm.setting.Logger.MonitorWindow <= 0 {
 		sm.setting.Logger.MonitorWindow = 15
@@ -73,6 +74,7 @@ func (sm *SettingManager) setDefaults() {
 	}
 }
 
+// 设置重加载
 func (sm *SettingManager) ReloadSetting() error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -101,6 +103,7 @@ func (sm *SettingManager) ReloadSetting() error {
 	return nil
 }
 
+// 更新设置
 func (sm *SettingManager) UpdateSetting(newSetting *Setting) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -122,6 +125,7 @@ func (sm *SettingManager) UpdateSetting(newSetting *Setting) error {
 	return nil
 }
 
+// 保存设置到文件
 func (sm *SettingManager) saveToFile() error {
 	data, err := yaml.Marshal(sm.setting)
 	if err != nil {
@@ -138,6 +142,7 @@ func (sm *SettingManager) notifyCallbacks(oldSetting, newSetting *Setting) {
 	}
 }
 
+// 注册设置变化回调
 func (sm *SettingManager) RegisterChangeCallback(name string, callback func(*Setting) error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()

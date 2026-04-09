@@ -1,7 +1,7 @@
 package Server
 
 import (
-	Backend "MavlinkProject/Server/backend"
+	Backend "MavlinkProject/Server/Backend"
 	"log"
 	"os"
 

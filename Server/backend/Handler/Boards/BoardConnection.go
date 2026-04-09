@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	FRP "MavlinkProject/Server/backend/Shared/FRPHelper"
 	Conf "MavlinkProject/Server/backend/Config"
 	Board "MavlinkProject/Server/backend/Shared/Boards"
+	FRP "MavlinkProject/Server/backend/Utils/FRPHelper"
 	WarningHandler "MavlinkProject/Server/backend/Utils/WarningHandle"
 )
 
@@ -27,6 +27,7 @@ func GetBoardConnectionConfig() (keepAliveInterval, connectionTimeout time.Durat
 	maxRetryAttempts = cfg.MaxRetryAttempts
 	retryDelay = time.Duration(cfg.RetryDelay) * time.Second
 
+	// 提高鲁棒性, 这些if值会导致系统错误
 	if keepAliveInterval <= 0 {
 		keepAliveInterval = 30 * time.Second
 	}
@@ -43,57 +44,11 @@ func GetBoardConnectionConfig() (keepAliveInterval, connectionTimeout time.Durat
 	return
 }
 
-type CentralServerInfo struct {
-	Name             string
-	Address          string
-	Port             int
-	Timeout          time.Duration
-	ReadTimeout      time.Duration
-	MaxRetryAttempts int
-}
-
-func GetFRPCentrals() []CentralServerInfo {
-	setting := Conf.GetSetting()
-	cfgs := setting.Board.FRP.CentralServers
-	frpCfg := setting.Board.FRP
-
-	if len(cfgs) == 0 {
-		return []CentralServerInfo{}
-	}
-
-	timeout := time.Duration(frpCfg.Timeout) * time.Second
-	readTimeout := time.Duration(frpCfg.ReadTimeout) * time.Second
-	maxRetryAttempts := frpCfg.MaxRetryAttempts
-
-	if timeout <= 0 {
-		timeout = 5 * time.Second
-	}
-	if readTimeout <= 0 {
-		readTimeout = 10 * time.Second
-	}
-	if maxRetryAttempts <= 0 {
-		maxRetryAttempts = 3
-	}
-
-	servers := make([]CentralServerInfo, 0, len(cfgs))
-	for _, cfg := range cfgs {
-		servers = append(servers, CentralServerInfo{
-			Name:             cfg.Name,
-			Address:          cfg.Address,
-			Port:             cfg.Port,
-			Timeout:          timeout,
-			ReadTimeout:      readTimeout,
-			MaxRetryAttempts: maxRetryAttempts,
-		})
-	}
-
-	return servers
-}
-
 // ============================
 // BoardConnectionManager
 // ============================
 
+// 后端-板控 连接管理器
 type BoardConnectionManager struct {
 	boards      map[string]*BoardServer
 	tcpConns    map[string]net.Conn
@@ -105,6 +60,7 @@ type BoardConnectionManager struct {
 	stopChan    chan bool
 }
 
+// 后端-板控 连接管理器-服务器
 type BoardServer struct {
 	boardID           string
 	listener          net.Listener
@@ -415,6 +371,7 @@ func (bs *BoardServer) handleConnection(conn net.Conn) {
 
 	retryCount := 0
 
+	// 单开通道，用于发送keepalive消息
 	keepAliveStop := make(chan bool)
 	go bs.keepAliveWriter(conn, connKey, keepAliveStop)
 
@@ -436,6 +393,7 @@ func (bs *BoardServer) handleConnection(conn net.Conn) {
 
 		conn.SetDeadline(time.Now().Add(bs.connectionTimeout))
 
+		// 阅读数据时防止换行读取错误
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
 			if err == io.EOF || strings.Contains(err.Error(), "EOF") {

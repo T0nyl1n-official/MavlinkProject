@@ -5,7 +5,7 @@ import (
 	"time"
 
 	Board "MavlinkProject/Server/backend/Shared/Boards"
-	FRP "MavlinkProject/Server/backend/Shared/FRPHelper"
+	FRP "MavlinkProject/Server/backend/Utils/FRPHelper"
 )
 
 type SensorAlertReq struct {

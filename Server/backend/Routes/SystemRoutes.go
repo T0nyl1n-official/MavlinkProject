@@ -6,12 +6,25 @@ import (
 	"github.com/gin-gonic/gin"
 
 	Conf "MavlinkProject/Server/backend/Config"
+	JwtMiddleware "MavlinkProject/Server/backend/Middles"
+	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 )
 
-func InitSystemRoutes(r *gin.Engine, settingManager *Conf.SettingManager) {
-	systemGroup := r.Group("/api/system")
+func InitSystemRoutes(r *gin.Engine, settingManager *Conf.SettingManager, jwtManager *jwtUtils.JWTManager) {
+	systemGroup := r.Group("/system")
 	{
-		systemGroup.GET("/setting", func(c *gin.Context) {
+		systemGroup.GET("/setting", JwtMiddleware.JwtAuthMiddleWare(jwtManager, nil), func(c *gin.Context) {
+			claims, exists := c.Get("claims")
+			if !exists {
+				c.JSON(http.StatusUnauthorized, gin.H{"code": 1, "msg": "unauthorized"})
+				return
+			}
+			jwtClaims := claims.(*jwtUtils.JWTClaims)
+			if jwtClaims.Role != "admin" {
+				c.JSON(http.StatusForbidden, gin.H{"code": 1, "msg": "admin permission required"})
+				return
+			}
+
 			setting := settingManager.GetSetting()
 			c.JSON(http.StatusOK, gin.H{
 				"code": 0,
@@ -50,7 +63,17 @@ func InitSystemRoutes(r *gin.Engine, settingManager *Conf.SettingManager) {
 			}
 		})
 
-		systemGroup.POST("/setting/reload", func(c *gin.Context) {
+		systemGroup.POST("/setting/reload", JwtMiddleware.JwtAuthMiddleWare(jwtManager, nil), func(c *gin.Context) {
+			claims, exists := c.Get("claims")
+			if !exists {
+				c.JSON(http.StatusUnauthorized, gin.H{"code": 1, "msg": "unauthorized"})
+				return
+			}
+			jwtClaims := claims.(*jwtUtils.JWTClaims)
+			if jwtClaims.Role != "admin" {
+				c.JSON(http.StatusForbidden, gin.H{"code": 1, "msg": "admin permission required"})
+				return
+			}
 			if err := settingManager.ReloadSetting(); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 1, "msg": "reload failed: " + err.Error()})
 				return
@@ -58,7 +81,17 @@ func InitSystemRoutes(r *gin.Engine, settingManager *Conf.SettingManager) {
 			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "setting reloaded successfully"})
 		})
 
-		systemGroup.POST("/setting/update", func(c *gin.Context) {
+		systemGroup.POST("/setting/update", JwtMiddleware.JwtAuthMiddleWare(jwtManager, nil), func(c *gin.Context) {
+			claims, exists := c.Get("claims")
+			if !exists {
+				c.JSON(http.StatusUnauthorized, gin.H{"code": 1, "msg": "unauthorized"})
+				return
+			}
+			jwtClaims := claims.(*jwtUtils.JWTClaims)
+			if jwtClaims.Role != "admin" {
+				c.JSON(http.StatusForbidden, gin.H{"code": 1, "msg": "admin permission required"})
+				return
+			}
 			var newSetting Conf.Setting
 			if err := c.ShouldBindJSON(&newSetting); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"code": 1, "msg": "invalid request: " + err.Error()})
@@ -73,7 +106,17 @@ func InitSystemRoutes(r *gin.Engine, settingManager *Conf.SettingManager) {
 			c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "setting updated successfully"})
 		})
 
-		systemGroup.POST("/setting/:category", func(c *gin.Context) {
+		systemGroup.POST("/setting/:category", JwtMiddleware.JwtAuthMiddleWare(jwtManager, nil), func(c *gin.Context) {
+			claims, exists := c.Get("claims")
+			if !exists {
+				c.JSON(http.StatusUnauthorized, gin.H{"code": 1, "msg": "unauthorized"})
+				return
+			}
+			jwtClaims := claims.(*jwtUtils.JWTClaims)
+			if jwtClaims.Role != "admin" {
+				c.JSON(http.StatusForbidden, gin.H{"code": 1, "msg": "admin permission required"})
+				return
+			}
 			category := c.Param("category")
 			setting := settingManager.GetSetting()
 

@@ -16,15 +16,17 @@ import (
 
 func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager, mysqlDB *gorm.DB, settingManager *Conf.SettingManager) {
 	r.StaticFile("/favicon.ico", "./Resources/favicon.ico")
-
 	Test_Routes(r)
+
+	InitSystemRoutes(r, settingManager, jwtManager)
+
 	MiscRoutes.SetMiscRoutes(r)
 	UsersRoutes.SetUsersRoutes(r, jwtManager, tokenManager, mysqlDB)
 	BoardsRoutes.SetupBoardRoutes(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupChainRoutes(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupDefaultMavlinkRoutesV2(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupMavlinkV1Routes(r, jwtManager, tokenManager)
-	InitSystemRoutes(r, settingManager)
+
 }
 
 func Test_Routes(r *gin.Engine) {
@@ -32,7 +34,7 @@ func Test_Routes(r *gin.Engine) {
 		c.JSON(200, gin.H{
 			"status":  "success",
 			"message": "Hello world! - Welcome to The Mavlink Project!",
-			"version": "Pre-Release 0.1.4",
+			"version": "Pre-Release 0.1.5",
 		})
 	})
 }

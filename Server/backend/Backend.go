@@ -20,13 +20,9 @@ import (
 	Verification "MavlinkProject/Server/backend/Utils/Verification"
 )
 
-func (bs *BackendServer) onBoardConfigChange(newSetting *Conf.Setting) error {
-	log.Printf("[Setting] Board config changed, restarting board listener...")
-	Listening.StopBoardListener()
-	Listening.StartBoardListener()
-	log.Printf("[Setting] Board listener restarted")
-	return nil
-}
+var (
+	settingPath = "config/Setting.yaml"
+)
 
 type BackendServer struct {
 	Router            *gin.Engine
@@ -40,10 +36,12 @@ type BackendServer struct {
 }
 
 func (bs *BackendServer) New() {
+	// 创建router
 	router := gin.Default()
 
+	
 	bs.SettingManager = Conf.GetSettingManager()
-	err := bs.SettingManager.LoadSetting("config/Setting.yaml")
+	err := bs.SettingManager.LoadSetting(settingPath)
 	if err != nil {
 		log.Fatalf("MavlinkProject - Backend : 加载配置文件失败 : %v", err)
 	}
@@ -125,4 +123,12 @@ func (bs *BackendServer) Start(addr, port string) *BackendServer {
 	bs.Run(port)
 	log.Printf("Backend server starting on port %s (HTTP)", port)
 	return bs
+}
+
+func (bs *BackendServer) onBoardConfigChange(newSetting *Conf.Setting) error {
+	log.Printf("[Setting] Board config changed, restarting board listener...")
+	Listening.StopBoardListener()
+	Listening.StartBoardListener()
+	log.Printf("[Setting] Board listener restarted")
+	return nil
 }
