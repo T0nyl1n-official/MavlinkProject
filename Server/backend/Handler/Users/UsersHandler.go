@@ -38,11 +38,7 @@ func SetRedisTokenManager(redisMgr *Jwt.RedisTokenManager) {
 }
 
 func (h *UserHandler) RegisterUser(c *gin.Context) {
-	user := &User.User{
-		Username: c.PostForm("username"),
-		Email:    c.PostForm("email"),
-		Password: fmt.Sprintf("%x", md5.Sum([]byte(c.PostForm("password")))),
-	}
+	var user User.User
 
 	if err := c.ShouldBindJSON(&user); err != nil {
 		validationErrors := []ErrorsMgr.ValidationError{
@@ -75,8 +71,6 @@ func (h *UserHandler) RegisterUser(c *gin.Context) {
 		return
 	}
 
-	// 设置用户为在线状态, 并保存到数据库
-	user.SetOnline()
 	if err := h.Mysql.Create(&user).Error; err != nil {
 		ErrorsMgr.HandleError(c, fmt.Errorf("数据库错误: %v", err))
 		return
@@ -420,3 +414,5 @@ func (h *UserHandler) LogoutUser(c *gin.Context) {
 		"message": "用户退出成功",
 	})
 }
+
+
