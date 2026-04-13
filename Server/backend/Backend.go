@@ -1,13 +1,18 @@
 package Backend
 
 import (
+	"context"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
-	WarningHandler "MavlinkProject/Server/backend/Utils/WarningHandle"
 	Conf "MavlinkProject/Server/backend/Config"
 	DBService "MavlinkProject/Server/backend/Database"
 	DBConfig "MavlinkProject/Server/backend/Database/Config"
@@ -18,11 +23,17 @@ import (
 	Listening "MavlinkProject/Server/backend/Middles/Listening"
 	Routes "MavlinkProject/Server/backend/Routes"
 	Verification "MavlinkProject/Server/backend/Utils/Verification"
+	WarningHandler "MavlinkProject/Server/backend/Utils/WarningHandle"
 )
 
 var (
-	settingPath = "config/Setting.yaml"
+	settingPath   = "config/Setting.yaml"
+	backendServer *BackendServer
 )
+
+func GetBackendServer() *BackendServer {
+	return backendServer
+}
 
 type BackendServer struct {
 	Router            *gin.Engine
@@ -33,13 +44,12 @@ type BackendServer struct {
 	TokenManager      *Jwt.RedisTokenManager
 	Verification      Verification.VerificationManager
 	SettingManager    *Conf.SettingManager
+	StartTime         time.Time
 }
 
 func (bs *BackendServer) New() {
-	// 创建router
 	router := gin.Default()
 
-	
 	bs.SettingManager = Conf.GetSettingManager()
 	err := bs.SettingManager.LoadSetting(settingPath)
 	if err != nil {
@@ -70,7 +80,6 @@ func (bs *BackendServer) New() {
 			log.Fatalf("MavlinkProject - Backend : 初始化Redis失败: DB=%d", db)
 		}
 		redisClients = append(redisClients, *redisClient)
-
 	}
 
 	tokenRedis := redisClients[len(redisClients)-2]
@@ -103,22 +112,57 @@ func (bs *BackendServer) New() {
 	log.Printf("[BackendServer] Board listener service started")
 }
 
-func (bs *BackendServer) Run(port string) {
+var httpServer *http.Server
 
+func (bs *BackendServer) Run(port string) {
+	bs.StartTime = time.Now()
 	Routes.InitAllRoutes(bs.Router, bs.JWTManager, bs.TokenManager, bs.Mysql, bs.SettingManager)
 
 	addr := "0.0.0.0:" + port
 	log.Printf("启动 HTTP 服务器: %s", addr)
 
-	err := bs.Router.RunTLS("0.0.0.0:8080", "cert.pem", "key.pem")
-	if err != nil {
-		log.Printf("HTTP 服务器启动失败: %v", err)
-	} else {
-		log.Printf("Backend server started on port %s (HTTP)", port)
+	httpServer = &http.Server{
+		Addr:    addr,
+		Handler: bs.Router,
 	}
+
+	go func() {
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("HTTP 服务器启动失败: %v", err)
+		}
+	}()
+
+	log.Printf("Backend server started on port %s (HTTP)", port)
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+}
+
+func (bs *BackendServer) Shutdown() error {
+	log.Printf("[BackendServer] Shutting down server...")
+	Listening.StopBoardListener()
+	if httpServer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(ctx); err != nil {
+			log.Printf("[BackendServer] Server shutdown error: %v", err)
+			return err
+		}
+	}
+	log.Printf("[BackendServer] Server shutdown complete")
+	return nil
+}
+
+func (bs *BackendServer) Restart() {
+	bs.Shutdown()
+	time.Sleep(2 * time.Second)
+	execPath, _ := os.Executable()
+	syscall.Exec(execPath, os.Args, os.Environ())
 }
 
 func (bs *BackendServer) Start(addr, port string) *BackendServer {
+	backendServer = bs
 	bs.New()
 	bs.Run(port)
 	log.Printf("Backend server starting on port %s (HTTP)", port)

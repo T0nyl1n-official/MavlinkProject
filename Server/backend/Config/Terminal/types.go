@@ -61,6 +61,8 @@ const (
 )
 
 const (
+	TCO_empty Terminal_Command_Object = ""
+
 	TCO_create Terminal_Command_Object = "create"
 	TCO_del    Terminal_Command_Object = "del"
 	TCO_delete Terminal_Command_Object = "delete"
@@ -74,6 +76,8 @@ const (
 	TCO_owner    Terminal_Command_Object = "owner"
 	TCO_config   Terminal_Command_Object = "config"
 	TCO_restart  Terminal_Command_Object = "restart"
+	TCO_shutdown Terminal_Command_Object = "shutdown"
+	TCO_abort    Terminal_Command_Object = "abort"
 	TCO_password Terminal_Command_Object = "password"
 	TCO_cache    Terminal_Command_Object = "cache"
 
@@ -89,12 +93,15 @@ const (
 	TCO_landnode Terminal_Command_Object = "landnode"
 	TCO_conn     Terminal_Command_Object = "connection"
 	TCO_agent    Terminal_Command_Object = "agent"
+
+	TCO_mysql Terminal_Command_Object = "mysql"
+	TCO_redis Terminal_Command_Object = "redis"
 )
 
 type TerminalCMD struct {
 	Command Terminal_Command_String   `json:"command"`
 	Objects []Terminal_Command_Object `json:"objects"`
-	Args    []Terminal_Command_Args   `json:"args"`
+	Args    map[string]interface{}    `json:"args"`
 	Path    string                    `json:"path"`
 }
 
@@ -108,38 +115,38 @@ var TCS_map_User = map[Terminal_Command_String]map[string]interface{}{
 		"-": "Welcome to MavlinkProject Terminal!\nThere are commands now available:",
 	},
 	TCS_help: {
-		"help":   "Show all permitted commands and details",
-		"format": "help ([command]/[pages])",
+		"help":    "Show all permitted commands and details",
+		"format":  "help ([command]/[pages])",
 		"example": "help ls",
 	},
 	TCS_whoami: {
-		"whoami": "Show the current username and permission",
-		"format": "(no arguments)",
+		"whoami":  "Show the current username and permission",
+		"format":  "(no arguments)",
 		"example": "whoami",
 	},
 	TCS_ls: {
-		"ls":     "Show the current directory",
-		"format": "ls ([path])",
+		"ls":      "Show the current directory",
+		"format":  "ls ([path])",
 		"example": "ls Backend/Config",
 	},
 	TCS_cd: {
-		"cd":     "Change directory",
-		"format": "cd [path]",
+		"cd":      "Change directory",
+		"format":  "cd [path]",
 		"example": "cd Backend/Config",
 	},
 	TCS_mod: {
-		"mod":    "Show the mod directory",
-		"format": "mod",
-		"example": "mod",
+		"mod":     "Show the mod directory",
+		"format":  "mod ([object]) [operation]  ([value]) [args]",
+		"example": "mod show",
 	},
 	TCS_show: {
-		"show":   "Show the object's details",
-		"format": "show [object] [command] [args]",
-		"example": "show mod",
+		"show":    "Show the object's details",
+		"format":  "show [object] [command] [args]",
+		"example": "show Server",
 	},
 	TCS_server: {
-		"server": "Show the server details",
-		"format": "server [command] [args]",
+		"server":  "Show the server details",
+		"format":  "server [command] [args]",
 		"example": "server restart",
 	},
 	TCS_backend: {
@@ -150,12 +157,12 @@ var TCS_map_User = map[Terminal_Command_String]map[string]interface{}{
 	TCS_frontend: {
 		"frontend": "Show the frontend details",
 		"format":   "frontend [command] [args]",
-		"example": "frontend config",
+		"example":  "frontend config",
 	},
 	TCS_database: {
 		"database": "Show the database details",
 		"format":   "database [object] [command] [args]",
-		"example": "database redis add {test:testMessage} to 15 -f",
+		"example":  "database redis add {test:testMessage} to 15 -f",
 	},
 	TCS_mavlink: {
 		"mavlink": "Show the mavlink details",
@@ -261,8 +268,8 @@ var TCS_map_Admin = map[Terminal_Command_String]map[string]interface{}{
 		"example": "deluser steve -f",
 	},
 	TCS_auto: {
-		"auto":   "Using AI agent handle the Server automatically",
-		"format": "auto [AI-Agent object] [args]",
+		"auto":    "Using AI agent handle the Server automatically",
+		"format":  "auto [AI-Agent object] [args]",
 		"example": "auto Deepseekv3.5-turbo-16k",
 	},
 	TCS_reboot: {
@@ -277,3 +284,26 @@ var TCS_map_Admin = map[Terminal_Command_String]map[string]interface{}{
 		"example":  "shutdown -t 10",
 	},
 }
+
+// Terminal_Help_Details 定义帮助命令的详细信息
+var (
+	THD_help = map[string]interface{}{
+		"help":   "Show all permitted commands and details",
+		"format1": "help [pages]",
+		"example1": "help 1",
+		"format2": "help [command]",
+		"example2": "help mod",
+	}
+
+	THD_mod = map[string]interface{}{
+		"mod": "Show the mod directory",
+		"format": "mod ([object]) [operation]  ([value]) [args]",
+		"example": "mod show",
+	}
+
+	THD_show = map[string]interface{}{
+		"show": "Show the object's details",
+		"format": "show [object] [command] [args]",
+		"example": "show Server",
+	}
+)

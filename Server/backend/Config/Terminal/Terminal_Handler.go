@@ -1,10 +1,13 @@
 package terminal
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	Backend "MavlinkProject/Server/Backend"
 	User "MavlinkProject/Server/backend/Shared/User"
 )
 
@@ -68,16 +71,27 @@ func (tm *TerminalManager) Handle() *TerminalResponse {
 }
 
 func (tm *TerminalManager) Help() *TerminalResponse {
-	if tm.User.IsAdmin {
+	switch tm.Command.Objects[0] {
+	case TCO_empty:
+		if tm.User.IsAdmin {
+			return &TerminalResponse{
+				Success: true,
+				Message: TCS_map_Admin,
+			}
+		} else {
+			return &TerminalResponse{
+				Success: true,
+				Message: TCS_map_User,
+			}
+		}
+	
+	default:
 		return &TerminalResponse{
 			Success: true,
-			Message: TCS_map_Admin,
+			Message: TCS_map_User,
 		}
 	}
-	return &TerminalResponse{
-		Success: true,
-		Message: TCS_map_User,
-	}
+
 }
 
 func (tm *TerminalManager) Whoami() *TerminalResponse {
@@ -191,24 +205,209 @@ func (tm *TerminalManager) Show() *TerminalResponse {
 }
 
 func (tm *TerminalManager) Server() *TerminalResponse {
-	return &TerminalResponse{
-		Success: true,
-		Message: map[string]interface{}{
-			"command": string(TCS_server),
-			"note":    "server details",
-			"args":    tm.Command.Args,
-		},
+	server := Backend.GetBackendServer()
+	setting := server.SettingManager.GetSetting()
+	uptime := time.Since(server.StartTime)
+
+	switch tm.Command.Objects[0] {
+	case TCO_config, TCO_empty:
+		// server config and Running details implementation
+		return &TerminalResponse{
+			Success: true,
+			Message: map[string]interface{}{
+				"command": string(TCS_server),
+				"server-status": map[string]interface{}{
+					"uptime":         uptime.String(),
+					"uptime_seconds": uptime.Seconds(),
+					"start_time":     server.StartTime.Format(time.RFC3339),
+				},
+				"server-config": map[string]interface{}{
+					"database": setting.Database,
+					"redis":    setting.Redis,
+					"jwt":      setting.JWT,
+					"cors":     setting.CORS,
+					"rate_lim": setting.RateLimit,
+					"logger":   setting.Logger,
+					"board":    setting.Board,
+				},
+			},
+		}
+	case TCO_restart:
+		// default restart time is 5 seconds, i will lock it there
+		restartTime := 5
+		// getting argument -time
+		if tm.Command.Args["t"] != nil {
+			if v, ok := tm.Command.Args["t"].(int); ok {
+				restartTime = v
+			}
+		}
+
+		go func() {
+			// wait for the server to be ready
+			log.Println("[Terminal] Server restart scheduled in", restartTime, "seconds...")
+			time.Sleep(time.Duration(restartTime-5) * time.Second)
+
+			itime := 5
+			for itime > 0 {
+				log.Println("[Terminal] Server restart scheduled in", itime, "seconds...")
+				time.Sleep(time.Second)
+				itime--
+			}
+
+			server := Backend.GetBackendServer()
+			server.Restart()
+		}()
+		// and response, cool
+		return &TerminalResponse{
+			Success: true,
+			Message: map[string]interface{}{
+				"command":            string(TCS_server),
+				"note":               "server restart has scheduled",
+				"restart_in_seconds": restartTime,
+			},
+		}
+
+	case TCO_shutdown:
+		// server shutdown implementation, same like restart()
+		// default shutdown time is 5 seconds
+		shutdownTime := 5
+		// getting argument -time
+		if tm.Command.Args["t"] != nil {
+			if v, ok := tm.Command.Args["t"].(int); ok {
+				shutdownTime = v
+			}
+		}
+		go func() {
+			log.Println("[Terminal] Server shutdown scheduled in", shutdownTime, "seconds...")
+			time.Sleep(time.Duration(shutdownTime-5) * time.Second)
+
+			itime := 5
+			for itime > 0 {
+				log.Println("[Terminal] Server shutdown scheduled in", itime, "seconds...")
+				time.Sleep(time.Second)
+				itime--
+			}
+			server := Backend.GetBackendServer()
+			server.Shutdown()
+		}()
+
+		return &TerminalResponse{
+			Success: true,
+			Message: map[string]interface{}{
+				"command":             string(TCS_server),
+				"note":                "server shutdown has scheduled",
+				"shutdown_in_seconds": shutdownTime,
+			},
+		}
+
+	default:
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error":   "Unknown command syntax",
+				"message": "Use command \"help server\" for more information",
+			},
+		}
 	}
 }
 
 func (tm *TerminalManager) Backend() *TerminalResponse {
-	return &TerminalResponse{
-		Success: true,
-		Message: map[string]interface{}{
-			"command": string(TCS_backend),
-			"note":    "backend details",
-			"args":    tm.Command.Args,
-		},
+	server := Backend.GetBackendServer()
+	setting := server.SettingManager.GetSetting()
+	uptime := time.Since(server.StartTime)
+
+	switch tm.Command.Objects[0] {
+	case TCO_config, TCO_empty:
+		return &TerminalResponse{
+			Success: true,
+			Message: map[string]interface{}{
+				"command": string(TCS_backend),
+				"status": map[string]interface{}{
+					"uptime":         uptime.String(),
+					"uptime_seconds": uptime.Seconds(),
+					"start_time":     server.StartTime.Format(time.RFC3339),
+				},
+				"config": map[string]interface{}{
+					"database": setting.Database,
+					"redis":    setting.Redis,
+					"jwt":      setting.JWT,
+					"cors":     setting.CORS,
+					"rate_lim": setting.RateLimit,
+					"logger":   setting.Logger,
+					"board":    setting.Board,
+				},
+			},
+		}
+	case TCO_restart:
+		restartTime := 5
+		if tm.Command.Args["t"] != nil {
+			if v, ok := tm.Command.Args["t"].(int); ok {
+				restartTime = v
+			}
+		}
+
+		go func() {
+			log.Println("[Terminal] Backend restart scheduled in", restartTime, "seconds...")
+			time.Sleep(time.Duration(restartTime-5) * time.Second)
+
+			itime := 5
+			for itime > 0 {
+				log.Println("[Terminal] Backend restart in", itime, "seconds...")
+				time.Sleep(time.Second)
+				itime--
+			}
+
+			server := Backend.GetBackendServer()
+			server.Restart()
+		}()
+
+		return &TerminalResponse{
+			Success: true,
+			Message: map[string]interface{}{
+				"command":            string(TCS_backend),
+				"note":               "backend restart scheduled",
+				"restart_in_seconds": restartTime,
+			},
+		}
+	case TCO_shutdown:
+		shutdownTime := 5
+		if tm.Command.Args["t"] != nil {
+			if v, ok := tm.Command.Args["t"].(int); ok {
+				shutdownTime = v
+			}
+		}
+
+		go func() {
+			log.Println("[Terminal] Backend shutdown scheduled in", shutdownTime, "seconds...")
+			time.Sleep(time.Duration(shutdownTime-5) * time.Second)
+
+			itime := 5
+			for itime > 0 {
+				log.Println("[Terminal] Backend shutdown in", itime, "seconds...")
+				time.Sleep(time.Second)
+				itime--
+			}
+
+			server := Backend.GetBackendServer()
+			server.Shutdown()
+		}()
+
+		return &TerminalResponse{
+			Success: true,
+			Message: map[string]interface{}{
+				"command":             string(TCS_backend),
+				"note":                "backend shutdown scheduled",
+				"shutdown_in_seconds": shutdownTime,
+			},
+		}
+	default:
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error":   "Unknown command syntax",
+				"message": "Use command \"help backend\" for more information",
+			},
+		}
 	}
 }
 
@@ -224,13 +423,67 @@ func (tm *TerminalManager) Frontend() *TerminalResponse {
 }
 
 func (tm *TerminalManager) Database() *TerminalResponse {
+	server := Backend.GetBackendServer()
+	setting := server.SettingManager.GetSetting()
+
+	objectsLen := len(tm.Command.Objects)
+
+	switch {
+	case objectsLen == 0 || (objectsLen == 1 && (tm.Command.Objects[0] == TCO_empty || tm.Command.Objects[0] == TCO_config)):
+		return &TerminalResponse{
+			Success: true,
+			Message: map[string]interface{}{
+				"command": string(TCS_database),
+				"mysql": map[string]interface{}{
+					"host":     setting.Database.MySQL.Host,
+					"port":     setting.Database.MySQL.Port,
+					"user":     setting.Database.MySQL.User,
+					"database": setting.Database.MySQL.Database,
+					"charset":  setting.Database.MySQL.Charset,
+				},
+				"redis": map[string]interface{}{
+					"host": setting.Redis.Host,
+					"port": setting.Redis.Port,
+				},
+			},
+		}
+	case objectsLen >= 1 && tm.Command.Objects[0] == "mysql":
+		if objectsLen == 1 || (objectsLen == 2 && (tm.Command.Objects[1] == TCO_empty || tm.Command.Objects[1] == TCO_config)) {
+			return &TerminalResponse{
+				Success: true,
+				Message: map[string]interface{}{
+					"command": string(TCS_database),
+					"mysql": map[string]interface{}{
+						"host":     setting.Database.MySQL.Host,
+						"port":     setting.Database.MySQL.Port,
+						"user":     setting.Database.MySQL.User,
+						"database": setting.Database.MySQL.Database,
+						"charset":  setting.Database.MySQL.Charset,
+					},
+				},
+			}
+		}
+	case objectsLen >= 1 && tm.Command.Objects[0] == "redis":
+		if objectsLen == 1 || (objectsLen == 2 && (tm.Command.Objects[1] == TCO_empty || tm.Command.Objects[1] == TCO_config)) {
+			return &TerminalResponse{
+				Success: true,
+				Message: map[string]interface{}{
+					"command": string(TCS_database),
+					"redis": map[string]interface{}{
+						"host": setting.Redis.Host,
+						"port": setting.Redis.Port,
+					},
+				},
+			}
+		}
+	}
+
 	return &TerminalResponse{
-		Success: true,
+		Success: false,
 		Message: map[string]interface{}{
 			"command": string(TCS_database),
-			"note":    "database details",
-			"objects": tm.Command.Objects,
-			"args":    tm.Command.Args,
+			"error":   "Unknown syntax",
+			"message": "Use \"database mysql \" as example or use \"help database\" to get more information",
 		},
 	}
 }
