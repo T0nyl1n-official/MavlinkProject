@@ -4,27 +4,27 @@
 #include <Adafruit_MLX90614.h>
 #include <FastLED.h>
 #include <WiFi.h>
+#include <HTTPClient.h>         // 新增：用于 HTTP 请求
+#include <WiFiClientSecure.h>   // 新增：用于处理 HTTPS 传输
 #include <time.h>
 
 // ========== WiFi 配置 ==========
 const char *ssid = "YILING_10";
 const char *password = "yiling10";
 
-// ========== TCP 配置（原 UDP 改为 TCP）==========
-const char *tcpAddress = "172.67.148.20";
-const int tcpPort = 8081;
+// ========== HTTP(S) API 配置 ==========
+// 这里的域名填入你做好了内网穿透或线上的真实域名
+const char *apiEndpoint = "https://conn.deeppluse.dpdns.org/api/sensor/message"; 
 
 // ========== 设备标识配置 ==========
-const String FROM_ID = "esp32_c3_001";
-const String FROM_TYPE = "Drone";
-const String TO_ID = "Control";
-const String TO_TYPE = "Control";
+const String FROM_ID = "esp32_001";
+const String FROM_TYPE = "ESP32";
 
-// ========== 消息配置（与后端结构体保持一致）==========
-const String MESSAGE_TYPE = "Request";
+// ========== 消息配置 ==========
+const String MESSAGE_TYPE = "Heartbeat";
 const String MESSAGE_ATTRIBUTE = "Status";
-const String CONNECTION = "TCP";  // 改为 TCP
-const String COMMAND = "Heartbeat";
+const String CONNECTION = "HTTP";  
+const String COMMAND = "Status";
 
 // ========== 引脚定义 ==========
 #define MQ4_PIN 2
@@ -37,9 +37,6 @@ const String COMMAND = "Heartbeat";
 Adafruit_BMP280 bmp;
 Adafruit_MLX90614 mlx;
 CRGB leds[NUM_LEDS];
-
-// ========== TCP 客户端对象 ==========
-WiFiClient tcpClient;
 
 // ========== 传感器数据变量 ==========
 uint32_t gasValue = 0;
@@ -55,11 +52,6 @@ unsigned long lastWiFiCheck = 0;
 unsigned long lastBlinkTime = 0;
 bool wifiBlinkState = false;
 int wifiBlinkCount = 0;
-
-// ========== TCP 连接管理变量 ==========
-bool tcpConnected = false;
-unsigned long lastTcpReconnectTime = 0;
-const unsigned long TCP_RECONNECT_INTERVAL = 5000;  // 5秒重连一次
 
 // ========== 初始化 LED ==========
 void initLED()
@@ -206,45 +198,6 @@ void ensureWiFiConnected()
     connectWiFi();
 }
 
-// ========== TCP 连接管理 ==========
-void connectTCP()
-{
-    if (tcpClient.connected()) {
-        return;
-    }
-    
-    Serial.println("正在连接 TCP 服务器...");
-    Serial.print("目标地址: ");
-    Serial.print(tcpAddress);
-    Serial.print(":");
-    Serial.println(tcpPort);
-    
-    if (tcpClient.connect(tcpAddress, tcpPort)) {
-        tcpConnected = true;
-        Serial.println("✓ TCP 服务器连接成功");
-    } else {
-        tcpConnected = false;
-        Serial.println("✗ TCP 服务器连接失败");
-    }
-}
-
-void ensureTCPConnected()
-{
-    // 检查 TCP 连接状态
-    if (!tcpClient.connected()) {
-        tcpConnected = false;
-        
-        // 限制重连频率
-        unsigned long now = millis();
-        if (now - lastTcpReconnectTime >= TCP_RECONNECT_INTERVAL) {
-            lastTcpReconnectTime = now;
-            connectTCP();
-        }
-    } else {
-        tcpConnected = true;
-    }
-}
-
 // ========== 初始化 NTP ==========
 void initNTP()
 {
@@ -254,7 +207,7 @@ void initNTP()
 // ========== 生成唯一 MessageID ==========
 String generateMessageID()
 {
-    return String("esp32_") + String(millis()) + "_" + String(random(1000, 9999));
+    return String("msg_") + String(millis()) + "_" + String(random(1000, 9999));
 }
 
 // ========== 获取 RFC3339 时间 ==========
@@ -272,17 +225,19 @@ String getCurrentTime()
 }
 
 // ========== 构建 Data 对象 ==========
+// 将 ESP32 读出的真实传感数据组装成要求的格式
 String buildDataJson()
 {
     String dataJson = "{";
-    dataJson += "\"status\":\"idle\",";
-    dataJson += "\"gas\":" + String(gasValue) + ",";
     dataJson += "\"temperature\":" + String(temperature, 2) + ",";
-    dataJson += "\"pressure\":" + String(pressure, 2) + ",";
+    
+    // 如果你没有装湿度传感器，这里依然使用 BMP 的气压或其它你想要传的数据
+    // 此处根据你的需求额外带上了真实数据供后端使用
+    dataJson += "\"pressure\":" + String(pressure, 2) + ","; 
+    dataJson += "\"gas\":" + String(gasValue) + ",";
     dataJson += "\"altitude\":" + String(altitude, 2) + ",";
     dataJson += "\"ambient_temp\":" + String(ambientTemp, 2) + ",";
-    dataJson += "\"object_temp\":" + String(objectTemp, 2) + ",";
-    dataJson += "\"wifi_rssi\":" + String(WiFi.RSSI());
+    dataJson += "\"object_temp\":" + String(objectTemp, 2);
     dataJson += "}";
     return dataJson;
 }
@@ -304,48 +259,69 @@ String buildInnerMessage()
 String buildMessageJson()
 {
     String messageId = generateMessageID();
-    String messageTime = getCurrentTime();
     
     String messageJson = "{";
     messageJson += "\"message_id\":\"" + messageId + "\",";
-    messageJson += "\"message_time\":\"" + messageTime + "\",";
     messageJson += "\"message\":" + buildInnerMessage() + ",";
     messageJson += "\"from_id\":\"" + FROM_ID + "\",";
-    messageJson += "\"from_type\":\"" + FROM_TYPE + "\",";
-    messageJson += "\"to_id\":\"" + TO_ID + "\",";
-    messageJson += "\"to_type\":\"" + TO_TYPE + "\"";
+    messageJson += "\"from_type\":\"" + FROM_TYPE + "\"";
     messageJson += "}";
+    
     return messageJson;
 }
 
-// ========== 通过 TCP 发送 BoardMessage ==========
-void sendDataViaTCP()
+// ========== 通过 HTTPS 发送 JSON  payload ==========
+void sendDataViaHTTP()
 {
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("WiFi 未连接，无法发送数据");
         return;
     }
     
-    if (!tcpClient.connected()) {
-        Serial.println("TCP 未连接，无法发送数据");
-        return;
-    }
-    
     String messageJson = buildMessageJson();
     
-    Serial.println("========== 准备发送 TCP 消息 ==========");
+    Serial.println("========== 准备发送 HTTPS 消息 ==========");
     Serial.print("目标地址: ");
-    Serial.print(tcpAddress);
-    Serial.print(":");
-    Serial.println(tcpPort);
-    Serial.print("消息内容: ");
+    Serial.println(apiEndpoint);
+    Serial.println("消息内容: ");
     Serial.println(messageJson);
-    Serial.println("=====================================");
     
-    // 发送数据（添加换行符作为消息分隔符）
-    tcpClient.println(messageJson);
+    // 创建针对 HTTPS 的安全客户端
+    WiFiClientSecure *client = new WiFiClientSecure;
+    // 不验证 TLS 证书指纹 (因为走 CF 或者各种动态代理，直接 setInsecure 是最稳定的)
+    client->setInsecure(); 
     
-    Serial.println("✓ TCP 消息已成功发送");
+    HTTPClient https;
+    
+    // 初始化 HTTPClient
+    if (https.begin(*client, apiEndpoint)) {
+        // 设置请求头为 JSON
+        https.addHeader("Content-Type", "application/json");
+        
+        // 发起 POST 请求
+        int httpResponseCode = https.POST(messageJson);
+
+        if (httpResponseCode > 0) {
+            Serial.print("✓ HTTPS POST 请求成功，状态码: ");
+            Serial.println(httpResponseCode);
+            String response = https.getString();
+            Serial.println("服务器响应:");
+            Serial.println(response);
+        } else {
+            Serial.print("✗ HTTPS 请求失败，错误代码: ");
+            Serial.println(httpResponseCode);
+            Serial.printf("详细错误: %s\n", https.errorToString(httpResponseCode).c_str());
+        }
+        
+        // 关闭请求释放资源
+        https.end();
+    } else {
+        Serial.println("✗ 无法连接到目标服务器开始 HTTPS 传输");
+    }
+    
+    // 释放 WiFiClientSecure 对象
+    delete client;
+    Serial.println("=========================================");
 }
 
 // ========== 打印调试 ==========
@@ -365,8 +341,6 @@ void printDebug()
     Serial.print(objectTemp);
     Serial.print("C | WiFi:");
     Serial.print(WiFi.status() == WL_CONNECTED ? "OK" : "NO");
-    Serial.print(" | TCP:");
-    Serial.print(tcpConnected ? "OK" : "NO");
     Serial.print(" | RSSI:");
     Serial.println(WiFi.RSSI());
 }
@@ -422,11 +396,6 @@ void loop()
 {
     ensureWiFiConnected();
     
-    // 确保 TCP 连接
-    if (WiFi.status() == WL_CONNECTED) {
-        ensureTCPConnected();
-    }
-    
     unsigned long now = millis();
     if (now - lastWiFiCheck >= 500) {
         lastWiFiCheck = now;
@@ -442,12 +411,13 @@ void loop()
     updateLED();
     printDebug();
     
-    // 通过 TCP 发送数据（仅当连接正常时）
-    if (WiFi.status() == WL_CONNECTED && tcpClient.connected()) {
-        sendDataViaTCP();
+    // 只有在 WiFi 连上的情况下发送数据
+    if (WiFi.status() == WL_CONNECTED) {
+        sendDataViaHTTP();
     } else {
-        Serial.println("⚠️ TCP 未连接，跳过数据发送");
+        Serial.println("⚠️ WiFi 未连接，跳过数据发送");
     }
     
-    delay(1000);
+    // HTTP/HTTPS 请求对处理器资源消耗较大，建议调高延时（示例为 5 秒）
+    delay(5000); 
 }
