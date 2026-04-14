@@ -1,13 +1,19 @@
 package terminal
 
 import (
+	"bufio"
+	"context"
+	"crypto/md5"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	Backend "MavlinkProject/Server/Backend"
+	MiddleWare "MavlinkProject/Server/Backend/Middles"
 	User "MavlinkProject/Server/backend/Shared/User"
 )
 
@@ -84,11 +90,49 @@ func (tm *TerminalManager) Help() *TerminalResponse {
 				Message: TCS_map_User,
 			}
 		}
-	
+	case "help":
+		return &TerminalResponse{Success: true, Message: THD_help}
+	case "mod":
+		return &TerminalResponse{Success: true, Message: THD_mod}
+	case "show":
+		return &TerminalResponse{Success: true, Message: THD_show}
+	case "server":
+		return &TerminalResponse{Success: true, Message: THD_server}
+	case "backend":
+		return &TerminalResponse{Success: true, Message: THD_backend}
+	case "database":
+		return &TerminalResponse{Success: true, Message: THD_database}
+	case "mavlink":
+		return &TerminalResponse{Success: true, Message: THD_mavlink}
+	case "board":
+		return &TerminalResponse{Success: true, Message: THD_board}
+	case "log":
+		return &TerminalResponse{Success: true, Message: THD_log}
+	case "drone":
+		return &TerminalResponse{Success: true, Message: THD_drone}
+	case "sensor":
+		return &TerminalResponse{Success: true, Message: THD_sensor}
+	case "cache":
+		return &TerminalResponse{Success: true, Message: THD_cache}
+	case "adduser":
+		return &TerminalResponse{Success: true, Message: THD_adduser}
+	case "deluser":
+		return &TerminalResponse{Success: true, Message: THD_deluser}
+	case "auto":
+		return &TerminalResponse{Success: true, Message: THD_auto}
+	case "reboot":
+		return &TerminalResponse{Success: true, Message: THD_reboot}
+	case "shutdown":
+		return &TerminalResponse{Success: true, Message: THD_shutdown}
+	case "frontend":
+		return &TerminalResponse{Success: true, Message: THD_frontend}
 	default:
 		return &TerminalResponse{
-			Success: true,
-			Message: TCS_map_User,
+			Success: false,
+			Message: map[string]interface{}{
+				"error":   "Unknown command",
+				"message": "Use command \"help\" for more information",
+			},
 		}
 	}
 
@@ -412,6 +456,7 @@ func (tm *TerminalManager) Backend() *TerminalResponse {
 }
 
 func (tm *TerminalManager) Frontend() *TerminalResponse {
+	// unfinished
 	return &TerminalResponse{
 		Success: true,
 		Message: map[string]interface{}{
@@ -489,6 +534,7 @@ func (tm *TerminalManager) Database() *TerminalResponse {
 }
 
 func (tm *TerminalManager) Mavlink() *TerminalResponse {
+	// unfinished
 	return &TerminalResponse{
 		Success: true,
 		Message: map[string]interface{}{
@@ -500,12 +546,112 @@ func (tm *TerminalManager) Mavlink() *TerminalResponse {
 }
 
 func (tm *TerminalManager) Log() *TerminalResponse {
+	object := "server"
+	logType := "any"
+	maxLines := 10
+
+	if len(tm.Command.Objects) > 0 && tm.Command.Objects[0] != TCO_empty {
+		object = string(tm.Command.Objects[0])
+	}
+
+	if len(tm.Command.Objects) > 1 && tm.Command.Objects[1] != TCO_empty {
+		logType = string(tm.Command.Objects[1])
+	}
+
+	if len(tm.Command.Objects) > 2 {
+		if level, err := strconv.Atoi(string(tm.Command.Objects[2])); err == nil {
+			maxLines = level
+		}
+	}
+
+	logDir := MiddleWare.LogDirFunc()
+
+	var logFiles []string
+	entries, err := os.ReadDir(logDir)
+	if err != nil {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error":   "Cannot read log directory",
+				"details": err.Error(),
+			},
+		}
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "log_") && strings.HasSuffix(entry.Name(), ".log") {
+			logFiles = append(logFiles, entry.Name())
+		}
+	}
+
+	if len(logFiles) == 0 {
+		return &TerminalResponse{
+			Success: true,
+			Message: map[string]interface{}{
+				"object":  object,
+				"type":    logType,
+				"count":   0,
+				"logs":    []string{},
+				"message": "No log files found",
+			},
+		}
+	}
+
+	sortFiles := false
+	for _, f := range logFiles {
+		if strings.Contains(f, object) || object == "server" {
+			sortFiles = true
+			break
+		}
+	}
+
+	var sortedFiles []string
+	if sortFiles {
+		for i := len(logFiles) - 1; i >= 0; i-- {
+			sortedFiles = append(sortedFiles, logFiles[i])
+		}
+	} else {
+		sortedFiles = logFiles
+	}
+
+	var results []string
+	logTypeLower := strings.ToLower(logType)
+
+	for _, fileName := range sortedFiles {
+		if len(results) >= maxLines {
+			break
+		}
+
+		logPath := filepath.Join(logDir, fileName)
+		file, err := os.Open(logPath)
+		if err != nil {
+			continue
+		}
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			if logTypeLower != "any" && !strings.Contains(strings.ToLower(line), logTypeLower) {
+				continue
+			}
+
+			results = append(results, line)
+
+			if len(results) >= maxLines {
+				break
+			}
+		}
+		file.Close()
+	}
+
 	return &TerminalResponse{
 		Success: true,
 		Message: map[string]interface{}{
-			"command": string(TCS_log),
-			"note":    "backend logs",
-			"args":    tm.Command.Args,
+			"object": object,
+			"type":   logType,
+			"count":  len(results),
+			"logs":   results,
 		},
 	}
 }
@@ -547,12 +693,64 @@ func (tm *TerminalManager) Sensor() *TerminalResponse {
 }
 
 func (tm *TerminalManager) Cache() *TerminalResponse {
+	object := ""
+	if len(tm.Command.Objects) > 0 && tm.Command.Objects[0] != TCO_empty {
+		object = string(tm.Command.Objects[0])
+	}
+
+	server := Backend.GetBackendServer()
+	if server == nil || server.RedisClient == nil {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error": "Redis client not available",
+			},
+		}
+	}
+
+	redisClients := *server.RedisClient
+
+	if object == "" || object == "config" {
+		var cacheInfo []map[string]interface{}
+		for i, client := range redisClients {
+			ctx := context.Background()
+			info, err := client.Info(ctx).Result()
+			if err != nil {
+				continue
+			}
+
+			dbNames := []string{
+				"GeneralWarning", "Backend", "Token", "Verification",
+			}
+			dbName := "Unknown"
+			if i < len(dbNames) {
+				dbName = dbNames[i]
+			}
+
+			cacheInfo = append(cacheInfo, map[string]interface{}{
+				"db_index": i,
+				"db_name":  dbName,
+				"status":   "connected",
+				"info":     info,
+			})
+		}
+
+		return &TerminalResponse{
+			Success: true,
+			Message: map[string]interface{}{
+				"command":    string(TCS_cache),
+				"object":     "config",
+				"cache_info": cacheInfo,
+			},
+		}
+	}
+
 	return &TerminalResponse{
-		Success: true,
+		Success: false,
 		Message: map[string]interface{}{
 			"command": string(TCS_cache),
-			"note":    "cache details",
-			"args":    tm.Command.Args,
+			"object":  object,
+			"message": "Use 'cache config' to view cache configuration",
 		},
 	}
 }
@@ -566,13 +764,73 @@ func (tm *TerminalManager) Adduser() *TerminalResponse {
 			},
 		}
 	}
+
+	if len(tm.Command.Objects) < 2 {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error":   "invalid arguments",
+				"usage":   "adduser [username] [email] [password]",
+				"example": "adduser admin admin@example.com password123",
+			},
+		}
+	}
+
+	username := string(tm.Command.Objects[0])
+	email := string(tm.Command.Objects[1])
+	password := "default_password"
+	if len(tm.Command.Objects) >= 3 {
+		password = string(tm.Command.Objects[2])
+	}
+
+	server := Backend.GetBackendServer()
+	if server == nil || server.Mysql == nil {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error": "database not available",
+			},
+		}
+	}
+
+	var existingUser User.User
+	err := server.Mysql.Where("username = ? OR email = ?", username, email).First(&existingUser).Error
+	if err == nil {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error": "user already exists",
+			},
+		}
+	}
+
+	newUser := User.User{
+		Username: username,
+		Email:    email,
+		Password: fmt.Sprintf("%x", md5.Sum([]byte(password))),
+		IsAdmin:  false,
+		IsOnline: false,
+	}
+
+	err = server.Mysql.Create(&newUser).Error
+	if err != nil {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error":   "failed to create user",
+				"details": err.Error(),
+			},
+		}
+	}
+
 	return &TerminalResponse{
 		Success: true,
 		Message: map[string]interface{}{
 			"command":  string(TCS_adduser),
-			"username": tm.Command.Objects[0],
-			"email":    tm.Command.Objects[1],
-			"args":     tm.Command.Args,
+			"username": username,
+			"email":    email,
+			"user_id":  newUser.ID,
+			"message":  "user created successfully",
 		},
 	}
 }
@@ -586,12 +844,188 @@ func (tm *TerminalManager) Deluser() *TerminalResponse {
 			},
 		}
 	}
+
+	if len(tm.Command.Objects) < 1 {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error":   "invalid arguments",
+				"usage":   "deluser [username]",
+				"example": "deluser testuser",
+			},
+		}
+	}
+
+	username := string(tm.Command.Objects[0])
+
+	server := Backend.GetBackendServer()
+	if server == nil || server.Mysql == nil {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error": "database not available",
+			},
+		}
+	}
+
+	var user User.User
+	err := server.Mysql.Where("username = ?", username).First(&user).Error
+	if err != nil {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error": "user not found",
+			},
+		}
+	}
+
+	if user.ID == tm.User.ID {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error": "cannot delete yourself",
+			},
+		}
+	}
+
+	err = server.Mysql.Delete(&user).Error
+	if err != nil {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error":   "failed to delete user",
+				"details": err.Error(),
+			},
+		}
+	}
+
 	return &TerminalResponse{
 		Success: true,
 		Message: map[string]interface{}{
 			"command":  string(TCS_deluser),
-			"username": tm.Command.Objects[0],
-			"args":     tm.Command.Args,
+			"username": username,
+			"user_id":  user.ID,
+			"message":  "user deleted successfully",
+		},
+	}
+}
+
+func (tm *TerminalManager) Chmod() *TerminalResponse {
+	if !tm.User.IsAdmin {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error": "permission denied: admin required",
+			},
+		}
+	}
+
+	if len(tm.Command.Objects) < 2 {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error":    "invalid arguments",
+				"usage":    "chmod [username] [property] [value]",
+				"example":  "chmod testuser admin true",
+				"example2": "chmod testuser password newpass123",
+			},
+		}
+	}
+
+	username := string(tm.Command.Objects[0])
+	property := string(tm.Command.Objects[1])
+	value := ""
+	if len(tm.Command.Objects) >= 3 {
+		value = string(tm.Command.Objects[2])
+	}
+
+	server := Backend.GetBackendServer()
+	if server == nil || server.Mysql == nil {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error": "database not available",
+			},
+		}
+	}
+
+	var user User.User
+	err := server.Mysql.Where("username = ?", username).First(&user).Error
+	if err != nil {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error": "user not found",
+			},
+		}
+	}
+
+	switch property {
+	case "admin":
+		if value == "true" {
+			user.IsAdmin = true
+		} else if value == "false" {
+			user.IsAdmin = false
+		} else {
+			return &TerminalResponse{
+				Success: false,
+				Message: map[string]interface{}{
+					"error":   "invalid value for admin, use true or false",
+					"example": "chmod username admin true",
+				},
+			}
+		}
+	case "password":
+		if value == "" {
+			return &TerminalResponse{
+				Success: false,
+				Message: map[string]interface{}{
+					"error":   "password cannot be empty",
+					"example": "chmod username password newpassword",
+				},
+			}
+		}
+		user.Password = fmt.Sprintf("%x", md5.Sum([]byte(value)))
+	case "email":
+		if value == "" {
+			return &TerminalResponse{
+				Success: false,
+				Message: map[string]interface{}{
+					"error":   "email cannot be empty",
+					"example": "chmod username email newemail@example.com",
+				},
+			}
+		}
+		user.Email = value
+	default:
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error":    "unknown property",
+				"property": "available properties: admin, password, email",
+			},
+		}
+	}
+
+	err = server.Mysql.Save(&user).Error
+	if err != nil {
+		return &TerminalResponse{
+			Success: false,
+			Message: map[string]interface{}{
+				"error":   "failed to update user",
+				"details": err.Error(),
+			},
+		}
+	}
+
+	return &TerminalResponse{
+		Success: true,
+		Message: map[string]interface{}{
+			"command":  string(TCS_chmod),
+			"username": username,
+			"property": property,
+			"value":    value,
+			"message":  "user updated successfully",
 		},
 	}
 }
@@ -624,12 +1058,35 @@ func (tm *TerminalManager) Reboot() *TerminalResponse {
 			},
 		}
 	}
+
+	restartTime := 5
+	if tm.Command.Args["t"] != nil {
+		if v, ok := tm.Command.Args["t"].(int); ok {
+			restartTime = v
+		}
+	}
+
+	go func() {
+		log.Println("[Terminal] System reboot scheduled in", restartTime, "seconds...")
+		time.Sleep(time.Duration(restartTime-5) * time.Second)
+
+		itime := 5
+		for itime > 0 {
+			log.Println("[Terminal] System reboot scheduled in", itime, "seconds...")
+			time.Sleep(time.Second)
+			itime--
+		}
+
+		server := Backend.GetBackendServer()
+		server.Restart()
+	}()
+
 	return &TerminalResponse{
 		Success: true,
 		Message: map[string]interface{}{
-			"command": string(TCS_reboot),
-			"note":    "restart server",
-			"args":    tm.Command.Args,
+			"command":           string(TCS_reboot),
+			"note":              "system reboot has scheduled",
+			"reboot_in_seconds": restartTime,
 		},
 	}
 }
@@ -643,12 +1100,35 @@ func (tm *TerminalManager) Shutdown() *TerminalResponse {
 			},
 		}
 	}
+
+	shutdownTime := 5
+	if tm.Command.Args["t"] != nil {
+		if v, ok := tm.Command.Args["t"].(int); ok {
+			shutdownTime = v
+		}
+	}
+
+	go func() {
+		log.Println("[Terminal] System shutdown scheduled in", shutdownTime, "seconds...")
+		time.Sleep(time.Duration(shutdownTime-5) * time.Second)
+
+		itime := 5
+		for itime > 0 {
+			log.Println("[Terminal] System shutdown scheduled in", itime, "seconds...")
+			time.Sleep(time.Second)
+			itime--
+		}
+
+		server := Backend.GetBackendServer()
+		server.Shutdown()
+	}()
+
 	return &TerminalResponse{
 		Success: true,
 		Message: map[string]interface{}{
-			"command": string(TCS_shutdown),
-			"note":    "shutdown server",
-			"args":    tm.Command.Args,
+			"command":             string(TCS_shutdown),
+			"note":                "system shutdown has scheduled",
+			"shutdown_in_seconds": shutdownTime,
 		},
 	}
 }

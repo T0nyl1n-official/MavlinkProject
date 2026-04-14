@@ -114,25 +114,50 @@ func (bs *BackendServer) New() {
 
 var httpServer *http.Server
 
-func (bs *BackendServer) Run(port string) {
+type HTTPSConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	Port     string `yaml:"port"`
+	CertFile string `yaml:"cert_file"`
+	KeyFile  string `yaml:"key_file"`
+}
+
+func (bs *BackendServer) Run(port string, httpsConfig HTTPSConfig) {
 	bs.StartTime = time.Now()
 	Routes.InitAllRoutes(bs.Router, bs.JWTManager, bs.TokenManager, bs.Mysql, bs.SettingManager)
 
-	addr := "0.0.0.0:" + port
-	log.Printf("启动 HTTP 服务器: %s", addr)
+	if httpsConfig.Enabled {
+		addr := "0.0.0.0:" + httpsConfig.Port
+		log.Printf("启动 HTTPS 服务器: %s", addr)
 
-	httpServer = &http.Server{
-		Addr:    addr,
-		Handler: bs.Router,
-	}
-
-	go func() {
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("HTTP 服务器启动失败: %v", err)
+		httpServer = &http.Server{
+			Addr:    addr,
+			Handler: bs.Router,
 		}
-	}()
 
-	log.Printf("Backend server started on port %s (HTTP)", port)
+		go func() {
+			if err := httpServer.ListenAndServeTLS(httpsConfig.CertFile, httpsConfig.KeyFile); err != nil && err != http.ErrServerClosed {
+				log.Printf("HTTPS 服务器启动失败: %v", err)
+			}
+		}()
+
+		log.Printf("Backend server started on port %s (HTTPS)", httpsConfig.Port)
+	} else {
+		addr := "0.0.0.0:" + port
+		log.Printf("启动 HTTP 服务器: %s", addr)
+
+		httpServer = &http.Server{
+			Addr:    addr,
+			Handler: bs.Router,
+		}
+
+		go func() {
+			if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("HTTP 服务器启动失败: %v", err)
+			}
+		}()
+
+		log.Printf("Backend server started on port %s (HTTP)", port)
+	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -161,11 +186,11 @@ func (bs *BackendServer) Restart() {
 	syscall.Exec(execPath, os.Args, os.Environ())
 }
 
-func (bs *BackendServer) Start(addr, port string) *BackendServer {
+func (bs *BackendServer) Start(addr, port string, httpsConfig HTTPSConfig) *BackendServer {
 	backendServer = bs
 	bs.New()
-	bs.Run(port)
-	log.Printf("Backend server starting on port %s (HTTP)", port)
+	bs.Run(port, httpsConfig)
+	log.Printf("Backend server starting...")
 	return bs
 }
 

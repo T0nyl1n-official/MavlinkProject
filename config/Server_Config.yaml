@@ -7,7 +7,7 @@ backend:
 # HTTPS服务器配置
 https:
   enabled: true
-  port: "443"
+  port: "8080"
   # 证书文件路径
   cert_file: "cert.pem"
   key_file: "key.pem"

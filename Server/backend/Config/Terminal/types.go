@@ -288,22 +288,134 @@ var TCS_map_Admin = map[Terminal_Command_String]map[string]interface{}{
 // Terminal_Help_Details 定义帮助命令的详细信息
 var (
 	THD_help = map[string]interface{}{
-		"help":   "Show all permitted commands and details",
-		"format1": "help [pages]",
+		"help":     "Show all permitted commands and details",
+		"format1":  "help [pages]",
 		"example1": "help 1",
-		"format2": "help [command]",
+		"format2":  "help [command]",
 		"example2": "help mod",
 	}
 
 	THD_mod = map[string]interface{}{
-		"mod": "Show the mod directory",
-		"format": "mod ([object]) [operation]  ([value]) [args]",
+		"mod":     "Show the mod directory",
+		"format":  "mod ([object]) [operation]  ([value]) [args]",
 		"example": "mod show",
 	}
 
 	THD_show = map[string]interface{}{
-		"show": "Show the object's details",
-		"format": "show [object] [command] [args]",
+		"show":    "Show the object's details",
+		"format":  "show [object] [command] [args]",
 		"example": "show Server",
+	}
+
+	THD_server = map[string]interface{}{
+		"server":   "Server management commands",
+		"format1":  "server config",
+		"example1": "server config",
+		"format2":  "server restart [-t seconds]",
+		"example2": "server restart -t 10",
+		"format3":  "server shutdown [-t seconds]",
+		"example3": "server shutdown -t 5",
+	}
+
+	THD_backend = map[string]interface{}{
+		"backend":  "Backend service management",
+		"format1":  "backend config",
+		"example1": "backend config",
+		"format2":  "backend restart [-t seconds]",
+		"example2": "backend restart -t 10",
+		"format3":  "backend shutdown [-t seconds]",
+		"example3": "backend shutdown -t 5",
+	}
+
+	THD_frontend = map[string]interface{}{
+		"frontend": "Frontend service management",
+		"format1":  "frontend config",
+		"example1": "frontend config",
+		"format2":  "frontend restart [-t seconds]",
+		"example2": "frontend restart -t 10",
+		"format3":  "frontend shutdown [-t seconds]",
+		"example3": "frontend shutdown -t 5",
+	}
+
+	THD_database = map[string]interface{}{
+		"database": "Database configuration management",
+		"format1":  "database",
+		"example1": "database",
+		"format2":  "database mysql",
+		"example2": "database mysql",
+		"format3":  "database redis",
+		"example3": "database redis",
+	}
+
+	THD_mavlink = map[string]interface{}{
+		"mavlink": "Mavlink protocol configuration",
+		"format":  "mavlink config",
+		"example": "mavlink config",
+	}
+
+	THD_board = map[string]interface{}{
+		"board":    "Board connection management",
+		"format1":  "board config",
+		"example1": "board config",
+		"format2":  "board restart",
+		"example2": "board restart",
+	}
+
+	THD_log = map[string]interface{}{
+		"log":      "Show Backend logs",
+		"format1": "log ([object]) ([type]/[level])",
+		"example1": "log Backend error",
+		"format2": "log [beginTime] [endTime] ([type]/[level])",
+		"example2": "log 2005-12-29-21:00:00 2005-12-29-22:00:00 200",
+	}
+
+	THD_drone = map[string]interface{}{
+		"drone":    "Drone management",
+		"format1":  "drone",
+		"example1": "drone",
+		"format2":  "drone [drone_id]",
+		"example2": "drone drone_001",
+	}
+
+	THD_sensor = map[string]interface{}{
+		"sensor":  "Sensor management",
+		"format":  "sensor",
+		"example": "sensor",
+	}
+
+	THD_cache = map[string]interface{}{
+		"cache":   "Cache management",
+		"format":  "cache config",
+		"example": "cache config",
+	}
+
+	THD_adduser = map[string]interface{}{
+		"adduser": "Add new user (admin only)",
+		"format":  "adduser [username] [email]",
+		"example": "adduser admin admin@example.com",
+	}
+
+	THD_deluser = map[string]interface{}{
+		"deluser": "Delete user (admin only)",
+		"format":  "deluser [username]",
+		"example": "deluser testuser",
+	}
+
+	THD_auto = map[string]interface{}{
+		"auto":    "AI agent auto management (admin only)",
+		"format":  "auto [agent_name] [args]",
+		"example": "auto mission_planner -enable",
+	}
+
+	THD_reboot = map[string]interface{}{
+		"reboot":  "System reboot (admin only)",
+		"format":  "reboot",
+		"example": "reboot",
+	}
+
+	THD_shutdown = map[string]interface{}{
+		"shutdown": "System shutdown (admin only)",
+		"format":   "shutdown",
+		"example":  "shutdown",
 	}
 )

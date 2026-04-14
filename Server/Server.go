@@ -14,7 +14,8 @@ type ServerConfig struct {
 }
 
 type Config struct {
-	Backend ServerConfig `yaml:"backend"`
+	Backend ServerConfig         `yaml:"backend"`
+	HTTPS   Backend.HTTPSConfig  `yaml:"https"`
 }
 
 var BackendServer Backend.BackendServer
@@ -23,7 +24,7 @@ func Server_start() {
 	configPath := "config/Server_Config.yaml"
 	cfg := getConfig(configPath)
 
-	BackendServer.Start(cfg.Backend.Address, cfg.Backend.Port)
+	BackendServer.Start(cfg.Backend.Address, cfg.Backend.Port, cfg.HTTPS)
 }
 
 func getConfig(configPath string) Config {
