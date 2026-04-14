@@ -8,6 +8,7 @@ import (
 	BoardsRoutes "MavlinkProject/Server/backend/Routes/Boards"
 	MavlinkRoutes "MavlinkProject/Server/backend/Routes/Mavlink"
 	MiscRoutes "MavlinkProject/Server/backend/Routes/Misc"
+	SensorRoutes "MavlinkProject/Server/backend/Routes/Sensor"
 	UsersRoutes "MavlinkProject/Server/backend/Routes/User"
 
 	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
@@ -27,6 +28,7 @@ func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager 
 	MavlinkRoutes.SetupDefaultMavlinkRoutesV2(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupMavlinkV1Routes(r, jwtManager, tokenManager)
 
+	SensorRoutes.SetupSensorRoutes(r)
 }
 
 func Test_Routes(r *gin.Engine) {
