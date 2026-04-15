@@ -8,7 +8,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
-	"strings"
+	//"strings"
 	"testing"
 	"time"
 
@@ -401,9 +401,6 @@ func TestSendMessageToBoardByFromID(t *testing.T) {
 }
 
 func TestSensorAlertToCentral(t *testing.T) {
-	// 这个测试假设使用 go run main.go 启动了后端应用
-	// 测试步骤：客户端构造 SensorAlertReq 的 JSON
-	// POST 给后端 https://localhost:8080/mavlink/v2/sensor-alert （后端起的是 RunTLS）
 	reqPayload := map[string]interface{}{
 		"sensor_id":   "esp32_sensor_001",
 		"latitude":    39.9042,
@@ -418,7 +415,7 @@ func TestSensorAlertToCentral(t *testing.T) {
 		t.Fatalf("Failed to marshal request payload: %v", err)
 	}
 
-	apiURL := "https://localhost:8080/mavlink/v2/sensor-alert"
+	apiURL := "https://localhost:8888/mavlink/v2/sensor-alert"
 	t.Logf("Sending POST request to %s with payload: %s", apiURL, string(body))
 
 	// 因为本地是自签发测试TLS，为了防止报错，可以忽略证书校验
@@ -428,7 +425,7 @@ func TestSensorAlertToCentral(t *testing.T) {
 	client := &http.Client{Transport: tr}
 	
 	// 先进行用户注册和登录获取 Token 
-	apiBaseUrl := "https://localhost:8080"
+    apiBaseUrl := "https://api.deeppluse.dpdns.org"
 	username := fmt.Sprintf("test_sensor_%d", time.Now().Unix())
 	email := fmt.Sprintf("%s@example.com", username)
 	password := "TestPass@123"
@@ -472,47 +469,74 @@ func TestSensorAlertToCentral(t *testing.T) {
 	
 	t.Logf("获取 Token 成功: %s...", token[:10])
 
-	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(body))
-	if err != nil {
-		t.Fatalf("Failed to create request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	
-	// 这个接口被挂载在了 JWT 保护下，如果没有真实的 Token 会报错 400，可以先进行无验证模拟或者提供 token
-	req.Header.Set("Authorization", "Bearer "+token)
-	t.Log("JWT Auth header set successfully.")
-	
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("Failed to send POST request: %v. Please make sure the backend is running locally on port 8080.", err)
-	}
-	defer resp.Body.Close()
+	// -------- 核心修改：换成纯 HTTP POST 请求，完全模拟现在 ESP32 的行为 --------
+    // 注意：替换为你后端真正接收该 JSON 的实际接口路径
+    // 如果你为 ESP32 专属开了一个新接口，请填在这里；如果复用 v2/sensor-alert，请确保后端能解析这个嵌套结构
+    apiURL = apiBaseUrl + "/api/sensor/message" 
 
-	if resp.StatusCode != http.StatusOK {
-		var errData map[string]interface{}
-		json.NewDecoder(resp.Body).Decode(&errData)
-		
-		// 因为树莓派可能没有在线，FRP 代理会立即截断连接导致 EOF 错误。
-		// 这里验证我们的错误逻辑的确生效了，代表链路是通的 (拨号成功，只是读响应 EOF)
-		if resp.StatusCode == 500 && errData["error"] != nil {
-			errStr := errData["error"].(string)
-			if strings.Contains(errStr, "EOF") {
-				t.Logf("测试成功走通后端并发往 FRP，且正确处理了树莓派离线的 EOF 错误: %v", errStr)
-				return // 测试通过
-			}
-		}
-		
-		t.Fatalf("Expected status 200 OK, got %d. Error body: %v", resp.StatusCode, errData)
-	}
+    // 构造目前 ESP32 正在发送的完整 JSON 格式（包含 Heartbeat 结构或 BoardMessage 结构）
+    testMessage := Board.BoardMessage{
+        MessageID:   fmt.Sprintf("ALERT_%d", time.Now().Unix()),
+        MessageTime: time.Now(),
+        Message: Board.Message{
+            MessageType: "Request",  // 注意跟你后端处理的类型匹配
+            Command:     "SensorAlert",
+            Attribute:   Board.MessageAttribute_Default,
+            // 数据载荷对应 ESP32 发送的内容
+            Data: map[string]interface{}{
+                "sensor_id":   "esp32_sensor_001",
+                "latitude":    39.9042,
+                "longitude":   116.4074,
+                "radius":      50.0,
+                "photo_count": 5,
+                "altitude":    100.0,
+            },
+        },
+        FromID:   "esp32_sensor_001",
+        FromType: "sensor", // 如果之前定义了具体的标识常量，或者强制为 "ESP32" 等
+        ToID:     "cloud_backend", 
+    }
 
-	var jsonResp map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&jsonResp)
-	if err != nil {
-		t.Fatalf("Failed to decode JSON response: %v", err)
-	}
+    msgBytes, err := json.Marshal(testMessage)
+    if err != nil {
+        t.Fatalf("Failed to marshal BoardMessage: %v", err)
+    }
 
-	t.Logf("Response received from backend: %+v", jsonResp)
-	if jsonResp["success"] != true {
-		t.Errorf("Expected success=true from backend, but got false. Error: %v", jsonResp["error"])
-	}
+    t.Logf("Sending pure HTTPS POST to %s...", apiURL)
+
+    // 构造 HTTP POST 请求
+    req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(msgBytes))
+    if err != nil {
+        t.Fatalf("Failed to create HTTP POST request: %v", err)
+    }
+    
+    // 设置 Content-Type 和鉴权 Header (这里与 ESP32 的 addHeader 行为一致)
+    req.Header.Set("Content-Type", "application/json")
+    if token != "" {
+        req.Header.Set("Authorization", "Bearer "+token) 
+    }
+
+    // 设定超时并发送（利用外部定义的客户端 `client`，具备你之前写好的 InsecureSkipVerify 等特性）
+    client.Timeout = 10 * time.Second
+    resp, err := client.Do(req)
+    if err != nil {
+        t.Fatalf("HTTPS POST failed (could be Cloudflare block, DNS, or server down): %v", err)
+    }
+    defer resp.Body.Close()
+
+    // 读取后端返回的响应内容
+    respBuffer := new(bytes.Buffer)
+    respBuffer.ReadFrom(resp.Body)
+
+    if resp.StatusCode != 200 {
+        t.Fatalf("Server rejected the request. HTTP Status: %d, Response: %s", resp.StatusCode, respBuffer.String())
+    }
+
+    // 解析并验证返回结果
+    var receivedResponse map[string]interface{}
+    if err := json.Unmarshal(respBuffer.Bytes(), &receivedResponse); err != nil {
+        t.Logf("Warning: Response is not standard JSON: %s", respBuffer.String())
+    } else {
+        t.Logf("Success! Received valid JSON response from backend: %+v", receivedResponse)
+    }
 }
