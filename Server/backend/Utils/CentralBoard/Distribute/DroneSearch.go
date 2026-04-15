@@ -17,15 +17,21 @@ import (
 type MavlinkCommander = MavlinkBoard.MavlinkCommander
 
 type DroneConfig struct {
+	Timeout            time.Duration
+	Retry              int
+	Batch              int
 	MinBatteryLevel    float64
 	MaxDroneDistance   float64
 	StatusCheckTimeout time.Duration
 }
 
 var defaultDroneConfig = DroneConfig{
-	MinBatteryLevel:    30.0,
+	Timeout:            5 * time.Second,
+	Retry:              10,
+	Batch:              10,
+	MinBatteryLevel:    20.0,
 	MaxDroneDistance:   1000.0,
-	StatusCheckTimeout: 5 * time.Second,
+	StatusCheckTimeout: 2 * time.Second,
 }
 
 type DroneStatus struct {
@@ -42,10 +48,33 @@ type DroneStatus struct {
 	Commander    *MavlinkCommander
 }
 
+type ProgressChain struct {
+	ChainID       string
+	Tasks         []Task
+	CurrentTask   int
+	Status        string
+	StartTime     time.Time
+	EndTime       time.Time
+	AssignedDrone string
+}
+
+type Task struct {
+	TaskID     string
+	Command    string
+	Data       map[string]interface{}
+	Status     string
+	RetryCount int
+	MaxRetries int
+	Timeout    time.Duration
+	StartTime  time.Time
+	EndTime    time.Time
+}
+
 type DroneSearch struct {
 	boardManager *boardHandler.BoardConnectionManager
 	drones       map[string]*DroneStatus
 	activeTasks  map[string]string // boardID -> taskChainID
+	taskChains   map[string]*ProgressChain
 	mu           sync.RWMutex
 	messageChan  chan *Board.BoardMessage
 	stopChan     chan bool
@@ -88,6 +117,7 @@ func GetDroneSearch() *DroneSearch {
 			boardManager: boardHandler.GetBoardManager(),
 			drones:       make(map[string]*DroneStatus),
 			activeTasks:  make(map[string]string),
+			taskChains:   make(map[string]*ProgressChain),
 			messageChan:  make(chan *Board.BoardMessage, 1000),
 			stopChan:     make(chan bool),
 		}
@@ -201,15 +231,85 @@ func (ds *DroneSearch) checkDroneStatus() {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
-	now := time.Now()
-	// 使用无锁版获取配置
 	cfg := ds.getConfigUnlocked()
+	now := time.Now()
+
+	var droneIDs []string
 	for boardID, drone := range ds.drones {
+		droneIDs = append(droneIDs, boardID)
 		if now.Sub(drone.LastUpdate) > cfg.StatusCheckTimeout {
 			log.Printf("[DroneSearch] Drone %s timeout, marking as unavailable", boardID)
 			drone.IsIdle = false
 		}
 	}
+
+	if len(droneIDs) == 0 {
+		return
+	}
+
+	ds.checkDroneConnectionParallel(droneIDs, cfg)
+}
+
+func (ds *DroneSearch) checkDroneConnectionParallel(droneIDs []string, cfg DroneConfig) {
+	if len(droneIDs) == 0 {
+		return
+	}
+
+	batchSize := cfg.Batch
+	if batchSize <= 0 {
+		batchSize = 10
+	}
+
+	retryCount := cfg.Retry
+	if retryCount <= 0 {
+		retryCount = 10
+	}
+
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, batchSize)
+
+	for _, boardID := range droneIDs {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			success := ds.checkAndUpdateDroneWithRetry(id, retryCount, cfg.Timeout)
+			if !success {
+				log.Printf("[DroneSearch] Warning: Drone %s connection failed after %d retries", id, retryCount)
+			}
+		}(boardID)
+	}
+
+	wg.Wait()
+}
+
+func (ds *DroneSearch) checkAndUpdateDroneWithRetry(boardID string, retryCount int, timeout time.Duration) bool {
+	for attempt := 1; attempt <= retryCount; attempt++ {
+		ds.mu.RLock()
+		drone, exists := ds.drones[boardID]
+		ds.mu.RUnlock()
+
+		if !exists {
+			return false
+		}
+
+		conn, _, _, connected := ds.boardManager.GetBoardConnectionInfo(boardID)
+		if connected && conn != "" {
+			ds.mu.Lock()
+			drone.IsIdle = true
+			ds.mu.Unlock()
+			return true
+		}
+
+		if attempt < retryCount {
+			time.Sleep(timeout / time.Duration(retryCount))
+		}
+	}
+
+	return false
 }
 
 func (ds *DroneSearch) FindBestDrone() (*DroneStatus, error) {
@@ -372,6 +472,45 @@ func (ds *DroneSearch) GetDroneStatus(boardID string) (*DroneStatus, error) {
 	return drone, nil
 }
 
+func (ds *DroneSearch) SubmitProgressChain(chain *ProgressChain) error {
+	if chain == nil || chain.ChainID == "" {
+		return fmt.Errorf("invalid progress chain")
+	}
+
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+
+	drone, exists := ds.drones[chain.AssignedDrone]
+	if !exists {
+		return fmt.Errorf("drone %s not found", chain.AssignedDrone)
+	}
+
+	if !drone.IsIdle {
+		return fmt.Errorf("drone %s is not idle", chain.AssignedDrone)
+	}
+
+	ds.taskChains[chain.ChainID] = chain
+	drone.IsIdle = false
+	ds.activeTasks[chain.AssignedDrone] = chain.ChainID
+
+	log.Printf("[DroneSearch] Progress chain %s submitted to drone %s with %d tasks",
+		chain.ChainID, chain.AssignedDrone, len(chain.Tasks))
+
+	return nil
+}
+
+func (ds *DroneSearch) GetProgressChain(chainID string) (*ProgressChain, error) {
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
+
+	chain, exists := ds.taskChains[chainID]
+	if !exists {
+		return nil, fmt.Errorf("chain %s not found", chainID)
+	}
+
+	return chain, nil
+}
+
 func (ds *DroneSearch) SetDroneIdle(boardID string, isIdle bool) error {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
@@ -524,5 +663,5 @@ func (ds *DroneSearch) GetDroneStatusReport() map[string]interface{} {
 
 // InjectDroneStatus 直接且同步地由本地调用来更新无人机状态（用于单机模式或绕过队列）
 func (ds *DroneSearch) InjectDroneStatus(msg *Board.BoardMessage) {
-    ds.handleBoardMessage(msg)
+	ds.handleBoardMessage(msg)
 }

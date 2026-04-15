@@ -188,3 +188,72 @@ func contains[T comparable](slice []T, target T) bool {
 	}
 	return false
 }
+
+var deviceJWTManager *jwtUtils.JWTManager
+var deviceTokenManager *JwtRedis.RedisTokenManager
+
+func SetDeviceJWTManagers(jwtMgr *jwtUtils.JWTManager, tokenMgr *JwtRedis.RedisTokenManager) {
+	deviceJWTManager = jwtMgr
+	deviceTokenManager = tokenMgr
+}
+
+func DeviceJwtAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if deviceJWTManager == nil || deviceTokenManager == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"code":    500,
+				"error":   "Device authentication not configured",
+				"message": "请先进行设备登录认证",
+			})
+			c.Abort()
+			return
+		}
+
+		tokenString, err := ExtractToken(c)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    401,
+				"error":   "Device authentication required",
+				"message": "请先进行设备登录认证，获取设备令牌",
+			})
+			c.Abort()
+			return
+		}
+
+		if valid, _ := deviceTokenManager.ValidateToken(tokenString); !valid {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    401,
+				"error":   "Device token expired or invalid",
+				"message": "设备令牌已失效，请重新登录获取令牌",
+			})
+			c.Abort()
+			return
+		}
+
+		if valid, _ := deviceJWTManager.ValidateToken(tokenString); !valid {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    401,
+				"error":   "Device token expired or invalid",
+				"message": "设备令牌已失效，请重新登录获取令牌",
+			})
+			c.Abort()
+			return
+		}
+
+		claims, err4 := deviceJWTManager.ParseToken(tokenString)
+		if err4 != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    401,
+				"error":   "Device token expired or invalid",
+				"message": "设备令牌已失效，请重新登录获取令牌",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Set("device_id", claims.Subject)
+		c.Set("device_type", claims.Role)
+		c.Set("user_id", claims.ID)
+		c.Next()
+	}
+}

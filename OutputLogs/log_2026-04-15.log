@@ -1,0 +1,320 @@
+[2026-04-15 15:34:01] INFO GET / 200 0ms
+[2026-04-15 15:35:35] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 15:40:49] INFO 监控数据已重置
+[2026-04-15 16:06:39] INFO GET / 200 0ms
+[2026-04-15 16:21:22] INFO 监控数据已重置
+[2026-04-15 16:36:22] INFO 监控数据已重置
+[2026-04-15 16:43:27] INFO POST /api/sensor/message 200 4ms
+[2026-04-15 16:54:32] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 16:56:26] INFO GET / 200 0ms
+[2026-04-15 16:56:28] INFO GET / 200 0ms
+[2026-04-15 16:56:29] INFO GET / 200 0ms
+[2026-04-15 16:56:30] INFO GET /aaabbbccc 404 0ms
+[2026-04-15 16:56:30] INFO GET /1 404 0ms
+[2026-04-15 16:56:31] INFO GET /fb 404 0ms
+[2026-04-15 16:56:32] INFO GET /fwc 404 0ms
+[2026-04-15 16:56:33] INFO GET /fzh 404 0ms
+[2026-04-15 16:56:35] INFO GET /res/favicon.ico 404 0ms
+[2026-04-15 16:56:36] INFO GET /assets/favicon-aOK6_042.ico 404 0ms
+[2026-04-15 16:56:37] INFO GET /images/01.jpg 404 0ms
+[2026-04-15 16:56:38] INFO GET /wp-content/uploads/2020/10/official-logo-512x512.png 404 0ms
+[2026-04-15 16:56:39] INFO GET /wp-content/uploads/2023/02/1677572030-814390417fe413b.png 404 0ms
+[2026-04-15 16:56:41] INFO GET /favicon.ico 200 85ms
+[2026-04-15 16:56:42] INFO GET /icons/favicon.ico 404 0ms
+[2026-04-15 16:56:44] INFO GET /wp-content/uploads/2023/08/logo-gold.png 404 0ms
+[2026-04-15 16:56:46] INFO GET /favicon-32x32.png 404 0ms
+[2026-04-15 16:56:48] INFO GET / 200 0ms
+[2026-04-15 16:56:49] INFO GET /assets/GanjingAbout-0xqqgv2B.js 404 0ms
+[2026-04-15 16:58:40] INFO GET / 200 0ms
+[2026-04-15 17:01:59] INFO GET /aaabbbccc 404 0ms
+[2026-04-15 17:02:17] INFO GET /fwc 404 0ms
+[2026-04-15 17:02:20] INFO GET /fzh 404 0ms
+[2026-04-15 17:02:23] INFO GET /res/favicon.ico 404 0ms
+[2026-04-15 17:02:26] INFO GET /assets/favicon-aOK6_042.ico 404 0ms
+[2026-04-15 17:03:41] INFO GET /images/01.jpg 404 0ms
+[2026-04-15 17:06:04] INFO GET /wp-content/uploads/2023/02/1677572030-814390417fe413b.png 404 0ms
+[2026-04-15 17:07:00] INFO GET /favicon-32x32.png 404 0ms
+[2026-04-15 17:07:52] INFO GET /assets/GanjingAbout-0xqqgv2B.js 404 0ms
+[2026-04-15 17:09:21] INFO 监控数据已重置
+[2026-04-15 17:24:21] INFO 监控数据已重置
+[2026-04-15 17:39:21] INFO 监控数据已重置
+[2026-04-15 17:54:21] INFO 监控数据已重置
+[2026-04-15 18:09:21] INFO 监控数据已重置
+[2026-04-15 18:24:21] INFO 监控数据已重置
+[2026-04-15 18:39:21] INFO 监控数据已重置
+[2026-04-15 18:54:21] INFO 监控数据已重置
+[2026-04-15 19:09:21] INFO 监控数据已重置
+[2026-04-15 19:24:21] INFO 监控数据已重置
+[2026-04-15 19:39:21] INFO 监控数据已重置
+[2026-04-15 19:54:21] INFO 监控数据已重置
+[2026-04-15 20:09:21] INFO 监控数据已重置
+[2026-04-15 20:10:42] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 20:10:55] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 20:11:08] INFO POST /api/sensor/message 400 5ms
+[2026-04-15 20:24:21] INFO 监控数据已重置
+[2026-04-15 20:31:51] INFO POST /api/sensor/alert 404 0ms
+[2026-04-15 20:31:56] INFO POST /api/sensor/alert 404 0ms
+[2026-04-15 20:34:38] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 20:39:21] INFO 监控数据已重置
+[2026-04-15 20:51:47] INFO GET / 200 0ms
+[2026-04-15 20:54:21] INFO 监控数据已重置
+[2026-04-15 21:02:16] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:02:26] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:02:36] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:02:47] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:03:01] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:03:13] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:03:35] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:03:41] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:03:49] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:03:58] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:04:09] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:04:19] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:04:32] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:04:52] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:04:58] INFO POST /api/sensor/message 200 443ms
+[2026-04-15 21:05:08] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:05:17] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:05:34] INFO POST /api/sensor/message 200 2ms
+[2026-04-15 21:05:42] INFO POST /api/sensor/message 200 361ms
+[2026-04-15 21:05:53] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:05:57] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:06:09] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:06:22] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:06:32] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:06:36] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:06:45] INFO POST /api/sensor/message 200 1ms
+[2026-04-15 21:09:21] INFO 监控数据已重置
+[2026-04-15 21:24:21] INFO 监控数据已重置
+[2026-04-15 21:29:56] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:30:29] INFO POST /api/sensor/message 200 1ms
+[2026-04-15 21:30:49] INFO POST /api/sensor/message 200 2ms
+[2026-04-15 21:31:06] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:31:13] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:31:21] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:31:33] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:31:44] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:31:47] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:31:58] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:32:18] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:32:26] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:32:31] INFO POST /api/sensor/message 200 275ms
+[2026-04-15 21:32:40] INFO POST /api/sensor/message 200 1ms
+[2026-04-15 21:32:53] INFO POST /api/sensor/message 200 282ms
+[2026-04-15 21:33:01] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:33:06] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:33:14] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:33:30] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:33:40] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:33:46] INFO POST /api/sensor/message 200 277ms
+[2026-04-15 21:33:54] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:34:02] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:34:12] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:34:15] INFO POST /api/sensor/message 200 451ms
+[2026-04-15 21:34:23] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:34:41] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:34:49] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:34:59] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:35:07] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:35:10] INFO POST /api/sensor/message 200 975ms
+[2026-04-15 21:35:19] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:35:29] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:35:37] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:35:40] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:35:51] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:35:59] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:36:08] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:36:17] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:36:22] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:36:31] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:36:40] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:36:49] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:36:54] INFO POST /api/sensor/message 200 1ms
+[2026-04-15 21:37:03] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:37:12] INFO POST /api/sensor/message 200 274ms
+[2026-04-15 21:37:22] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:37:26] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:37:34] INFO POST /api/sensor/message 200 270ms
+[2026-04-15 21:37:42] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:37:50] INFO POST /api/sensor/message 200 1ms
+[2026-04-15 21:38:00] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:38:05] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:38:14] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:38:22] INFO POST /api/sensor/message 200 1ms
+[2026-04-15 21:38:31] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:38:33] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:38:41] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:38:50] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:39:01] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:39:12] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:39:16] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:39:21] INFO 监控数据已重置
+[2026-04-15 21:39:23] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:39:32] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:39:39] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:39:48] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:39:51] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:39:59] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:40:07] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:40:16] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:40:24] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:40:27] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:40:36] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:40:45] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:40:55] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:41:03] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:41:06] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:41:25] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:41:33] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:41:41] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:41:45] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:41:53] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:42:03] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:42:12] INFO GET /api/sensor/connect 404 0ms
+[2026-04-15 21:42:14] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:42:24] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:42:31] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:54:21] INFO 监控数据已重置
+[2026-04-15 21:54:50] INFO POST /api/sensor/message 200 0ms
+[2026-04-15 21:55:11] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:55:19] INFO POST /api/sensor/message 400 376ms
+[2026-04-15 21:55:24] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:55:28] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:55:32] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:55:38] INFO POST /api/sensor/message 400 355ms
+[2026-04-15 21:55:45] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:55:48] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:55:53] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:55:58] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:56:02] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:56:09] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:56:13] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:56:18] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:56:23] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:56:29] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:56:34] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:56:38] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:56:43] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:56:48] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:57:03] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:57:11] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:57:14] INFO GET / 200 0ms
+[2026-04-15 21:57:15] INFO GET /favicon.ico 304 3ms
+[2026-04-15 21:57:28] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:57:34] INFO GET / 200 0ms
+[2026-04-15 21:58:06] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:58:12] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:58:18] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:58:21] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:58:28] INFO POST /api/sensor/message 400 390ms
+[2026-04-15 21:58:33] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:58:41] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:58:44] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:58:50] INFO POST /api/sensor/message 400 1ms
+[2026-04-15 21:58:54] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:58:59] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:59:04] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:59:08] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:59:13] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:59:20] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:59:24] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:59:32] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:59:35] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:59:40] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:59:45] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:59:51] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 21:59:56] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:00:02] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:00:06] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:00:11] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:00:16] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:00:21] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:00:21] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现50次错误(状态码: 400)
+[2026-04-15 22:02:28] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:02:28] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现51次错误(状态码: 400)
+[2026-04-15 22:02:33] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:02:33] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现52次错误(状态码: 400)
+[2026-04-15 22:02:38] INFO POST /api/sensor/message 400 1ms
+[2026-04-15 22:02:38] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现53次错误(状态码: 400)
+[2026-04-15 22:02:43] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:02:43] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现54次错误(状态码: 400)
+[2026-04-15 22:02:51] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:02:51] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现55次错误(状态码: 400)
+[2026-04-15 22:02:55] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:02:55] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现56次错误(状态码: 400)
+[2026-04-15 22:03:00] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:03:00] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现57次错误(状态码: 400)
+[2026-04-15 22:03:05] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:03:05] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现58次错误(状态码: 400)
+[2026-04-15 22:03:12] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:03:12] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现59次错误(状态码: 400)
+[2026-04-15 22:03:18] INFO POST /api/sensor/message 400 366ms
+[2026-04-15 22:03:18] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现60次错误(状态码: 400)
+[2026-04-15 22:03:24] INFO POST /api/sensor/message 400 406ms
+[2026-04-15 22:03:24] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现61次错误(状态码: 400)
+[2026-04-15 22:03:29] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:03:29] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现62次错误(状态码: 400)
+[2026-04-15 22:03:33] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:03:33] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现63次错误(状态码: 400)
+[2026-04-15 22:03:39] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:03:39] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现64次错误(状态码: 400)
+[2026-04-15 22:03:44] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:03:44] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现65次错误(状态码: 400)
+[2026-04-15 22:03:49] INFO POST /api/sensor/message 400 633ms
+[2026-04-15 22:03:49] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现66次错误(状态码: 400)
+[2026-04-15 22:03:58] INFO POST /api/sensor/message 400 421ms
+[2026-04-15 22:03:58] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现67次错误(状态码: 400)
+[2026-04-15 22:04:05] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:04:05] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现68次错误(状态码: 400)
+[2026-04-15 22:04:11] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:04:11] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现69次错误(状态码: 400)
+[2026-04-15 22:04:16] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:04:16] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现70次错误(状态码: 400)
+[2026-04-15 22:04:25] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:04:25] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现71次错误(状态码: 400)
+[2026-04-15 22:04:28] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:04:28] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现72次错误(状态码: 400)
+[2026-04-15 22:04:34] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:04:34] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现73次错误(状态码: 400)
+[2026-04-15 22:04:38] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:04:38] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现74次错误(状态码: 400)
+[2026-04-15 22:04:44] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:04:44] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现75次错误(状态码: 400)
+[2026-04-15 22:04:51] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:04:51] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现76次错误(状态码: 400)
+[2026-04-15 22:04:56] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:04:56] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现77次错误(状态码: 400)
+[2026-04-15 22:05:00] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:05:00] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现78次错误(状态码: 400)
+[2026-04-15 22:05:06] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:05:06] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现79次错误(状态码: 400)
+[2026-04-15 22:05:21] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:05:21] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现80次错误(状态码: 400)
+[2026-04-15 22:05:26] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:05:26] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现81次错误(状态码: 400)
+[2026-04-15 22:05:31] INFO POST /api/sensor/message 400 779ms
+[2026-04-15 22:05:31] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现82次错误(状态码: 400)
+[2026-04-15 22:05:34] INFO POST /api/sensor/message 400 307ms
+[2026-04-15 22:05:34] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现83次错误(状态码: 400)
+[2026-04-15 22:05:40] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:05:40] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现84次错误(状态码: 400)
+[2026-04-15 22:05:45] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:05:45] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现85次错误(状态码: 400)
+[2026-04-15 22:05:51] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:05:51] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现86次错误(状态码: 400)
+[2026-04-15 22:05:55] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:05:55] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现87次错误(状态码: 400)
+[2026-04-15 22:06:01] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:06:01] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现88次错误(状态码: 400)
+[2026-04-15 22:06:04] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:06:04] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现89次错误(状态码: 400)
+[2026-04-15 22:06:10] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:06:10] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现90次错误(状态码: 400)
+[2026-04-15 22:06:15] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:06:15] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现91次错误(状态码: 400)
+[2026-04-15 22:06:20] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:06:20] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现92次错误(状态码: 400)
+[2026-04-15 22:06:25] INFO POST /api/sensor/message 400 0ms
+[2026-04-15 22:06:25] WARN 🚨 URL错误警告: /api/sensor/message 在5分钟内出现93次错误(状态码: 400)
+[2026-04-15 22:09:21] INFO 监控数据已重置
+[2026-04-15 22:24:21] INFO 监控数据已重置

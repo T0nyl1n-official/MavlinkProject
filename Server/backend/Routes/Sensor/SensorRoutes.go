@@ -7,7 +7,7 @@ import (
 )
 
 func SetupSensorRoutes(r *gin.Engine) {
-	sensorGroup := r.Group("/sensor")
+	sensorGroup := r.Group("/api/sensor")
 	{
 		sensorGroup.POST("/message", SensorHandler.ReceiveSensorMessage)
 		sensorGroup.GET("/status", SensorHandler.GetSensorStatus)

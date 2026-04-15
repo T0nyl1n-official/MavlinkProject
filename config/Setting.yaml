@@ -129,3 +129,12 @@ board:
       - name: "central_2"
         address: "frp-put.com"
         port: 14465
+
+# 无人机搜索配置
+drone_search:
+  timeout: 5                 # 秒 (无人机状态查询超时)
+  retry: 10                  # 重试次数
+  batch: 10                  # 并行查询批次大小
+  min_battery: 20.0          # 最低电量要求 (%)
+  max_distance: 1000.0       # 最大距离 (米)
+  status_check_interval: 2   # 秒 (状态检查间隔)

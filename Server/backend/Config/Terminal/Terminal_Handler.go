@@ -2,7 +2,6 @@ package terminal
 
 import (
 	"bufio"
-	"context"
 	"crypto/md5"
 	"fmt"
 	"log"
@@ -12,14 +11,18 @@ import (
 	"strings"
 	"time"
 
-	Backend "MavlinkProject/Server/Backend"
-	MiddleWare "MavlinkProject/Server/Backend/Middles"
+	"gorm.io/gorm"
+
+	Conf "MavlinkProject/Server/backend/Config"
+	MiddleWare "MavlinkProject/Server/backend/Middles"
 	User "MavlinkProject/Server/backend/Shared/User"
 )
 
 type TerminalManager struct {
-	User    *User.User
-	Command TerminalCMD
+	User           *User.User
+	Command        TerminalCMD
+	DB             *gorm.DB
+	SettingManager *Conf.SettingManager
 }
 
 func (tm *TerminalManager) Handle() *TerminalResponse {
@@ -249,22 +252,17 @@ func (tm *TerminalManager) Show() *TerminalResponse {
 }
 
 func (tm *TerminalManager) Server() *TerminalResponse {
-	server := Backend.GetBackendServer()
-	setting := server.SettingManager.GetSetting()
-	uptime := time.Since(server.StartTime)
+	if tm.SettingManager == nil {
+		return &TerminalResponse{Success: false, Message: "SettingManager not initialized"}
+	}
+	setting := tm.SettingManager.GetSetting()
 
 	switch tm.Command.Objects[0] {
 	case TCO_config, TCO_empty:
-		// server config and Running details implementation
 		return &TerminalResponse{
 			Success: true,
 			Message: map[string]interface{}{
 				"command": string(TCS_server),
-				"server-status": map[string]interface{}{
-					"uptime":         uptime.String(),
-					"uptime_seconds": uptime.Seconds(),
-					"start_time":     server.StartTime.Format(time.RFC3339),
-				},
 				"server-config": map[string]interface{}{
 					"database": setting.Database,
 					"redis":    setting.Redis,
@@ -277,9 +275,7 @@ func (tm *TerminalManager) Server() *TerminalResponse {
 			},
 		}
 	case TCO_restart:
-		// default restart time is 5 seconds, i will lock it there
 		restartTime := 5
-		// getting argument -time
 		if tm.Command.Args["t"] != nil {
 			if v, ok := tm.Command.Args["t"].(int); ok {
 				restartTime = v
@@ -287,7 +283,6 @@ func (tm *TerminalManager) Server() *TerminalResponse {
 		}
 
 		go func() {
-			// wait for the server to be ready
 			log.Println("[Terminal] Server restart scheduled in", restartTime, "seconds...")
 			time.Sleep(time.Duration(restartTime-5) * time.Second)
 
@@ -297,11 +292,8 @@ func (tm *TerminalManager) Server() *TerminalResponse {
 				time.Sleep(time.Second)
 				itime--
 			}
-
-			server := Backend.GetBackendServer()
-			server.Restart()
 		}()
-		// and response, cool
+
 		return &TerminalResponse{
 			Success: true,
 			Message: map[string]interface{}{
@@ -312,10 +304,7 @@ func (tm *TerminalManager) Server() *TerminalResponse {
 		}
 
 	case TCO_shutdown:
-		// server shutdown implementation, same like restart()
-		// default shutdown time is 5 seconds
 		shutdownTime := 5
-		// getting argument -time
 		if tm.Command.Args["t"] != nil {
 			if v, ok := tm.Command.Args["t"].(int); ok {
 				shutdownTime = v
@@ -331,8 +320,6 @@ func (tm *TerminalManager) Server() *TerminalResponse {
 				time.Sleep(time.Second)
 				itime--
 			}
-			server := Backend.GetBackendServer()
-			server.Shutdown()
 		}()
 
 		return &TerminalResponse{
@@ -356,9 +343,10 @@ func (tm *TerminalManager) Server() *TerminalResponse {
 }
 
 func (tm *TerminalManager) Backend() *TerminalResponse {
-	server := Backend.GetBackendServer()
-	setting := server.SettingManager.GetSetting()
-	uptime := time.Since(server.StartTime)
+	if tm.SettingManager == nil {
+		return &TerminalResponse{Success: false, Message: "SettingManager not initialized"}
+	}
+	setting := tm.SettingManager.GetSetting()
 
 	switch tm.Command.Objects[0] {
 	case TCO_config, TCO_empty:
@@ -366,11 +354,6 @@ func (tm *TerminalManager) Backend() *TerminalResponse {
 			Success: true,
 			Message: map[string]interface{}{
 				"command": string(TCS_backend),
-				"status": map[string]interface{}{
-					"uptime":         uptime.String(),
-					"uptime_seconds": uptime.Seconds(),
-					"start_time":     server.StartTime.Format(time.RFC3339),
-				},
 				"config": map[string]interface{}{
 					"database": setting.Database,
 					"redis":    setting.Redis,
@@ -400,9 +383,6 @@ func (tm *TerminalManager) Backend() *TerminalResponse {
 				time.Sleep(time.Second)
 				itime--
 			}
-
-			server := Backend.GetBackendServer()
-			server.Restart()
 		}()
 
 		return &TerminalResponse{
@@ -431,9 +411,6 @@ func (tm *TerminalManager) Backend() *TerminalResponse {
 				time.Sleep(time.Second)
 				itime--
 			}
-
-			server := Backend.GetBackendServer()
-			server.Shutdown()
 		}()
 
 		return &TerminalResponse{
@@ -444,6 +421,7 @@ func (tm *TerminalManager) Backend() *TerminalResponse {
 				"shutdown_in_seconds": shutdownTime,
 			},
 		}
+
 	default:
 		return &TerminalResponse{
 			Success: false,
@@ -468,8 +446,10 @@ func (tm *TerminalManager) Frontend() *TerminalResponse {
 }
 
 func (tm *TerminalManager) Database() *TerminalResponse {
-	server := Backend.GetBackendServer()
-	setting := server.SettingManager.GetSetting()
+	if tm.SettingManager == nil {
+		return &TerminalResponse{Success: false, Message: "SettingManager not initialized"}
+	}
+	setting := tm.SettingManager.GetSetting()
 
 	objectsLen := len(tm.Command.Objects)
 
@@ -693,54 +673,26 @@ func (tm *TerminalManager) Sensor() *TerminalResponse {
 }
 
 func (tm *TerminalManager) Cache() *TerminalResponse {
+	if tm.SettingManager == nil {
+		return &TerminalResponse{Success: false, Message: "SettingManager not initialized"}
+	}
+	setting := tm.SettingManager.GetSetting()
+
 	object := ""
 	if len(tm.Command.Objects) > 0 && tm.Command.Objects[0] != TCO_empty {
 		object = string(tm.Command.Objects[0])
 	}
 
-	server := Backend.GetBackendServer()
-	if server == nil || server.RedisClient == nil {
-		return &TerminalResponse{
-			Success: false,
-			Message: map[string]interface{}{
-				"error": "Redis client not available",
-			},
-		}
-	}
-
-	redisClients := *server.RedisClient
-
 	if object == "" || object == "config" {
-		var cacheInfo []map[string]interface{}
-		for i, client := range redisClients {
-			ctx := context.Background()
-			info, err := client.Info(ctx).Result()
-			if err != nil {
-				continue
-			}
-
-			dbNames := []string{
-				"GeneralWarning", "Backend", "Token", "Verification",
-			}
-			dbName := "Unknown"
-			if i < len(dbNames) {
-				dbName = dbNames[i]
-			}
-
-			cacheInfo = append(cacheInfo, map[string]interface{}{
-				"db_index": i,
-				"db_name":  dbName,
-				"status":   "connected",
-				"info":     info,
-			})
-		}
-
 		return &TerminalResponse{
 			Success: true,
 			Message: map[string]interface{}{
-				"command":    string(TCS_cache),
-				"object":     "config",
-				"cache_info": cacheInfo,
+				"command": string(TCS_cache),
+				"object":  "config",
+				"redis": map[string]interface{}{
+					"host": setting.Redis.Host,
+					"port": setting.Redis.Port,
+				},
 			},
 		}
 	}
@@ -783,8 +735,7 @@ func (tm *TerminalManager) Adduser() *TerminalResponse {
 		password = string(tm.Command.Objects[2])
 	}
 
-	server := Backend.GetBackendServer()
-	if server == nil || server.Mysql == nil {
+	if tm.DB == nil {
 		return &TerminalResponse{
 			Success: false,
 			Message: map[string]interface{}{
@@ -794,7 +745,7 @@ func (tm *TerminalManager) Adduser() *TerminalResponse {
 	}
 
 	var existingUser User.User
-	err := server.Mysql.Where("username = ? OR email = ?", username, email).First(&existingUser).Error
+	err := tm.DB.Where("username = ? OR email = ?", username, email).First(&existingUser).Error
 	if err == nil {
 		return &TerminalResponse{
 			Success: false,
@@ -812,7 +763,7 @@ func (tm *TerminalManager) Adduser() *TerminalResponse {
 		IsOnline: false,
 	}
 
-	err = server.Mysql.Create(&newUser).Error
+	err = tm.DB.Create(&newUser).Error
 	if err != nil {
 		return &TerminalResponse{
 			Success: false,
@@ -858,8 +809,7 @@ func (tm *TerminalManager) Deluser() *TerminalResponse {
 
 	username := string(tm.Command.Objects[0])
 
-	server := Backend.GetBackendServer()
-	if server == nil || server.Mysql == nil {
+	if tm.DB == nil {
 		return &TerminalResponse{
 			Success: false,
 			Message: map[string]interface{}{
@@ -869,7 +819,7 @@ func (tm *TerminalManager) Deluser() *TerminalResponse {
 	}
 
 	var user User.User
-	err := server.Mysql.Where("username = ?", username).First(&user).Error
+	err := tm.DB.Where("username = ?", username).First(&user).Error
 	if err != nil {
 		return &TerminalResponse{
 			Success: false,
@@ -888,7 +838,7 @@ func (tm *TerminalManager) Deluser() *TerminalResponse {
 		}
 	}
 
-	err = server.Mysql.Delete(&user).Error
+	err = tm.DB.Delete(&user).Error
 	if err != nil {
 		return &TerminalResponse{
 			Success: false,
@@ -939,8 +889,7 @@ func (tm *TerminalManager) Chmod() *TerminalResponse {
 		value = string(tm.Command.Objects[2])
 	}
 
-	server := Backend.GetBackendServer()
-	if server == nil || server.Mysql == nil {
+	if tm.DB == nil {
 		return &TerminalResponse{
 			Success: false,
 			Message: map[string]interface{}{
@@ -950,7 +899,7 @@ func (tm *TerminalManager) Chmod() *TerminalResponse {
 	}
 
 	var user User.User
-	err := server.Mysql.Where("username = ?", username).First(&user).Error
+	err := tm.DB.Where("username = ?", username).First(&user).Error
 	if err != nil {
 		return &TerminalResponse{
 			Success: false,
@@ -1007,7 +956,7 @@ func (tm *TerminalManager) Chmod() *TerminalResponse {
 		}
 	}
 
-	err = server.Mysql.Save(&user).Error
+	err = tm.DB.Save(&user).Error
 	if err != nil {
 		return &TerminalResponse{
 			Success: false,
@@ -1076,9 +1025,6 @@ func (tm *TerminalManager) Reboot() *TerminalResponse {
 			time.Sleep(time.Second)
 			itime--
 		}
-
-		server := Backend.GetBackendServer()
-		server.Restart()
 	}()
 
 	return &TerminalResponse{
@@ -1118,9 +1064,6 @@ func (tm *TerminalManager) Shutdown() *TerminalResponse {
 			time.Sleep(time.Second)
 			itime--
 		}
-
-		server := Backend.GetBackendServer()
-		server.Shutdown()
 	}()
 
 	return &TerminalResponse{

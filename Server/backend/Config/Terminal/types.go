@@ -363,9 +363,9 @@ var (
 
 	THD_log = map[string]interface{}{
 		"log":      "Show Backend logs",
-		"format1": "log ([object]) ([type]/[level])",
+		"format1":  "log ([object]) ([type]/[level])",
 		"example1": "log Backend error",
-		"format2": "log [beginTime] [endTime] ([type]/[level])",
+		"format2":  "log [beginTime] [endTime] ([type]/[level])",
 		"example2": "log 2005-12-29-21:00:00 2005-12-29-22:00:00 200",
 	}
 

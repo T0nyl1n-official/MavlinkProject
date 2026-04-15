@@ -1,6 +1,7 @@
 package BoardsRoutes
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -9,7 +10,8 @@ import (
 	boardHandler "MavlinkProject/Server/backend/Handler/Boards"
 	Board "MavlinkProject/Server/backend/Shared/Boards"
 
-	JwtMiddleware "MavlinkProject/Server/backend/Middles"
+	MiddleWare "MavlinkProject/Server/backend/Middles"
+	UserAgentMiddleware "MavlinkProject/Server/backend/Middles"
 	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
 	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 )
@@ -20,6 +22,24 @@ type BoardMessageRequest struct {
 	Command   string                 `json:"command"`
 	Data      map[string]interface{} `json:"data"`
 	Attribute string                 `json:"attribute"`
+}
+
+type BoardSendMessageRequest struct {
+	MessageID   string             `json:"message_id"`
+	MessageTime int64              `json:"message_time"`
+	Message     MessageDataRequest `json:"message"`
+	FromID      string             `json:"from_id"`
+	FromType    string             `json:"from_type"`
+	ToID        string             `json:"to_id"`
+	ToType      string             `json:"to_type"`
+}
+
+type MessageDataRequest struct {
+	MessageType string                 `json:"message_type"`
+	Attribute   string                 `json:"attribute"`
+	Connection  string                 `json:"connection"`
+	Command     string                 `json:"command"`
+	Data        map[string]interface{} `json:"data"`
 }
 
 type BoardCreateRequest struct {
@@ -42,7 +62,7 @@ type BoardResponse struct {
 
 func SetupBoardRoutes(router *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager *Jwt.RedisTokenManager) {
 	board := router.Group("/api/board")
-	board.Use(JwtMiddleware.JwtAuthMiddleWareWithRedis(jwtManager, tokenManager, nil))
+	board.Use(MiddleWare.JwtAuthMiddleWareWithRedis(jwtManager, tokenManager, nil))
 	{
 		board.POST("/create", createBoardServer)
 		board.POST("/start", startBoardServer)
@@ -53,6 +73,13 @@ func SetupBoardRoutes(router *gin.Engine, jwtManager *jwtUtils.JWTManager, token
 		board.GET("/info/:boardID", getBoardInfo)
 		board.POST("/auto-forward", enableAutoForward)
 		board.DELETE("/delete/:boardID", deleteBoardServer)
+	}
+
+	boardAccess := router.Group("/api/board")
+	boardAccess.Use(MiddleWare.DeviceJwtAuthMiddleware())
+	boardAccess.Use(UserAgentMiddleware.UserAgentCheckMiddleware())
+	{
+		boardAccess.POST("/send-message", sendMessageFromBoard)
 	}
 }
 
@@ -362,4 +389,56 @@ func randomString(n int) string {
 		time.Sleep(time.Nanosecond)
 	}
 	return string(b)
+}
+
+func sendMessageFromBoard(c *gin.Context) {
+	var req BoardSendMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, BoardResponse{
+			Success: false,
+			Error:   "Invalid request body: " + err.Error(),
+		})
+		return
+	}
+
+	if req.MessageID == "" {
+		req.MessageID = generateMessageID()
+	}
+	if req.MessageTime == 0 {
+		req.MessageTime = time.Now().Unix()
+	}
+
+	msg := &Board.BoardMessage{
+		MessageID:   req.MessageID,
+		MessageTime: time.Unix(req.MessageTime, 0),
+		Message: Board.Message{
+			MessageType: req.Message.MessageType,
+			Attribute:   Board.MessageAttribute(req.Message.Attribute),
+			Connection:  req.Message.Connection,
+			Command:     req.Message.Command,
+			Data:        req.Message.Data,
+		},
+		FromID:   req.FromID,
+		FromType: req.FromType,
+		ToID:     req.ToID,
+		ToType:   req.ToType,
+	}
+
+	log.Printf("[BoardRoutes] Received message from board: from=%s(%s) to=%s(%s) type=%s attr=%s cmd=%s",
+		req.FromID, req.FromType, req.ToID, req.ToType, req.Message.MessageType, req.Message.Attribute, req.Message.Command)
+
+	manager := boardHandler.GetBoardManager()
+
+	if err := manager.SendMessageToBoard(req.ToID, msg); err != nil {
+		c.JSON(http.StatusInternalServerError, BoardResponse{
+			Success: false,
+			Error:   "Failed to send message: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, BoardResponse{
+		Success: true,
+		Message: "Message sent successfully",
+	})
 }

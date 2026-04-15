@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -22,17 +23,30 @@ import (
 	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 	Listening "MavlinkProject/Server/backend/Middles/Listening"
 	Routes "MavlinkProject/Server/backend/Routes"
+	Distribute "MavlinkProject/Server/backend/Utils/CentralBoard/Distribute"
 	Verification "MavlinkProject/Server/backend/Utils/Verification"
 	WarningHandler "MavlinkProject/Server/backend/Utils/WarningHandle"
 )
 
 var (
-	settingPath   = "config/Setting.yaml"
-	backendServer *BackendServer
+	settingPath         = "config/Setting.yaml"
+	backendServer       *BackendServer
+	GlobalBackendServer *BackendServer
 )
 
 func GetBackendServer() *BackendServer {
+	if backendServer != nil {
+		GlobalBackendServer = backendServer
+	}
 	return backendServer
+}
+
+func GetGlobalBackendServer() *BackendServer {
+	return GlobalBackendServer
+}
+
+func GetDroneSearch() *Distribute.DroneSearch {
+	return Distribute.GetDroneSearch()
 }
 
 type BackendServer struct {
@@ -123,7 +137,7 @@ type HTTPSConfig struct {
 
 func (bs *BackendServer) Run(port string, httpsConfig HTTPSConfig) {
 	bs.StartTime = time.Now()
-	Routes.InitAllRoutes(bs.Router, bs.JWTManager, bs.TokenManager, bs.Mysql, bs.SettingManager)
+	Routes.InitAllRoutes(bs.Router, bs.JWTManager, bs.TokenManager, bs.Mysql, bs.SettingManager, bs)
 
 	if httpsConfig.Enabled {
 		addr := "0.0.0.0:" + httpsConfig.Port
@@ -187,8 +201,46 @@ func (bs *BackendServer) Restart() {
 }
 
 func (bs *BackendServer) Start(addr, port string, httpsConfig HTTPSConfig) *BackendServer {
+	// run Redis-Server-Cli and Cloudflare Tunnel in background process
+	go func() {
+		redisDefaultEXE := exec.Command("redis-server.exe")
+		if err := redisDefaultEXE.Start(); err != nil {
+			log.Printf("[MavlinkProject/Backend] Failed to start redis: %v", err)
+		}
+	}()
+
+	go func() {
+		tunnelCMD := exec.Command("cloudflared", "tunnel", "run")
+		outs, err := tunnelCMD.Output()
+		if err != nil {
+			log.Printf("[MavlinkProject/Backend] Failed to start tunnel: %v, output: %v", err, outs)
+		}
+		log.Printf("[MavlinkProject/Backend] Cloudflare Tunnel started")
+	}()
+
+	// start BackendServer-GIN
 	backendServer = bs
 	bs.New()
+
+	droneSearch := Distribute.GetDroneSearch()
+	dsConfig := bs.SettingManager.GetSetting().DroneSearch
+	droneSearch.UpdateConfig(Distribute.DroneConfig{
+		Timeout:            time.Duration(dsConfig.Timeout) * time.Second,
+		Retry:              dsConfig.Retry,
+		Batch:              dsConfig.Batch,
+		MinBatteryLevel:    dsConfig.MinBattery,
+		MaxDroneDistance:   dsConfig.MaxDistance,
+		StatusCheckTimeout: time.Duration(dsConfig.StatusCheckInterval) * time.Second,
+	})
+	log.Printf("[DroneSearch] Config loaded: timeout=%ds, retry=%d, batch=%d, min_battery=%.1f, max_distance=%.1f",
+		dsConfig.Timeout, dsConfig.Retry, dsConfig.Batch, dsConfig.MinBattery, dsConfig.MaxDistance)
+
+	if err := droneSearch.Start(); err != nil {
+		log.Printf("[Backend] Failed to start DroneSearch: %v", err)
+	} else {
+		log.Printf("[Backend] DroneSearch started")
+	}
+
 	bs.Run(port, httpsConfig)
 	log.Printf("Backend server starting...")
 	return bs

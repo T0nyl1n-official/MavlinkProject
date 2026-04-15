@@ -174,6 +174,7 @@ type Setting struct {
 	Verification  VerificationConfig  `yaml:"verification"`
 	ErrorListener ErrorListenerConfig `yaml:"error_listener"`
 	Board         BoardConfig         `yaml:"board"`
+	DroneSearch   DroneSearchConfig   `yaml:"drone_search"`
 }
 
 type DatabaseConfig struct {
@@ -306,4 +307,13 @@ type BoardFRPConfig struct {
 	ReadTimeout      int                   `yaml:"read_timeout"`
 	MaxRetryAttempts int                   `yaml:"max_retry_attempts"`
 	CentralServers   []CentralServerConfig `yaml:"central_servers"`
+}
+
+type DroneSearchConfig struct {
+	Timeout             int     `yaml:"timeout"`
+	Retry               int     `yaml:"retry"`
+	Batch               int     `yaml:"batch"`
+	MinBattery          float64 `yaml:"min_battery"`
+	MaxDistance         float64 `yaml:"max_distance"`
+	StatusCheckInterval int     `yaml:"status_check_interval"`
 }
