@@ -41,6 +41,13 @@ type MavlinkCommander struct {
 	pendingAcks map[uint16]chan *CommandAck
 	ackMutex    chan struct{}
 	stopChan    chan bool
+	// 状态存储
+	heartbeatStatus   *common.MessageHeartbeat
+	sysStatus        *common.MessageSysStatus
+	globalPosition   *common.MessageGlobalPositionInt
+	gpsStatus        *common.MessageGpsRawInt
+	batteryStatus    *common.MessageBatteryStatus
+	extendedSysState *common.MessageExtendedSysState
 }
 
 type ReceivedMAVLinkMessage struct {
@@ -148,6 +155,13 @@ func NewMavlinkCommander() *MavlinkCommander {
 		messageChan: make(chan *ReceivedMAVLinkMessage, 100),
 		pendingAcks: make(map[uint16]chan *CommandAck),
 		ackMutex:    make(chan struct{}, 1),
+		// 状态存储初始化
+		heartbeatStatus:   nil,
+		sysStatus:        nil,
+		globalPosition:   nil,
+		gpsStatus:        nil,
+		batteryStatus:    nil,
+		extendedSysState: nil,
 	}
 }
 
