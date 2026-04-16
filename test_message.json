@@ -1,0 +1,38 @@
+{
+  "message_id": "test_001",
+  "message_time": "2026-03-28T22:00:00Z",
+  "message": {
+    "message_type": "Request",
+    "attribute": "Mission",
+    "command": "ExecuteChain",
+    "data": {
+      "progress_chain": {
+        "chain_id": "test_chain_001",
+        "tasks": [
+          {
+            "command": "TakeOff",
+            "data": {
+              "altitude": 20.0
+            }
+          },
+          {
+            "command": "GoTo",
+            "data": {
+              "latitude": 30.123456,
+              "longitude": 114.123456,
+              "altitude": 30.0
+            }
+          },
+          {
+            "command": "Land",
+            "data": {
+              "latitude": 30.123456,
+              "longitude": 114.123456,
+              "altitude": 0.0
+            }
+          }
+        ]
+      }
+    }
+  }
+}

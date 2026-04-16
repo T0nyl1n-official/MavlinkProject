@@ -1,31 +1,35 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
+	"net/http"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
-	Distribute "MavlinkProject_Board/Distribute"
-	MavlinkBoard "MavlinkProject_Board/MavlinkCommand"
-	Board "MavlinkProject_Board/Shared/Boards"
-
-	"github.com/bluenviron/gomavlib/v3/pkg/dialects/common"
+	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/acme/autocert"
 	"gopkg.in/yaml.v3"
+
+	MavlinkBoard "MavlinkProject_Board/MavlinkCommand"
 )
 
 type Config struct {
-	Backend struct {
-		Address string `yaml:"address"`
-		Port    string `yaml:"port"`
-	} `yaml:"backend"`
-	Central struct {
-		LocalPort string `yaml:"local_port"`
-	} `yaml:"central"`
+	Server struct {
+		Port     string `yaml:"port"`
+		CertFile string `yaml:"cert_file"`
+		KeyFile  string `yaml:"key_file"`
+		Domain   string `yaml:"domain"`
+		Email    string `yaml:"email"`
+	} `yaml:"server"`
+	Mavlink struct {
+		SerialPort   string `yaml:"serial_port"`
+		SerialBaud   int    `yaml:"serial_baud"`
+		TargetSystem uint8  `yaml:"target_system"`
+	} `yaml:"mavlink"`
 	Drone struct {
 		Search struct {
 			Interval int `yaml:"interval"`
@@ -34,35 +38,32 @@ type Config struct {
 	} `yaml:"drone"`
 }
 
-var (
-	appConfig *Config
-)
-
-// using for Task.Status
-const (
-	TaskStatusPending   = "pending"
-	TaskStatusRunning   = "running"
-	TaskStatusCompleted = "completed"
-	TaskStatusFailed    = "failed"
-)
-
-// ProgressChain 链式任务结构
-type ProgressChain struct {
-	ChainID       string    `json:"chain_id"`
-	Tasks         []Task    `json:"tasks"`
-	CurrentTask   int       `json:"current_task"`
-	Status        string    `json:"status"` // pending, running, completed, failed
-	StartTime     time.Time `json:"start_time"`
-	EndTime       time.Time `json:"end_time"`
-	AssignedDrone string    `json:"assigned_drone"`
+type CentralServer struct {
+	config      *Config
+	commander   *MavlinkBoard.MavlinkCommander
+	router      *gin.Engine
+	server      *http.Server
+	taskChains  map[string]*ProgressChain
+	activeTasks map[string]*Task
+	mu          sync.RWMutex
+	stopChan    chan bool
+	running     bool
 }
 
-// Task 单个任务结构
+type ProgressChain struct {
+	ChainID     string    `json:"chain_id"`
+	Tasks       []Task    `json:"tasks"`
+	CurrentTask int       `json:"current_task"`
+	Status      string    `json:"status"`
+	StartTime   time.Time `json:"start_time"`
+	EndTime     time.Time `json:"end_time"`
+}
+
 type Task struct {
 	TaskID     string                 `json:"task_id"`
 	Command    string                 `json:"command"`
 	Data       map[string]interface{} `json:"data"`
-	Status     string                 `json:"status"` // pending, running, completed, failed
+	Status     string                 `json:"status"`
 	RetryCount int                    `json:"retry_count"`
 	MaxRetries int                    `json:"max_retries"`
 	Timeout    time.Duration          `json:"timeout"`
@@ -70,83 +71,190 @@ type Task struct {
 	EndTime    time.Time              `json:"end_time"`
 }
 
-// CentralServer 中央调度服务器
-type CentralServer struct {
-	droneSearch  *Distribute.DroneSearch
-	taskChains   map[string]*ProgressChain
-	activeChains map[string]*ProgressChain
-	mu           sync.RWMutex
-	listener     net.Listener
-	address      string
-	port         string
-	localPort    string
-	running      bool
-	stopChan     chan bool
+type MessageRequest struct {
+	MessageID   string    `json:"message_id"`
+	MessageTime time.Time `json:"message_time"`
+	Message     Message   `json:"message"`
+}
+
+type Message struct {
+	MessageType string                 `json:"message_type"`
+	Attribute   string                 `json:"attribute"`
+	Command     string                 `json:"command"`
+	Data        map[string]interface{} `json:"data"`
+}
+
+type MessageResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	ChainID string `json:"chain_id,omitempty"`
 }
 
 const (
-	DefaultPort = "8080"
+	TaskStatusPending   = "pending"
+	TaskStatusRunning   = "running"
+	TaskStatusCompleted = "completed"
+	TaskStatusFailed    = "failed"
+
 	MaxRetries  = 3
 	TaskTimeout = 30 * time.Second
 )
 
-func NewCentralServer(address, port, localPort string) *CentralServer {
-	if port == "" {
-		port = DefaultPort
-	}
-	if localPort == "" {
-		localPort = "8080"
+var appConfig *Config
+
+func loadConfig(configPath string) (*Config, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %v", err)
 	}
 
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %v", err)
+	}
+
+	if cfg.Server.Port == "" {
+		cfg.Server.Port = "8084"
+	}
+	if cfg.Mavlink.SerialBaud == 0 {
+		cfg.Mavlink.SerialBaud = 115200
+	}
+	if cfg.Mavlink.TargetSystem == 0 {
+		cfg.Mavlink.TargetSystem = 1
+	}
+
+	return &cfg, nil
+}
+
+func NewCentralServer(cfg *Config) *CentralServer {
 	return &CentralServer{
-		droneSearch:  Distribute.GetDroneSearch(),
-		taskChains:   make(map[string]*ProgressChain),
-		activeChains: make(map[string]*ProgressChain),
-		address:      address,
-		port:         port,
-		localPort:    localPort,
-		stopChan:     make(chan bool),
+		config:      cfg,
+		commander:   MavlinkBoard.NewMavlinkCommander(),
+		taskChains:  make(map[string]*ProgressChain),
+		activeTasks: make(map[string]*Task),
+		stopChan:    make(chan bool),
+	}
+}
+
+func (cs *CentralServer) initializeMavlink() error {
+	mavConfig := MavlinkBoard.MavlinkConfig{
+		ConnectionType: MavlinkBoard.ConnectionSerial,
+		SerialPort:     cs.config.Mavlink.SerialPort,
+		SerialBaud:     cs.config.Mavlink.SerialBaud,
+		TargetSystem:   cs.config.Mavlink.TargetSystem,
+		HeartbeatRate:  time.Second,
+	}
+
+	cs.commander.Configure(mavConfig)
+
+	if err := cs.commander.Start(); err != nil {
+		return fmt.Errorf("failed to start MAVLink: %v", err)
+	}
+
+	log.Printf("[Central] MAVLink initialized: %s @ %d baud", cs.config.Mavlink.SerialPort, cs.config.Mavlink.SerialBaud)
+	return nil
+}
+
+func (cs *CentralServer) setupRouter() {
+	gin.SetMode(gin.ReleaseMode)
+	cs.router = gin.New()
+	cs.router.Use(gin.Recovery())
+	cs.router.Use(gin.Logger())
+
+	cs.router.GET("/health", cs.healthCheck)
+
+	central := cs.router.Group("/central")
+	{
+		central.POST("/message", cs.handleMessage)
+		central.GET("/status", cs.getStatus)
+		central.GET("/chain/:chain_id", cs.getChainStatus)
 	}
 }
 
 func (cs *CentralServer) Start() error {
 	cs.mu.Lock()
-	defer cs.mu.Unlock()
-
 	if cs.running {
+		cs.mu.Unlock()
 		return fmt.Errorf("CentralServer already running")
 	}
 
-	// 启动 DroneSearch
-	if err := cs.droneSearch.Start(); err != nil {
-		return fmt.Errorf("failed to start DroneSearch: %v", err)
+	if err := cs.initializeMavlink(); err != nil {
+		cs.mu.Unlock()
+		return fmt.Errorf("failed to initialize MAVLink: %v", err)
 	}
 
-	// 监听本地端口 (让 Gin/测试可以连接)
-	listener, err := net.Listen("tcp", ":"+cs.localPort)
-	if err != nil {
-		return fmt.Errorf("failed to start local listener: %v", err)
-	}
-	cs.listener = listener
-	log.Printf("[CentralServer] Listening on port %s", cs.localPort)
+	cs.setupRouter()
 
-	// 连接到 FRP 服务器 (作为客户端)
-	frpConn, err := net.Dial("tcp", cs.address+":"+cs.port)
-	if err != nil {
-		log.Printf("[CentralServer] Warning: failed to connect to FRP server %s:%s: %v", cs.address, cs.port, err)
-	} else {
-		go cs.handleConnection(frpConn)
-		log.Printf("[CentralServer] Connected to FRP server %s:%s", cs.address, cs.port)
+	addr := fmt.Sprintf("0.0.0.0:%s", cs.config.Server.Port)
+	cs.server = &http.Server{
+		Addr:    addr,
+		Handler: cs.router,
 	}
 
 	cs.running = true
+	cs.mu.Unlock()
 
-	// 启动处理循环
-	go cs.acceptConnections()
-	go cs.taskProcessor()
+	go cs.startHTTPServer()
 
-	log.Printf("[CentralServer] Started")
+	log.Printf("[Central] HTTPS Server started on %s", addr)
 	return nil
+}
+
+func (cs *CentralServer) startHTTPServer() {
+	var err error
+
+	if cs.config.Server.Domain != "" {
+		log.Printf("[Central] Using Let's Encrypt for domain: %s", cs.config.Server.Domain)
+
+		certManager := autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(cs.config.Server.Domain),
+			Cache:      autocert.DirCache("letsencrypt-cache"),
+			Email:      cs.config.Server.Email,
+		}
+
+		tlsConfig := &tls.Config{
+			GetCertificate: certManager.GetCertificate,
+		}
+
+		tlsListener, err := tls.Listen("tcp", cs.server.Addr, tlsConfig)
+		if err != nil {
+			log.Printf("[Central] TLS listener error: %v", err)
+			return
+		}
+
+		go func() {
+			err = cs.server.Serve(tlsListener)
+			if err != nil && err != http.ErrServerClosed {
+				log.Printf("[Central] HTTPS Server error: %v", err)
+			}
+		}()
+
+		go func() {
+			httpServer := &http.Server{
+				Addr:    ":80",
+				Handler: certManager.HTTPHandler(nil),
+			}
+			log.Printf("[Central] ACME HTTP server started on :80 for certificate verification")
+			err = httpServer.ListenAndServe()
+			if err != nil && err != http.ErrServerClosed {
+				log.Printf("[Central] ACME HTTP server error: %v", err)
+			}
+		}()
+
+		log.Printf("[Central] HTTPS Server started with Let's Encrypt on %s", cs.server.Addr)
+	} else if cs.config.Server.CertFile != "" && cs.config.Server.KeyFile != "" {
+		err = cs.server.ListenAndServeTLS(cs.config.Server.CertFile, cs.config.Server.KeyFile)
+		if err != nil && err != http.ErrServerClosed {
+			log.Printf("[Central] HTTPS Server error: %v", err)
+		}
+	} else {
+		log.Printf("[Central] Warning: Running without TLS (no cert/key configured)")
+		err = cs.server.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			log.Printf("[Central] HTTP Server error: %v", err)
+		}
+	}
 }
 
 func (cs *CentralServer) Stop() error {
@@ -160,482 +268,297 @@ func (cs *CentralServer) Stop() error {
 	cs.running = false
 	close(cs.stopChan)
 
-	if cs.listener != nil {
-		cs.listener.Close()
+	if cs.commander != nil {
+		cs.commander.Stop()
 	}
 
-	// 停止 DroneSearch
-	cs.droneSearch.Stop()
+	if cs.server != nil {
+		cs.server.Close()
+	}
 
-	log.Printf("[CentralServer] Stopped")
+	log.Printf("[Central] Stopped")
 	return nil
 }
 
-func (cs *CentralServer) acceptConnections() {
-	for {
-		select {
-		case <-cs.stopChan:
-			return
-		default:
-			conn, err := cs.listener.Accept()
-			if err != nil {
-				if cs.running {
-					log.Printf("[CentralServer] Accept error: %v", err)
-				}
-				continue
-			}
-
-			go cs.handleConnection(conn)
-		}
-	}
+func (cs *CentralServer) healthCheck(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "ok",
+		"timestamp": time.Now().Unix(),
+	})
 }
 
-func (cs *CentralServer) handleConnection(conn net.Conn) {
-	defer conn.Close()
-
-	log.Printf("[CentralServer] New connection from %s", conn.RemoteAddr())
-
-	buffer := make([]byte, 4096)
-	for {
-		n, err := conn.Read(buffer)
-		if err != nil {
-			log.Printf("[CentralServer] Read error from %s: %v", conn.RemoteAddr(), err)
-
-			// 检查是否为 EOF 或连接关闭，进行重连
-			if err.Error() == "EOF" ||
-				strings.Contains(err.Error(), "use of closed network connection") {
-				log.Printf("[CentralServer] Connection closed, attempting to reconnect...")
-				cs.reconnectFRP()
-			}
-			return
-		}
-
-		if n > 0 {
-			var boardMsg Board.BoardMessage
-			if err := json.Unmarshal(buffer[:n], &boardMsg); err != nil {
-				log.Printf("[CentralServer] JSON unmarshal error: %v", err)
-				continue
-			}
-
-			// 处理接收到的消息
-			if err := cs.handleBoardMessage(&boardMsg); err != nil {
-				log.Printf("[CentralServer] Handle message error: %v", err)
-			}
-
-			// 发送响应
-			response := map[string]interface{}{
-				"status":  "received",
-				"message": "Task chain received and queued",
-			}
-			respData, _ := json.Marshal(response)
-			conn.Write(respData)
-		}
-	}
-}
-
-func (cs *CentralServer) reconnectFRP() {
-	for {
-		select {
-		case <-cs.stopChan:
-			return
-		case <-time.After(3 * time.Second):
-		}
-
-		log.Printf("[CentralServer] Attempting to reconnect to FRP server %s:%s...", cs.address, cs.port)
-		conn, err := net.Dial("tcp", cs.address+":"+cs.port)
-		if err != nil {
-			log.Printf("[CentralServer] Reconnect failed: %v", err)
-			continue
-		}
-
-		log.Printf("[CentralServer] Successfully reconnected to FRP server")
-		cs.handleConnection(conn)
+func (cs *CentralServer) handleMessage(c *gin.Context) {
+	var req MessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, MessageResponse{
+			Status:  "error",
+			Message: fmt.Sprintf("Invalid request: %v", err),
+		})
 		return
 	}
-}
 
-func (cs *CentralServer) handleBoardMessage(msg *Board.BoardMessage) error {
-	if msg.Message.Data == nil {
-		return fmt.Errorf("message data is nil")
-	}
+	log.Printf("[Central] Received message: type=%s, command=%s", req.Message.MessageType, req.Message.Command)
 
-	// 检查是否为任务链消息
-	chainData, exists := msg.Message.Data["progress_chain"]
+	chainData, exists := req.Message.Data["progress_chain"]
 	if !exists {
-		return fmt.Errorf("no progress_chain found in message data")
+		c.JSON(http.StatusBadRequest, MessageResponse{
+			Status:  "error",
+			Message: "No progress_chain found in message data",
+		})
+		return
 	}
 
-	// 解析任务链
 	chainJSON, err := json.Marshal(chainData)
 	if err != nil {
-		return fmt.Errorf("failed to marshal chain data: %v", err)
+		c.JSON(http.StatusInternalServerError, MessageResponse{
+			Status:  "error",
+			Message: fmt.Sprintf("Failed to marshal chain data: %v", err),
+		})
+		return
 	}
 
 	var progressChain ProgressChain
 	if err := json.Unmarshal(chainJSON, &progressChain); err != nil {
-		return fmt.Errorf("failed to unmarshal progress chain: %v", err)
+		c.JSON(http.StatusInternalServerError, MessageResponse{
+			Status:  "error",
+			Message: fmt.Sprintf("Failed to unmarshal progress chain: %v", err),
+		})
+		return
 	}
 
-	// 设置任务链基本信息
 	if progressChain.ChainID == "" {
 		progressChain.ChainID = fmt.Sprintf("chain_%d", time.Now().UnixNano())
 	}
-	progressChain.Status = "pending"
+	progressChain.Status = TaskStatusPending
 	progressChain.StartTime = time.Now()
 
-	// 初始化任务状态
 	for i := range progressChain.Tasks {
-		progressChain.Tasks[i].TaskID = fmt.Sprintf("task_%d", i)
-		progressChain.Tasks[i].Status = "pending"
+		progressChain.Tasks[i].TaskID = fmt.Sprintf("task_%s_%d", progressChain.ChainID, i)
+		progressChain.Tasks[i].Status = TaskStatusPending
 		progressChain.Tasks[i].MaxRetries = MaxRetries
 		progressChain.Tasks[i].Timeout = TaskTimeout
 	}
 
-	// 保存任务链
 	cs.mu.Lock()
 	cs.taskChains[progressChain.ChainID] = &progressChain
 	cs.mu.Unlock()
 
-	log.Printf("[CentralServer] Received progress chain: %s with %d tasks",
-		progressChain.ChainID, len(progressChain.Tasks))
+	go cs.processChain(&progressChain)
 
-	return nil
+	c.JSON(http.StatusOK, MessageResponse{
+		Status:  "ok",
+		Message: "Task chain received and queued",
+		ChainID: progressChain.ChainID,
+	})
 }
 
-func (cs *CentralServer) taskProcessor() {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
+func (cs *CentralServer) processChain(chain *ProgressChain) {
+	log.Printf("[Central] Processing chain %s with %d tasks", chain.ChainID, len(chain.Tasks))
 
-	for {
-		select {
-		case <-cs.stopChan:
-			return
-		case <-ticker.C:
-			cs.processTaskChains()
-		}
-	}
-}
-
-func (cs *CentralServer) processTaskChains() {
 	cs.mu.Lock()
-	defer cs.mu.Unlock()
+	chain.Status = TaskStatusRunning
+	cs.mu.Unlock()
 
-	// 处理待处理的任务链
-	for chainID, chain := range cs.taskChains {
-		if chain.Status == "pending" {
-			// 分配无人机并开始执行
-			if err := cs.startChainExecution(chain); err != nil {
-				log.Printf("[CentralServer] Failed to start chain %s: %v", chainID, err)
-				chain.Status = "failed"
-				chain.EndTime = time.Now()
-			} else {
-				chain.Status = "running"
-				cs.activeChains[chainID] = chain
-				delete(cs.taskChains, chainID)
-			}
+	for i := range chain.Tasks {
+		task := &chain.Tasks[i]
+		task.Status = TaskStatusRunning
+		task.StartTime = time.Now()
+
+		cs.mu.Lock()
+		cs.activeTasks[task.TaskID] = task
+		cs.mu.Unlock()
+
+		log.Printf("[Central] Executing task %s: command=%s", task.TaskID, task.Command)
+
+		err := cs.executeTask(task)
+
+		cs.mu.Lock()
+		delete(cs.activeTasks, task.TaskID)
+		cs.mu.Unlock()
+
+		if err != nil {
+			log.Printf("[Central] Task %s failed: %v", task.TaskID, err)
+			task.Status = TaskStatusFailed
+
+			cs.mu.Lock()
+			chain.Status = TaskStatusFailed
+			cs.mu.Unlock()
+			return
 		}
+
+		task.Status = TaskStatusCompleted
+		task.EndTime = time.Now()
+		log.Printf("[Central] Task %s completed", task.TaskID)
 	}
 
-	// 处理执行中的任务链
-	for chainID, chain := range cs.activeChains {
-		if chain.Status == "running" {
-			cs.executeCurrentTask(chain)
-		}
+	cs.mu.Lock()
+	chain.Status = TaskStatusCompleted
+	chain.EndTime = time.Now()
+	cs.mu.Unlock()
 
-		// 检查任务链是否完成
-		if chain.Status == "completed" || chain.Status == "failed" {
-			chain.EndTime = time.Now()
-			delete(cs.activeChains, chainID)
-			log.Printf("[CentralServer] Chain %s finished with status: %s", chainID, chain.Status)
-		}
+	log.Printf("[Central] Chain %s completed", chain.ChainID)
+}
+
+func (cs *CentralServer) executeTask(task *Task) error {
+	command := task.Command
+	params := task.Data
+
+	switch command {
+	case "TakeOff", "takeoff":
+		return cs.cmdTakeOff(params)
+	case "Land", "land":
+		return cs.cmdLand(params)
+	case "GoTo", "goto":
+		return cs.cmdGoto(params)
+	case "SetSpeed", "set_speed":
+		return cs.cmdSetSpeed(params)
+	case "SetPosition", "set_position":
+		return cs.cmdSetPosition(params)
+	default:
+		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
-func (cs *CentralServer) startChainExecution(chain *ProgressChain) error {
-	// 查找最佳无人机
-	bestDrone, err := cs.droneSearch.FindBestDrone()
-	if err != nil {
-		return fmt.Errorf("no available drone found: %v", err)
+func (cs *CentralServer) cmdTakeOff(params map[string]interface{}) error {
+	altitude, ok := params["altitude"].(float64)
+	if !ok {
+		altitude = 10.0
 	}
 
-	chain.AssignedDrone = bestDrone.BoardID
-	chain.CurrentTask = 0
+	targetSystem := cs.config.Mavlink.TargetSystem
 
-	// 标记无人机为忙碌状态
-	cs.droneSearch.SetDroneIdle(bestDrone.BoardID, false)
-
-	log.Printf("[CentralServer] Chain %s assigned to drone %s",
-		chain.ChainID, bestDrone.BoardID)
-
-	return nil
+	log.Printf("[Central] MAVLink: TakeOff to %.1f meters", altitude)
+	return cs.commander.CommandLong(
+		targetSystem, 1,
+		MAV_CMD_NAV_TAKEOFF,
+		0,
+		0, 0, 0, 0, 0, 0,
+		float32(altitude),
+	)
 }
 
-func (cs *CentralServer) executeCurrentTask(chain *ProgressChain) {
-	if chain.CurrentTask >= len(chain.Tasks) {
-		chain.Status = "completed"
-		// 释放无人机
-		cs.droneSearch.SetDroneIdle(chain.AssignedDrone, true)
+func (cs *CentralServer) cmdLand(params map[string]interface{}) error {
+	lat, _ := params["latitude"].(float64)
+	lon, _ := params["longitude"].(float64)
+	alt, _ := params["altitude"].(float64)
+
+	targetSystem := cs.config.Mavlink.TargetSystem
+
+	log.Printf("[Central] MAVLink: Land at (%.6f, %.6f, %.1f)", lat, lon, alt)
+	return cs.commander.CommandLong(
+		targetSystem, 1,
+		MAV_CMD_NAV_LAND,
+		0,
+		0, 0, 0, 0,
+		float32(lat), float32(lon),
+		float32(alt),
+	)
+}
+
+func (cs *CentralServer) cmdGoto(params map[string]interface{}) error {
+	lat, ok := params["latitude"].(float64)
+	if !ok {
+		return fmt.Errorf("missing latitude")
+	}
+	lon, ok := params["longitude"].(float64)
+	if !ok {
+		return fmt.Errorf("missing longitude")
+	}
+	alt, _ := params["altitude"].(float64)
+
+	targetSystem := cs.config.Mavlink.TargetSystem
+
+	log.Printf("[Central] MAVLink: GoTo (%.6f, %.6f, %.1f)", lat, lon, alt)
+	return cs.commander.CommandLong(
+		targetSystem, 1,
+		MAV_CMD_NAV_WAYPOINT,
+		0,
+		0, 0, 0, 0,
+		float32(lat), float32(lon),
+		float32(alt),
+	)
+}
+
+func (cs *CentralServer) cmdSetSpeed(params map[string]interface{}) error {
+	speed, ok := params["speed"].(float64)
+	if !ok {
+		return fmt.Errorf("missing speed")
+	}
+	speedType, _ := params["type"].(float64)
+
+	targetSystem := cs.config.Mavlink.TargetSystem
+
+	log.Printf("[Central] MAVLink: SetSpeed %.1f (type %.0f)", speed, speedType)
+	return cs.commander.CommandLong(
+		targetSystem, 1,
+		MAV_CMD_DO_CHANGE_SPEED,
+		0,
+		float32(speedType), float32(speed), 0, 0, 0, 0, 0,
+	)
+}
+
+func (cs *CentralServer) cmdSetPosition(params map[string]interface{}) error {
+	lat, ok := params["latitude"].(float64)
+	if !ok {
+		return fmt.Errorf("missing latitude")
+	}
+	lon, ok := params["longitude"].(float64)
+	if !ok {
+		return fmt.Errorf("missing longitude")
+	}
+	alt, _ := params["altitude"].(float64)
+
+	targetSystem := cs.config.Mavlink.TargetSystem
+
+	log.Printf("[Central] MAVLink: SetPosition (%.6f, %.6f, %.1f)", lat, lon, alt)
+	return cs.commander.CommandLong(
+		targetSystem, 1,
+		MAV_CMD_DO_SET_MODE,
+		0,
+		float32(MAV_FRAME_GLOBAL_RELATIVE_ALT), 0, 0, 0,
+		float32(lat), float32(lon),
+		float32(alt),
+	)
+}
+
+func (cs *CentralServer) getStatus(c *gin.Context) {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":        "running",
+		"active_chains": len(cs.taskChains),
+		"active_tasks":  len(cs.activeTasks),
+		"timestamp":     time.Now().Unix(),
+	})
+}
+
+func (cs *CentralServer) getChainStatus(c *gin.Context) {
+	chainID := c.Param("chain_id")
+
+	cs.mu.RLock()
+	chain, exists := cs.taskChains[chainID]
+	cs.mu.RUnlock()
+
+	if !exists {
+		c.JSON(http.StatusNotFound, MessageResponse{
+			Status:  "error",
+			Message: fmt.Sprintf("Chain %s not found", chainID),
+		})
 		return
 	}
 
-	task := &chain.Tasks[chain.CurrentTask]
-
-	// 检查任务状态
-	switch task.Status {
-	case "pending":
-		// 开始执行任务
-		task.StartTime = time.Now()
-		task.Status = "running"
-
-		if err := cs.executeTask(chain.AssignedDrone, task); err != nil {
-			log.Printf("[CentralServer] Task %s execution failed: %v", task.TaskID, err)
-			task.Status = "failed"
-			task.EndTime = time.Now()
-
-			// 重试逻辑
-			if task.RetryCount < task.MaxRetries {
-				task.RetryCount++
-				task.Status = "pending"
-				log.Printf("[CentralServer] Retrying task %s (attempt %d)",
-					task.TaskID, task.RetryCount)
-			} else {
-				chain.Status = "failed"
-				cs.droneSearch.SetDroneIdle(chain.AssignedDrone, true)
-			}
-		}
-
-	case "running":
-		// 检查任务超时
-		if time.Since(task.StartTime) > task.Timeout {
-			log.Printf("[CentralServer] Task %s timeout", task.TaskID)
-			task.Status = "failed"
-			task.EndTime = time.Now()
-
-			if task.RetryCount < task.MaxRetries {
-				task.RetryCount++
-				task.Status = "pending"
-			} else {
-				chain.Status = "failed"
-				cs.droneSearch.SetDroneIdle(chain.AssignedDrone, true)
-			}
-		}
-
-	case "completed":
-		// 任务完成，移动到下一个任务
-		chain.CurrentTask++
-		if chain.CurrentTask >= len(chain.Tasks) {
-			chain.Status = "completed"
-			cs.droneSearch.SetDroneIdle(chain.AssignedDrone, true)
-		}
-
-	case "failed":
-		// 任务失败，处理重试或失败链
-		if task.RetryCount < task.MaxRetries {
-			task.RetryCount++
-			task.Status = "pending"
-		} else {
-			chain.Status = "failed"
-			cs.droneSearch.SetDroneIdle(chain.AssignedDrone, true)
-		}
-	}
+	c.JSON(http.StatusOK, chain)
 }
 
-func (cs *CentralServer) executeTask(droneID string, task *Task) error {
-	commander, err := cs.droneSearch.GetDroneCommander(droneID)
-	if err != nil {
-		return fmt.Errorf("failed to get drone commander: %v", err)
-	}
-
-	// 根据命令类型执行相应操作
-	switch task.Command {
-	case "TakeOff":
-		return cs.executeTakeOff(commander, droneID, task.Data)
-	case "Land":
-		return cs.executeLand(commander, droneID, task.Data)
-	case "GoTo":
-		return cs.executeGoTo(commander, droneID, task.Data)
-	case "SetSpeed":
-		return cs.executeSetSpeed(commander, droneID, task.Data)
-	case "TakePhoto":
-		return cs.executeTakePhoto(commander, droneID, task.Data)
-	case "SetPosition":
-		return cs.executeSetPosition(commander, droneID, task.Data)
-	default:
-		return fmt.Errorf("unknown command: %s", task.Command)
-	}
-}
-
-// 具体的命令执行函数
-func (cs *CentralServer) executeTakeOff(commander *MavlinkBoard.MavlinkCommander, droneID string, data map[string]interface{}) error {
-	drone, err := cs.droneSearch.GetDroneStatus(droneID)
-	if err != nil {
-		return err
-	}
-
-	altitude := 10.0
-	if alt, ok := data["altitude"].(float64); ok {
-		altitude = alt
-	}
-
-	takeoffMsg := &common.MessageCommandLong{
-		TargetSystem:    drone.SystemID,
-		TargetComponent: drone.ComponentID,
-		Command:         common.MAV_CMD_NAV_TAKEOFF,
-		Param7:          float32(altitude),
-	}
-
-	return commander.WriteMessage(takeoffMsg)
-}
-
-func (cs *CentralServer) executeLand(commander *MavlinkBoard.MavlinkCommander, droneID string, data map[string]interface{}) error {
-	drone, err := cs.droneSearch.GetDroneStatus(droneID)
-	if err != nil {
-		return err
-	}
-
-	landMsg := &common.MessageCommandLong{
-		TargetSystem:    drone.SystemID,
-		TargetComponent: drone.ComponentID,
-		Command:         common.MAV_CMD_NAV_LAND,
-	}
-
-	return commander.WriteMessage(landMsg)
-}
-
-func (cs *CentralServer) executeGoTo(commander *MavlinkBoard.MavlinkCommander, droneID string, data map[string]interface{}) error {
-	drone, err := cs.droneSearch.GetDroneStatus(droneID)
-	if err != nil {
-		return err
-	}
-
-	lat, _ := data["latitude"].(float64)
-	lon, _ := data["longitude"].(float64)
-	alt, _ := data["altitude"].(float64)
-
-	gotoMsg := &common.MessageCommandLong{
-		TargetSystem:    drone.SystemID,
-		TargetComponent: drone.ComponentID,
-		Command:         common.MAV_CMD_NAV_WAYPOINT,
-		Param5:          float32(lat),
-		Param6:          float32(lon),
-		Param7:          float32(alt),
-	}
-
-	return commander.WriteMessage(gotoMsg)
-}
-
-func (cs *CentralServer) executeSetSpeed(commander *MavlinkBoard.MavlinkCommander, droneID string, data map[string]interface{}) error {
-	drone, err := cs.droneSearch.GetDroneStatus(droneID)
-	if err != nil {
-		return err
-	}
-
-	speed, _ := data["speed"].(float64)
-
-	speedMsg := &common.MessageCommandLong{
-		TargetSystem:    drone.SystemID,
-		TargetComponent: drone.ComponentID,
-		Command:         common.MAV_CMD_DO_CHANGE_SPEED,
-		Param2:          float32(speed),
-	}
-
-	return commander.WriteMessage(speedMsg)
-}
-
-func (cs *CentralServer) executeTakePhoto(commander *MavlinkBoard.MavlinkCommander, droneID string, data map[string]interface{}) error {
-	drone, err := cs.droneSearch.GetDroneStatus(droneID)
-	if err != nil {
-		return err
-	}
-
-	photoMsg := &common.MessageCommandLong{
-		TargetSystem:    drone.SystemID,
-		TargetComponent: drone.ComponentID,
-		Command:         common.MAV_CMD_IMAGE_START_CAPTURE,
-	}
-
-	return commander.WriteMessage(photoMsg)
-}
-
-func (cs *CentralServer) executeSetPosition(commander *MavlinkBoard.MavlinkCommander, droneID string, data map[string]interface{}) error {
-	drone, err := cs.droneSearch.GetDroneStatus(droneID)
-	if err != nil {
-		return err
-	}
-
-	lat, _ := data["latitude"].(float64)
-	lon, _ := data["longitude"].(float64)
-	alt, _ := data["altitude"].(float64)
-
-	positionMsg := &common.MessageSetPositionTargetGlobalInt{
-		TargetSystem:    drone.SystemID,
-		TargetComponent: drone.ComponentID,
-		LatInt:          int32(lat * 1e7),
-		LonInt:          int32(lon * 1e7),
-		Alt:             float32(alt),
-		CoordinateFrame: common.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-	}
-
-	return commander.WriteMessage(positionMsg)
-}
-
-// 获取任务链状态
-func (cs *CentralServer) GetChainStatus(chainID string) (*ProgressChain, error) {
-	cs.mu.RLock()
-	defer cs.mu.RUnlock()
-
-	chain, exists := cs.taskChains[chainID]
-	if exists {
-		return chain, nil
-	}
-
-	chain, exists = cs.activeChains[chainID]
-	if exists {
-		return chain, nil
-	}
-
-	return nil, fmt.Errorf("chain %s not found", chainID)
-}
-
-// 获取所有任务链状态
-func (cs *CentralServer) GetAllChains() []*ProgressChain {
-	cs.mu.RLock()
-	defer cs.mu.RUnlock()
-
-	chains := make([]*ProgressChain, 0)
-	for _, chain := range cs.taskChains {
-		chains = append(chains, chain)
-	}
-	for _, chain := range cs.activeChains {
-		chains = append(chains, chain)
-	}
-
-	return chains
-}
-
-func loadConfig(configPath string) (*Config, error) {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
-	}
-
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %v", err)
-	}
-
-	if cfg.Backend.Address == "" {
-		cfg.Backend.Address = "frp-any.com"
-	}
-	if cfg.Backend.Port == "" {
-		cfg.Backend.Port = "31154"
-	}
-	if cfg.Central.LocalPort == "" {
-		cfg.Central.LocalPort = "8081"
-	}
-
-	return &cfg, nil
-}
+const (
+	MAV_CMD_NAV_TAKEOFF           = 22
+	MAV_CMD_NAV_LAND              = 21
+	MAV_CMD_NAV_WAYPOINT          = 16
+	MAV_CMD_DO_CHANGE_SPEED       = 178
+	MAV_CMD_DO_SET_MODE           = 176
+	MAV_FRAME_GLOBAL_RELATIVE_ALT = 3
+)
 
 func main() {
 	configPath := "config.yaml"
@@ -645,28 +568,21 @@ func main() {
 
 	cfg, err := loadConfig(configPath)
 	if err != nil {
-		log.Printf("Warning: failed to load config: %v, using defaults", err)
-		cfg = &Config{}
-		cfg.Backend.Address = "frp-any.com"
-		cfg.Backend.Port = "31154"
-		cfg.Central.LocalPort = "8081"
+		log.Fatalf("Failed to load config: %v", err)
 	}
 	appConfig = cfg
 
-	central := NewCentralServer(cfg.Backend.Address, cfg.Backend.Port, cfg.Central.LocalPort)
+	central := NewCentralServer(cfg)
 
-	// 启动服务器
 	if err := central.Start(); err != nil {
 		log.Fatalf("Failed to start CentralServer: %v", err)
 	}
 
-	log.Printf("Central调度系统已启动, 本地监听端口 %s, FRP目标 %s:%s", cfg.Central.LocalPort, cfg.Backend.Address, cfg.Backend.Port)
-	log.Printf("等待接收ProgressChain任务链...")
+	log.Printf("[Central] Central调度系统已启动")
+	log.Printf("[Central] 等待接收任务链...")
 
-	// 等待中断信号
 	<-central.stopChan
 
-	log.Printf("Central调度系统正在关闭...")
+	log.Printf("[Central] Central调度系统正在关闭...")
 	central.Stop()
-	log.Printf("Central调度系统已关闭")
 }

@@ -1,15 +1,23 @@
-backend:
-  # FRP 服务器地址
-  address: "frp-any.com"
-  # FRP 服务器端口
-  port: "31154"
-  
-central:
-  # 本地监听端口 (供 Gin/测试连接)
-  local_port: "8081"
-  
+server:
+  # HTTPS 服务器监听端口
+  port: "8084"
+  # Let's Encrypt 域名 (留空则不使用自动证书)
+  domain: "deeppluse.dpdns.org"
+  # Let's Encrypt 通知邮箱
+  email: "2635085763@qq.com"
+  # SSL 证书路径 (手动指定证书时使用)
+  cert_file: "httpsConfig/cert.pem"
+  key_file: "httpsConfig/key.pem"
+
+mavlink:
+  # 串口端口 (连接到 FX4 飞控)
+  serial_port: "/dev/ttyUSB0"
+  # 串口波特率
+  serial_baud: 115200
+  # 目标飞控 System ID
+  target_system: 1
+
 drone:
-  # 无人机搜索配置
   search:
     interval: 5
     timeout: 10
