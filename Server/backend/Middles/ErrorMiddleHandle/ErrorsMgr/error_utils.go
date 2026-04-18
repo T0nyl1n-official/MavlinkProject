@@ -168,10 +168,6 @@ func ValidatePassword(password string) *ErrorDetail {
 		return GlobalCreateValidationError("password", "密码必须包含数字")
 	}
 
-	if !containsSpecialChar(password) {
-		return GlobalCreateValidationError("password", "密码必须包含特殊字符")
-	}
-
 	return nil
 }
 
