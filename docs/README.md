@@ -7,6 +7,7 @@ Central Board 是 MavlinkProject 的中央控制板，负责：
 - 将任务转译为 MAVLink 命令并发送给飞控
 - 与后端 API 进行安全的 HTTPS 通信
 - 提供 RESTful API 接口
+- 管理和调度无人机资源
 
 ## 技术栈
 
@@ -71,6 +72,7 @@ cp config.yaml config.yaml.local
 - `server.port`: 服务器端口
 - `mavlink.serial_port`: 飞控串口
 - `backend.token`: 后端认证令牌
+- `drone.search.*`: 无人机搜索相关阈值
 
 ### 3. 编译
 
@@ -115,11 +117,60 @@ go build -o CentralServer.exe .
   - `orbit` - 盘旋巡逻
   - 等其他命令
 
+### 🔍 无人机搜索
+- 基于电池电量和可用性的无人机选择
+- 动态阈值配置（最小电量、最大距离等）
+- 任务分配和状态管理
+
+### ⚙️ 灵活配置
+- 所有阈值和参数均可通过 config.yaml 配置
+- 支持无人机搜索参数自定义：
+  - 最小电池电量阈值
+  - 最大无人机距离阈值
+  - 状态检查超时时间
+  - 状态更新间隔
+  - 消息通道大小
+  - 评分权重
+
 ### 📊 API 接口
 - `/health` - 健康检查
 - `/api/board/message` - 接收任务链
 - `/api/board/status` - 获取板卡状态
 - `/api/chain/*` - 任务链管理
+
+## 配置详解
+
+### 无人机搜索配置 (drone.search)
+
+所有参数都在 `config.yaml` 中的 `drone.search` 部分配置：
+
+```yaml
+drone:
+  search:
+    # 最小电池电量阈值（百分比）
+    # 低于此电量的无人机将被排除
+    min_battery_level: 20.0
+
+    # 最大无人机距离阈值（米）
+    # 超过此距离的无人机将被排除
+    max_drone_distance: 1000.0
+
+    # 状态检查超时时间（秒）
+    # 超过此时间未更新的无人机将被标记为不可用
+    status_check_timeout: 5
+
+    # 状态更新间隔（秒）
+    # 定期检查无人机状态的间隔
+    status_update_interval: 2
+
+    # 消息通道大小
+    # 无人机消息通道的缓冲区大小
+    message_chan_size: 1000
+
+    # 评分权重
+    # 计算最佳无人机时的电池电量权重
+    score_weight: 10.0
+```
 
 ## 测试
 
@@ -181,7 +232,17 @@ go test -v ./tests/integration/
    - 验证认证令牌
    - 查看后端 API 状态
 
+4. **无人机搜索问题**：
+   - 检查 `drone.search` 配置是否正确
+   - 确保无人机状态正常上报
+   - 查看无人机超时设置是否合理
+
 ## 版本历史
+
+### v1.1.0
+- ✅ 无人机搜索模块参数配置化
+- ✅ 所有阈值和参数可通过 config.yaml 配置
+- ✅ 文档更新
 
 ### v1.0.0
 - ✅ HTTPS 服务配置
