@@ -1550,14 +1550,42 @@ GET https://api.deeppluse.dpdns.org/api/sensor/status
 │       │                                    ▼                      │
 │       │                          GenerateChainAndSendToCentral   │
 │       │                                    │                      │
-│       │                                    ▼ (FRP)               │
+│       │                                    ▼ (HTTPS)             │
 │       │                              Central 服务器               │
+│       │                           (central.deeppluse.dpdns.org)  │
 │       │                                                         │
 │       └─── NO ──→ BoardConn 内部处理 (messageChan)                │
 │                       │                                          │
 │                       ▼                                          │
 │                BoardHandler (保留，暂不使用)                       │
 └─────────────────────────────────────────────────────────────────┘
+
+### 后端向 Central 发送消息 (HTTPS)
+
+当后端需要向 Central 服务器发送任务链或控制指令时，使用 HTTPS 协议：
+
+```
+后端 Backend
+    │
+    ▼ (HTTPS POST /central/message)
+Central 服务器 (central.deeppluse.dpdns.org)
+    │
+    ▼
+任务链执行 / 指令处理
+```
+
+**消息结构**:
+```go
+type BoardMessage struct {
+    MessageID   string    `json:"message_id"`
+    MessageTime time.Time `json:"message_time"`
+    Message     Message   `json:"message"`
+    FromID      string    `json:"from_id"`
+    FromType    string    `json:"from_type"`
+    ToID        string    `json:"to_id"`
+    ToType      string    `json:"to_type"`
+}
+```
 ```
 
 ### 消息类型判断
@@ -1605,8 +1633,10 @@ GET https://api.deeppluse.dpdns.org/api/sensor/status
 8. Sensor 消息走 SensorAlertHandler 生成任务链
 9. Board 消息暂由 BoardConn 内部处理 (BoardHandler 保留但未启用)
 10. 传感器接口为公共接口，无需认证，适合 ESP32 等设备直接调用
+11. 后端向 Central 发送消息使用 HTTPS 协议，地址: `https://central.deeppluse.dpdns.org/central/message`
+12. 设备认证使用独立系统，错误提示友好，不会触发封禁
 
 ---
 
-*文档版本: 3.0*
+*文档版本: 3.1*
 *最后更新: 2026-04-15*
