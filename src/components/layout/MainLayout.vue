@@ -12,7 +12,11 @@ import Header from './Header.vue'
     <div class="main-content">
       <Header />
       <div class="content-area">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <transition name="page-fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </div>
     </div>
     
@@ -68,6 +72,7 @@ import Header from './Header.vue'
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .content-area {

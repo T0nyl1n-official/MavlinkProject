@@ -1,6 +1,130 @@
+<template>
+  <div class="board-manager-container page-transition">
+    <h1 class="gradient-title">📱 板子管理</h1>
+
+    <div class="board-card">
+      <div class="card-header">
+        <h2>板子列表</h2>
+        <div class="card-actions">
+          <div class="connection-status">
+            已连接：<span class="status-number">{{ connectedCount }}</span> / {{ boards.length }}
+          </div>
+          <el-button size="small" @click="createDialogVisible = true" type="primary">
+            <el-icon><Plus /></el-icon>
+            创建板子
+          </el-button>
+          <el-button size="small" @click="sendMessageDialogVisible = true" type="success">
+            <el-icon><ChatLineRound /></el-icon>
+            发送消息
+          </el-button>
+          <el-button size="small" @click="loadBoards">
+            <el-icon><Refresh /></el-icon>
+            刷新
+          </el-button>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <el-table :data="boards" style="width: 100%" row-key="board_id" v-loading="loading">
+          <el-table-column prop="board_id" label="板子ID" width="120" />
+          <el-table-column prop="board_name" label="名称" min-width="150" />
+          <el-table-column prop="address" label="IP" width="120" />
+          <el-table-column prop="port" label="端口" width="80" />
+          <el-table-column prop="connection" label="连接类型" width="100" />
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.is_connected ? 'success' : 'info'">
+                {{ row.is_connected ? '已连接' : '未连接' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="200">
+            <template #default="{ row }">
+              <el-button size="small" @click="sendCommand(row.board_id, 'TakePhoto')">拍照</el-button>
+              <el-button size="small" @click="sendCommand(row.board_id, 'TakeOff')">起飞</el-button>
+              <el-button size="small" type="danger" @click="handleDelete(row.board_id)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </div>
+
+    <!-- 创建板子对话框 -->
+    <el-dialog
+      v-model="createDialogVisible"
+      title="创建板子"
+      width="500px"
+    >
+      <el-form :model="createForm" :rules="createRules">
+        <el-form-item label="板子ID" prop="board_id">
+          <el-input v-model="createForm.board_id" placeholder="请输入板子ID" />
+        </el-form-item>
+        <el-form-item label="板子名称" prop="board_name">
+          <el-input v-model="createForm.board_name" placeholder="请输入板子名称" />
+        </el-form-item>
+        <el-form-item label="板子类型" prop="board_type">
+          <el-select v-model="createForm.board_type" placeholder="请选择板子类型">
+            <el-option label="Drone" value="Drone" />
+            <el-option label="Sensor" value="Sensor" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="连接类型" prop="connection">
+          <el-select v-model="createForm.connection" placeholder="请选择连接类型">
+            <el-option label="TCP" value="TCP" />
+            <el-option label="UDP" value="UDP" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="地址" prop="address">
+          <el-input v-model="createForm.address" placeholder="请输入地址" />
+        </el-form-item>
+        <el-form-item label="端口" prop="port">
+          <el-input v-model="createForm.port" placeholder="请输入端口" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="createDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleCreate">创建</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 发送消息对话框 -->
+    <el-dialog
+      v-model="sendMessageDialogVisible"
+      title="发送消息"
+      width="500px"
+    >
+      <el-form :model="sendMessageForm" :rules="sendMessageRules">
+        <el-form-item label="目标板子" prop="to_id">
+          <el-select v-model="sendMessageForm.to_id" placeholder="请选择板子">
+            <el-option v-for="board in boards" :key="board.board_id" :label="board.board_name || board.board_id" :value="board.board_id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="命令" prop="command">
+          <el-input v-model="sendMessageForm.command" placeholder="请输入命令" />
+        </el-form-item>
+        <el-form-item label="属性" prop="attribute">
+          <el-input v-model="sendMessageForm.attribute" placeholder="请输入属性" />
+        </el-form-item>
+        <el-form-item label="数据">
+          <el-input v-model="sendMessageForm.dataJson" placeholder="请输入数据（JSON格式）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="sendMessageDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleSendMessage">发送</el-button>
+        </span>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { ElMessage, ElMessageBox, ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElButton, ElTable, ElTableColumn, ElTag } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Refresh, ChatLineRound } from '@element-plus/icons-vue'
 import { getBoardListApi, sendMessageApi, createBoardApi, deleteBoardApi } from '@/api/board'
 
 interface BoardRow {
@@ -154,211 +278,193 @@ onMounted(() => {
 })
 </script>
 
-<template>
-  <div class="page">
-    <div class="page-header">
-      <h2 class="title">板子管理</h2>
-      <div class="actions">
-        <div class="stats">
-          已连接：<span class="num">{{ connectedCount }}</span> / {{ boards.length }}
-        </div>
-        <el-button size="small" @click="createDialogVisible = true" type="primary">创建板子</el-button>
-        <el-button size="small" @click="sendMessageDialogVisible = true" type="success">发送消息</el-button>
-        <el-button size="small" @click="loadBoards">刷新</el-button>
-      </div>
-    </div>
-
-    <el-table :data="boards" style="width: 100%" row-key="board_id" v-loading="loading">
-      <el-table-column prop="board_id" label="板子ID" />
-      <el-table-column prop="board_name" label="名称" />
-      <el-table-column prop="address" label="IP" />
-      <el-table-column prop="port" label="端口" />
-      <el-table-column prop="connection" label="连接类型" />
-      <el-table-column label="状态">
-        <template #default="{ row }">
-          <el-tag :type="row.is_connected ? 'success' : 'info'">
-            {{ row.is_connected ? '已连接' : '未连接' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="200">
-        <template #default="{ row }">
-          <el-button size="small" @click="sendCommand(row.board_id, 'TakePhoto')">拍照</el-button>
-          <el-button size="small" @click="sendCommand(row.board_id, 'TakeOff')">起飞</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(row.board_id)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <!-- 创建板子对话框 -->
-    <el-dialog
-      v-model="createDialogVisible"
-      title="创建板子"
-      width="500px"
-    >
-      <el-form :model="createForm" :rules="createRules">
-        <el-form-item label="板子ID" prop="board_id">
-          <el-input v-model="createForm.board_id" placeholder="请输入板子ID" />
-        </el-form-item>
-        <el-form-item label="板子名称" prop="board_name">
-          <el-input v-model="createForm.board_name" placeholder="请输入板子名称" />
-        </el-form-item>
-        <el-form-item label="板子类型" prop="board_type">
-          <el-select v-model="createForm.board_type" placeholder="请选择板子类型">
-            <el-option label="Drone" value="Drone" />
-            <el-option label="Sensor" value="Sensor" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="连接类型" prop="connection">
-          <el-select v-model="createForm.connection" placeholder="请选择连接类型">
-            <el-option label="TCP" value="TCP" />
-            <el-option label="UDP" value="UDP" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="地址" prop="address">
-          <el-input v-model="createForm.address" placeholder="请输入地址" />
-        </el-form-item>
-        <el-form-item label="端口" prop="port">
-          <el-input v-model="createForm.port" placeholder="请输入端口" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="createDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="handleCreate">创建</el-button>
-        </span>
-      </template>
-    </el-dialog>
-
-    <!-- 发送消息对话框 -->
-    <el-dialog
-      v-model="sendMessageDialogVisible"
-      title="发送消息"
-      width="500px"
-    >
-      <el-form :model="sendMessageForm" :rules="sendMessageRules">
-        <el-form-item label="目标板子" prop="to_id">
-          <el-select v-model="sendMessageForm.to_id" placeholder="请选择板子">
-            <el-option v-for="board in boards" :key="board.board_id" :label="board.board_name || board.board_id" :value="board.board_id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="命令" prop="command">
-          <el-input v-model="sendMessageForm.command" placeholder="请输入命令" />
-        </el-form-item>
-        <el-form-item label="属性" prop="attribute">
-          <el-input v-model="sendMessageForm.attribute" placeholder="请输入属性" />
-        </el-form-item>
-        <el-form-item label="数据">
-          <el-input v-model="sendMessageForm.dataJson" placeholder="请输入数据（JSON格式）" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="sendMessageDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="handleSendMessage">发送</el-button>
-        </span>
-      </template>
-    </el-dialog>
-  </div>
-</template>
-
 <style scoped>
-.page {
-  color: rgba(255, 255, 255, 0.92);
+.board-manager-container {
+  padding: 24px;
+  min-height: 100vh;
+  background: var(--bg-body);
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
 }
 
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.title {
-  font-size: 18px;
-  margin: 0;
-  font-weight: 700;
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.stats {
-  color: rgba(255, 255, 255, 0.75);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.num {
-  color: #66aaff;
-  font-weight: 700;
-}
-
-/* 表格样式 */
-:deep(.el-table) {
-  --el-table-bg-color: rgba(255, 255, 255, 0.03);
-  --el-table-border-color: rgba(255, 255, 255, 0.08);
-  --el-table-header-bg-color: rgba(255, 255, 255, 0.05);
-  --el-table-header-text-color: rgba(255, 255, 255, 0.85);
-  --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.05);
-  --el-table-text-color: rgba(255, 255, 255, 0.9);
-}
-
-/* 对话框样式 */
-:deep(.el-dialog) {
-  --el-dialog-bg-color: rgba(21, 21, 30, 0.95);
-  --el-dialog-border-color: rgba(255, 255, 255, 0.12);
-  --el-dialog-header-text-color: rgba(255, 255, 255, 0.9);
-}
-
-:deep(.el-form-item__label) {
-  color: rgba(255, 255, 255, 0.85);
-}
-
-:deep(.el-input__wrapper) {
-  background: rgba(28, 32, 58, 0.6) !important;
+.board-card {
+  background: var(--bg-card);
   border-radius: 8px;
-  box-shadow: 0 1.6px 8px rgba(50, 80, 200, 0.07);
-  border: 1px solid #22386736;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
 }
 
-:deep(.el-input input) {
-  color: #dde6ff;
-  caret-color: #66aaff;
+/* 卡片左上角发光点 */
+.board-card::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 8px;
+  height: 8px;
+  background: linear-gradient(135deg, #2a5298, #6c9bd1);
+  border-radius: 50%;
+  box-shadow: 0 0 12px #2a5298;
+  animation: pulse 2s ease-in-out infinite;
+  z-index: 1;
 }
 
-:deep(.el-select__input) {
-  color: #dde6ff;
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 8px #2a5298; }
+  50% { box-shadow: 0 0 20px #6c9bd1; }
 }
 
-:deep(.el-select__placeholder) {
-  color: rgba(255, 255, 255, 0.55);
+/* 卡片悬浮效果 */
+.board-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-hover);
+  border-color: transparent;
 }
 
-:deep(.el-option) {
-  color: rgba(255, 255, 255, 0.9);
+/* 悬浮时渐变发光边框 */
+.board-card:hover::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 1px;
+  background: linear-gradient(135deg, #2a5298, #1e3c72);
+  border-radius: 8px;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: borderGlow 2s ease-in-out infinite alternate;
+  z-index: 2;
 }
 
-:deep(.el-select-dropdown) {
-  background: rgba(21, 21, 30, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+@keyframes borderGlow {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
 }
 
-:deep(.el-option:hover) {
-  background: rgba(255, 255, 255, 0.05);
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+  position: relative;
+  z-index: 3;
+}
+
+.card-header h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.connection-status {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.status-number {
+  color: var(--primary);
+  font-weight: 600;
+  margin: 0 4px;
 }
 
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
+}
+
+/* 表格样式 */
+.table-container {
+  max-height: 600px;
+  overflow-y: auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  position: relative;
+  z-index: 3;
+}
+
+:deep(.el-table) {
+  border-radius: 8px;
+  overflow: hidden;
+  width: 100%;
+}
+
+:deep(.el-table__header-wrapper) {
+  border-radius: 8px 8px 0 0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+:deep(.el-table th) {
+  font-weight: 600;
+  background-color: var(--bg-table-header);
+  color: var(--text-primary);
+}
+
+:deep(.el-table td) {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* 滚动条样式 */
+.table-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: #0d1321;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background: #2a5298;
+  border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+  background: #1e3c72;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .board-manager-container {
+    padding: 16px;
+  }
+  
+  .board-card {
+    padding: 16px;
+  }
+  
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .card-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 </style>
 

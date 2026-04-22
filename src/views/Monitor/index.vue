@@ -236,6 +236,11 @@ function handleClearErrors() {
 <style scoped>
 .page {
   color: var(--text-primary);
+  padding: 24px;
+  min-height: 100vh;
+  background: var(--bg-body);
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
 .page-header {

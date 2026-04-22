@@ -1,6 +1,10 @@
 <template>
   <MainLayout v-if="showLayout" />
-  <router-view v-else />
+  <router-view v-else v-slot="{ Component }">
+    <transition name="page-fade" mode="out-in">
+      <component :is="Component" />
+    </transition>
+  </router-view>
 </template>
 
 <script setup lang="ts">
@@ -12,7 +16,7 @@ import MainLayout from './components/layout/MainLayout.vue'
 const route = useRoute()
 const authStore = useAuthStore()
 
-const isLoginRoute = computed(() => route.path === '/login')
+const isLoginRoute = computed(() => route.path === '/login' || route.path === '/register')
 const isLoggedIn = computed(() => !!authStore.token || !!localStorage.getItem('token'))
 
 // 根据路由与登录状态决定是否展示主布局
@@ -32,7 +36,23 @@ html, body, #app {
 }
 
 body {
-  background: #0A0E27;
+  background: var(--bg-body);
   font-family: 'Microsoft YaHei', sans-serif;
+}
+
+/* 页面切换动画 */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: all 0.3s ease-out;
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>

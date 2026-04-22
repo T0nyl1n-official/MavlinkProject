@@ -1,5 +1,5 @@
 <template>
-  <div class="chain-create-container">
+  <div class="chain-create-container page-transition">
     <div class="chain-create-card">
       <h1 class="chain-create-title gradient-title">创建任务链</h1>
       
@@ -294,6 +294,30 @@ function removeNode(index: number) {
   nodes.value = newNodes
   console.log('删除后节点数量:', nodes.value.length)
   ElMessage.success('节点已删除')
+  
+  // 重新初始化 Sortable 实例
+  if (sortableInstance) {
+    sortableInstance.destroy()
+    sortableInstance = null
+  }
+  
+  setTimeout(() => {
+    if (nodesListRef.value) {
+      sortableInstance = Sortable.create(nodesListRef.value, {
+        animation: 200,
+        handle: '.node-item',
+        ghostClass: 'sortable-ghost',
+        onEnd: (evt) => {
+          const { oldIndex, newIndex } = evt
+          if (oldIndex !== undefined && newIndex !== undefined && oldIndex !== newIndex) {
+            const movedNode = nodes.value.splice(oldIndex, 1)[0]
+            nodes.value.splice(newIndex, 0, movedNode)
+            ElMessage.success('节点顺序已更新')
+          }
+        }
+      })
+    }
+  }, 50)
 }
 
 // 上移节点
@@ -320,6 +344,12 @@ function moveNodeDown(index: number) {
 function clearAll() {
   nodes.value = []
   chainName.value = ''
+  
+  // 清理 Sortable 实例
+  if (sortableInstance) {
+    sortableInstance.destroy()
+    sortableInstance = null
+  }
 }
 
 // 发送任务链
@@ -381,6 +411,9 @@ function createNewChain() {
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .chain-create-card {

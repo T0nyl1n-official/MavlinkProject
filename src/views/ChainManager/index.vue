@@ -157,7 +157,7 @@ function handleCreateChain() {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page page-transition">
     <div class="page-header">
       <h2 class="title">任务链管理</h2>
       <div class="actions">
@@ -259,6 +259,11 @@ function handleCreateChain() {
 <style scoped>
 .page {
   color: var(--text-primary);
+  padding: 24px;
+  min-height: 100vh;
+  background: var(--bg-body);
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
 .page-header {

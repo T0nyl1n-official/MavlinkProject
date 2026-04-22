@@ -75,6 +75,9 @@ const isAdmin = computed(() => localStorage.getItem('role') === 'admin')
   flex-direction: column;
   align-items: flex-start;
   padding: 0;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .app-logo {

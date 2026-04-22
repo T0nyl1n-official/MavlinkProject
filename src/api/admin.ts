@@ -1,5 +1,5 @@
 import request from './request'
-import { mockService, config } from '@/utils/mockService'
+import { config } from '@/utils/mockService'
 
 export function getAllUsersApi() {
     if (!config.USE_REAL_API) {

@@ -1,8 +1,11 @@
 <template>
-  <div style="padding: 24px">
+  <div class="page-transition" style="padding: 24px; max-width: 1400px; margin: 0 auto; min-height: 100vh; background: var(--bg-body); width: 100%">
     <h1 class="gradient-title">🚁 MAVLink 控制面板</h1>
-    <p style="color: var(--text-secondary); margin-bottom: 24px">
+    <p style="color: var(--text-secondary); margin-bottom: 24px" v-if="!config.USE_REAL_API">
       ⚠️ 当前为模拟模式 - 已连接
+    </p>
+    <p style="color: var(--text-secondary); margin-bottom: 24px" v-else>
+      ✅ 当前为真实模式 - 已连接
     </p>
 
     <!-- 连接状态 -->
@@ -98,8 +101,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { takeoffApi, landApi, returnApi, moveApi, sensorAlertApi } from '@/api/mavlink'
+import { config } from '@/utils/mockService'
+
+onMounted(() => {
+  const saved = localStorage.getItem('useRealApi')
+  if (saved) {
+    config.USE_REAL_API = saved === 'true'
+  }
+})
 
 // V1 控制参数
 const takeoffAltitude = ref(10)
@@ -114,53 +126,107 @@ const v2TakeoffAltitude = ref(10)
 const v2LandSpeed = ref(1)
 
 // 处理起飞
-const handleTakeoff = () => {
+const handleTakeoff = async () => {
   const params = { altitude: takeoffAltitude.value }
-  console.log('Mock模式：发送起飞指令', params)
-  ElMessage.info(`Mock模式：已发送起飞指令，高度 ${takeoffAltitude.value}m`)
+  if (config.USE_REAL_API) {
+    try {
+      await takeoffApi(params)
+      ElMessage.success(`真实模式：已发送起飞指令，高度 ${takeoffAltitude.value}m`)
+    } catch (error) {
+      ElMessage.error('发送起飞指令失败')
+    }
+  } else {
+    console.log('Mock模式：发送起飞指令', params)
+    ElMessage.info(`Mock模式：已发送起飞指令，高度 ${takeoffAltitude.value}m`)
+  }
 }
 
 // 处理降落
-const handleLand = () => {
+const handleLand = async () => {
   const params = { speed: landSpeed.value }
-  console.log('Mock模式：发送降落指令', params)
-  ElMessage.info(`Mock模式：已发送降落指令，速度 ${landSpeed.value}m/s`)
+  if (config.USE_REAL_API) {
+    try {
+      await landApi(params)
+      ElMessage.success(`真实模式：已发送降落指令，速度 ${landSpeed.value}m/s`)
+    } catch (error) {
+      ElMessage.error('发送降落指令失败')
+    }
+  } else {
+    console.log('Mock模式：发送降落指令', params)
+    ElMessage.info(`Mock模式：已发送降落指令，速度 ${landSpeed.value}m/s`)
+  }
 }
 
 // 处理移动
-const handleMove = () => {
+const handleMove = async () => {
   const params = {
     latitude: parseFloat(moveLatitude.value),
     longitude: parseFloat(moveLongitude.value),
     altitude: parseFloat(moveAltitude.value),
     speed: moveSpeed.value
   }
-  console.log('Mock模式：发送移动指令', params)
-  ElMessage.info(`Mock模式：已发送移动指令到坐标 (${moveLatitude.value}, ${moveLongitude.value})，高度 ${moveAltitude.value}m`)
+  if (config.USE_REAL_API) {
+    try {
+      await moveApi(params)
+      ElMessage.success(`真实模式：已发送移动指令到坐标 (${moveLatitude.value}, ${moveLongitude.value})，高度 ${moveAltitude.value}m`)
+    } catch (error) {
+      ElMessage.error('发送移动指令失败')
+    }
+  } else {
+    console.log('Mock模式：发送移动指令', params)
+    ElMessage.info(`Mock模式：已发送移动指令到坐标 (${moveLatitude.value}, ${moveLongitude.value})，高度 ${moveAltitude.value}m`)
+  }
 }
 
 // 处理返航
-const handleReturn = () => {
-  console.log('Mock模式：发送返航指令')
-  ElMessage.info('Mock模式：已发送返航指令')
+const handleReturn = async () => {
+  if (config.USE_REAL_API) {
+    try {
+      await returnApi()
+      ElMessage.success('真实模式：已发送返航指令')
+    } catch (error) {
+      ElMessage.error('发送返航指令失败')
+    }
+  } else {
+    console.log('Mock模式：发送返航指令')
+    ElMessage.info('Mock模式：已发送返航指令')
+  }
 }
 
 // 处理 V2 起飞
-const handleV2Takeoff = () => {
+const handleV2Takeoff = async () => {
   const params = { altitude: v2TakeoffAltitude.value }
-  console.log('Mock模式：发送V2起飞指令', params)
-  ElMessage.info(`Mock模式：已发送V2起飞指令，高度 ${v2TakeoffAltitude.value}m`)
+  if (config.USE_REAL_API) {
+    try {
+      await takeoffApi(params)
+      ElMessage.success(`真实模式：已发送V2起飞指令，高度 ${v2TakeoffAltitude.value}m`)
+    } catch (error) {
+      ElMessage.error('发送V2起飞指令失败')
+    }
+  } else {
+    console.log('Mock模式：发送V2起飞指令', params)
+    ElMessage.info(`Mock模式：已发送V2起飞指令，高度 ${v2TakeoffAltitude.value}m`)
+  }
 }
 
 // 处理 V2 降落
-const handleV2Land = () => {
+const handleV2Land = async () => {
   const params = { speed: v2LandSpeed.value }
-  console.log('Mock模式：发送V2降落指令', params)
-  ElMessage.info(`Mock模式：已发送V2降落指令，速度 ${v2LandSpeed.value}m/s`)
+  if (config.USE_REAL_API) {
+    try {
+      await landApi(params)
+      ElMessage.success(`真实模式：已发送V2降落指令，速度 ${v2LandSpeed.value}m/s`)
+    } catch (error) {
+      ElMessage.error('发送V2降落指令失败')
+    }
+  } else {
+    console.log('Mock模式：发送V2降落指令', params)
+    ElMessage.info(`Mock模式：已发送V2降落指令，速度 ${v2LandSpeed.value}m/s`)
+  }
 }
 
 // 处理传感器警报
-const handleSensorAlert = () => {
+const handleSensorAlert = async () => {
   const params = {
     sensor_id: 'fire_sensor_001',
     latitude: 31.2304,
@@ -169,8 +235,17 @@ const handleSensorAlert = () => {
     photo_count: 5,
     altitude: 50
   }
-  console.log('Mock模式：发送传感器警报指令', params)
-  ElMessage.info('Mock模式：已发送火灾警报指令')
+  if (config.USE_REAL_API) {
+    try {
+      await sensorAlertApi(params)
+      ElMessage.success('真实模式：已发送火灾警报指令')
+    } catch (error) {
+      ElMessage.error('发送传感器警报指令失败')
+    }
+  } else {
+    console.log('Mock模式：发送传感器警报指令', params)
+    ElMessage.info('Mock模式：已发送火灾警报指令')
+  }
 }
 </script>
 

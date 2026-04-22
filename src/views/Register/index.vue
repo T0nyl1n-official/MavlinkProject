@@ -1,18 +1,9 @@
 <template>
   <div class="register-bg">
     <div class="register-wrapper">
-      <!-- 火箭插画 -->
+      <!-- 深地哨兵插画 -->
       <div class="register-illustration">
-        <svg width="200" height="200" viewBox="0 0 200 200" fill="none">
-          <circle cx="100" cy="100" r="80" fill="#E8DDFF" opacity="0.5"/>
-          <path d="M100 30L120 70H80L100 30Z" fill="#8C7CF0"/>
-          <rect x="95" y="70" width="10" height="60" fill="#C6B9FF" rx="5"/>
-          <circle cx="100" cy="85" r="8" fill="#FFD3B6"/>
-          <path d="M90 130L100 160L110 130H90Z" fill="#FFE5B4"/>
-          <circle cx="70" cy="50" r="3" fill="#C6B9FF"/>
-          <circle cx="130" cy="60" r="2" fill="#C6B9FF"/>
-          <circle cx="55" cy="80" r="2" fill="#C6B9FF"/>
-        </svg>
+        <img src="/logo.svg" alt="深地哨兵" style="width: 200px; height: 200px;" />
       </div>
       
       <!-- 注册表单 -->
