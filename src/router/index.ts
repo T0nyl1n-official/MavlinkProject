@@ -56,6 +56,12 @@ const router = createRouter({
             path: '/terminal',
             name: 'Terminal',
             component: () => import('@/views/Terminal/index.vue')
+        },
+        {
+            path: '/admin',
+            name: 'Admin',
+            component: () => import('@/views/Admin/index.vue'),
+            meta: { requiresAdmin: true }
         }
     ]
 })
@@ -63,6 +69,7 @@ const router = createRouter({
 // 路由守卫：未登录用户访问受保护页面时跳转到登录页
 router.beforeEach((to, _from, next) => {
     const token = localStorage.getItem('token')
+    const role = localStorage.getItem('role')
 
     // 登录页和注册页：如果已经登录则直接跳到默认页
     if (to.path === '/login' || to.path === '/register') {
@@ -73,6 +80,10 @@ router.beforeEach((to, _from, next) => {
 
     // 其他页面：未登录则跳转到 /login
     if (!token) next({ path: '/login', replace: true })
+    else if (to.meta.requiresAdmin && role !== 'admin') {
+        // 非管理员访问管理员页面，跳转到首页
+        next({ path: '/chain-manager', replace: true })
+    }
     else next()
 })
 

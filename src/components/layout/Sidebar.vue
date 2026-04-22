@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const activePath = computed(() => route.path)
+const isAdmin = computed(() => localStorage.getItem('role') === 'admin')
 </script>
 
 <template>
@@ -42,6 +43,12 @@ const activePath = computed(() => route.path)
           <span class="menu-icon">📡</span>
         </template>
         <span class="menu-text">监控</span>
+      </el-menu-item>
+      <el-menu-item index="/admin" v-if="isAdmin">
+        <template #icon>
+          <span class="menu-icon">👥</span>
+        </template>
+        <span class="menu-text">用户管理</span>
       </el-menu-item>
       <el-menu-item index="/settings">
         <template #icon>
