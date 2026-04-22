@@ -1,0 +1,264 @@
+:root {
+  --primary: #1E88E5; // 蓝色主色调
+  --primary-light: #42A5F5;
+  --primary-soft: #90CAF9;
+  --primary-gradient: linear-gradient(135deg, #1E88E5, #42A5F5);
+  --success: #4CAF50;
+  --warning: #FF9800;
+  --accent: #FF5722;
+  --bg-body: #F5F7FA;
+  --bg-card: #FFFFFF;
+  --bg-menu: #263238;
+  --bg-table-header: #ECEFF1;
+  --bg-table-row: #FFFFFF;
+  --text-primary: #263238;
+  --text-secondary: #607D8B;
+  --border-color: #E0E0E0;
+  --table-border: #E0E0E0;
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-hover: 0 8px 16px rgba(30, 136, 229, 0.2);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+}
+
+body {
+  background: var(--bg-body);
+  font-family: 'Inter', sans-serif;
+  color: var(--text-primary);
+}
+
+body,
+.el-card,
+.soft-card {
+  color: var(--text-primary) !important;
+}
+
+.el-card__header,
+.card-title {
+  color: var(--text-primary) !important;
+  font-weight: 600;
+}
+
+.el-menu-item {
+  color: var(--text-secondary) !important;
+
+  &.is-active {
+    color: var(--primary) !important;
+  }
+}
+
+.chain-name,
+.board-name {
+  color: var(--text-primary) !important;
+  font-weight: 500;
+}
+
+.el-card,
+.soft-card {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: all 0.3s ease !important;
+  margin-bottom: 16px !important;
+  overflow: hidden;
+}
+
+.el-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover) !important;
+}
+
+.el-button--primary {
+  background: var(--primary-gradient) !important;
+  border: none !important;
+  border-radius: 40px !important;
+  padding: 12px 24px !important;
+}
+
+.el-button--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
+}
+
+.el-input__wrapper {
+  background: var(--bg-body) !important;
+  border-radius: 40px !important;
+  box-shadow: none !important;
+}
+
+.el-input__wrapper.is-focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px rgba(140, 124, 240, 0.1) !important;
+}
+
+.el-aside {
+  background: white !important;
+  border-radius: 0 32px 32px 0 !important;
+  box-shadow: var(--shadow-md);
+}
+
+.el-menu-item.is-active {
+  background: var(--primary-gradient) !important;
+  color: white !important;
+  border-radius: 40px !important;
+}
+
+.el-tag {
+  background: var(--primary-soft) !important;
+  border: none !important;
+  color: var(--primary) !important;
+  border-radius: 40px !important;
+}
+
+/* 表格样式 */
+.el-table {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-md) !important;
+  overflow: hidden;
+}
+
+.el-table__header-wrapper {
+  background: var(--bg-table-header) !important;
+}
+
+.el-table th {
+  background: var(--bg-table-header) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--table-border) !important;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.el-table tr {
+  background: var(--bg-table-row) !important;
+  color: var(--text-primary) !important;
+}
+
+.el-table tr:hover {
+  background: #F5F7FA !important;
+}
+
+.el-table td {
+  border-bottom: 1px solid var(--table-border) !important;
+  color: var(--text-secondary) !important;
+  font-size: 14px;
+}
+
+.el-table--border,
+.el-table--group {
+  border: 1px solid var(--border-color) !important;
+}
+
+.el-table--border th,
+.el-table--border td {
+  border-right: 1px solid var(--table-border) !important;
+}
+
+.el-table--border th.gutter:last-of-type {
+  border-right: 1px solid var(--border-color) !important;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F1F1F1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C1C1C1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #A8A8A8;
+}
+
+.gradient-title {
+  background: var(--primary-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  color: var(--text-primary);
+}
+
+p,
+span,
+div {
+  font-family: 'Inter', sans-serif;
+  color: var(--text-secondary);
+}
+
+.soft-card {
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+/* 三栏布局样式 */
+.main-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main-layout .el-aside {
+  width: 80px !important;
+  flex-shrink: 0;
+}
+
+.main-layout .el-main {
+  flex: 1;
+  padding: 32px;
+  background: var(--bg-body);
+}
+
+.main-layout .el-header {
+  background: white;
+  box-shadow: var(--shadow-sm);
+  padding: 0 32px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 右侧信息栏 */
+.main-layout .right-sidebar {
+  width: 300px;
+  background: white;
+  box-shadow: var(--shadow-md);
+  border-radius: 32px 0 0 32px;
+  padding: 24px;
+  flex-shrink: 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .main-layout .right-sidebar {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-layout .el-aside {
+    width: 60px !important;
+  }
+
+  .main-layout .el-main {
+    padding: 16px;
+  }
+}
