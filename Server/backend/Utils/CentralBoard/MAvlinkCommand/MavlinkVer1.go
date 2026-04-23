@@ -285,10 +285,12 @@ func (m *MavlinkCommander) readLoop() {
 }
 
 func (m *MavlinkCommander) handleEvent(evt gomavlib.Event) {
-	switch evt := evt.(type) {
-	case *gomavlib.EventFrame:
-		m.handleFrame(evt)
-	}
+    switch evt := evt.(type) {
+    case *gomavlib.EventFrame:
+        m.handleFrame(evt)
+    case *gomavlib.EventParseError:
+        log.Printf("[MavlinkCommander] 数据帧解析异常: %v", evt.Error)
+    }
 }
 
 func (m *MavlinkCommander) handleFrame(evt *gomavlib.EventFrame) {
@@ -319,110 +321,51 @@ func (m *MavlinkCommander) handleFrame(evt *gomavlib.EventFrame) {
 }
 
 func (m *MavlinkCommander) processMessage(msg message.Message, systemID, componentID uint8) {
-	switch msg.GetID() {
-	case MAVLINK_MSG_ID_HEARTBEAT:
-		heartbeat := msg.(*common.MessageHeartbeat)
-		log.Printf("[Mavlink] Heartbeat: SysID=%d, Type=%d, Autopilot=%d, BaseMode=%d, SystemStatus=%d",
-			systemID, heartbeat.Type, heartbeat.Autopilot, heartbeat.BaseMode, heartbeat.SystemStatus)
+    switch m_type := msg.(type) {
+    
+    // 必要的日志：记录无人机对指令的确认应答
+    case *common.MessageCommandAck:
+        log.Printf("[Mavlink] CommandAck: SysID=%d, Command=%d, Result=%d",
+            systemID, m_type.Command, m_type.Result)
+        m.handleCommandAck(m_type)
 
-	case MAVLINK_MSG_ID_SYS_STATUS:
-		sysStatus := msg.(*common.MessageSysStatus)
-		log.Printf("[Mavlink] SysStatus: SysID=%d, Voltage=%dmV, Current=%dmA, Battery=%d%%, Load=%d%%",
-			systemID, sysStatus.VoltageBattery, sysStatus.CurrentBattery, sysStatus.BatteryRemaining, sysStatus.Load/10)
+    // 必要的日志：记录无人机发送的重要状态文本（如报错、警告）
+    case *common.MessageStatustext:
+        severityNames := []string{"EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFO", "DEBUG"}
+        severityName := "UNKNOWN"
+        if uint8(m_type.Severity) < uint8(len(severityNames)) {
+            severityName = severityNames[m_type.Severity]
+        }
+        text := string(m_type.Text[:])
+        log.Printf("[Mavlink] StatusText: SysID=%d, Severity=%s, Text=%s", systemID, severityName, text)
 
-	case MAVLINK_MSG_ID_GPS_RAW_INT:
-		gps := msg.(*common.MessageGpsRawInt)
-		lat := float64(gps.Lat) / 1e7
-		lon := float64(gps.Lon) / 1e7
-		alt := float64(gps.Alt) / 1000.0
-		log.Printf("[Mavlink] GPS_Raw_Int: SysID=%d, Lat=%.7f, Lon=%.7f, Alt=%.1fm, FixType=%d, Satellites=%d",
-			systemID, lat, lon, alt, gps.FixType, gps.SatellitesVisible)
+    // 必要的日志：记录任务到达点
+    case *common.MessageMissionItemReached:
+        log.Printf("[Mavlink] MissionItemReached: SysID=%d, Seq=%d", systemID, m_type.Seq)
 
-	case MAVLINK_MSG_ID_ATTITUDE:
-		att := msg.(*common.MessageAttitude)
-		log.Printf("[Mavlink] Attitude: SysID=%d, Roll=%.2f, Pitch=%.2f, Yaw=%.2f",
-			systemID, att.Roll, att.Pitch, att.Yaw)
+    // 必要的日志：任务应答
+    case *common.MessageMissionAck:
+        log.Printf("[Mavlink] MissionAck: SysID=%d, Type=%d", systemID, m_type.Type)
 
-	case MAVLINK_MSG_ID_GLOBAL_POSITION_INT:
-		gp := msg.(*common.MessageGlobalPositionInt)
-		lat := float64(gp.Lat) / 1e7
-		lon := float64(gp.Lon) / 1e7
-		alt := float64(gp.Alt) / 1000.0
-		relativeAlt := float64(gp.RelativeAlt) / 1000.0
-		log.Printf("[Mavlink] GlobalPosition: SysID=%d, Lat=%.7f, Lon=%.7f, Alt=%.1fm, RelativeAlt=%.1fm",
-			systemID, lat, lon, alt, relativeAlt)
-
-	case MAVLINK_MSG_ID_COMMAND_ACK:
-		ack := msg.(*common.MessageCommandAck)
-		log.Printf("[Mavlink] CommandAck: SysID=%d, Command=%d, Result=%d",
-			systemID, ack.Command, ack.Result)
-		m.handleCommandAck(ack)
-
-	case MAVLINK_MSG_ID_PARAM_VALUE:
-		param := msg.(*common.MessageParamValue)
-		name := string(param.ParamId[:])
-		log.Printf("[Mavlink] ParamValue: SysID=%d, Param=%s, Value=%.6f, Type=%d",
-			systemID, name, param.ParamValue, param.ParamType)
-
-	case MAVLINK_MSG_ID_MISSION_ITEM:
-		mi := msg.(*common.MessageMissionItem)
-		log.Printf("[Mavlink] MissionItem: SysID=%d, Seq=%d, Command=%d, Current=%d",
-			systemID, mi.Seq, mi.Command, mi.Current)
-
-	case MAVLINK_MSG_ID_MISSION_ACK:
-		ma := msg.(*common.MessageMissionAck)
-		log.Printf("[Mavlink] MissionAck: SysID=%d, Type=%d", systemID, ma.Type)
-
-	case MAVLINK_MSG_ID_RC_CHANNELS_RAW:
-		rc := msg.(*common.MessageRcChannelsRaw)
-		log.Printf("[Mavlink] RC_Raw: SysID=%d, Ch1=%d, Ch2=%d, Ch3=%d, Ch4=%d, Rssi=%d",
-			systemID, rc.Chan1Raw, rc.Chan2Raw, rc.Chan3Raw, rc.Chan4Raw, rc.Rssi)
-
-	case MAVLINK_MSG_ID_RC_CHANNELS_OVERRIDE:
-		rc := msg.(*common.MessageRcChannelsOverride)
-		log.Printf("[Mavlink] RC_Override: SysID=%d, msg= %v", systemID, rc)
-
-	case MAVLINK_MSG_ID_BATTERY_STATUS:
-		bat := msg.(*common.MessageBatteryStatus)
-		log.Printf("[Mavlink] BatteryStatus: SysID=%d, Voltage=%dmV, Current=%dmA, Remaining=%d%%",
-			systemID, bat.Voltages[0], bat.CurrentBattery, bat.BatteryRemaining)
-
-	case MAVLINK_MSG_ID_STATUSTEXT:
-		st := msg.(*common.MessageStatustext)
-		severityNames := []string{"EMERGENCY", "ALERT", "CRITICAL", "ERROR", "WARNING", "NOTICE", "INFO", "DEBUG"}
-		severityName := "UNKNOWN"
-		if uint8(st.Severity) < uint8(len(severityNames)) {
-			severityName = severityNames[st.Severity]
-		}
-		text := string(st.Text[:])
-		log.Printf("[Mavlink] StatusText: SysID=%d, Severity=%s, Text=%s", systemID, severityName, text)
-
-	case MAVLINK_MSG_ID_EXTENDED_SYS_STATE:
-		ess := msg.(*common.MessageExtendedSysState)
-		landedStateNames := []string{"UNDEFINED", "LANDED", "TAKING_OFF", "IN_AIR", "DESCENDING", "ASCENDING"}
-		landedState := "UNKNOWN"
-		if uint8(ess.LandedState) < uint8(len(landedStateNames)) {
-			landedState = landedStateNames[ess.LandedState]
-		}
-		log.Printf("[Mavlink] ExtendedSysState: SysID=%d, LandedState=%s", systemID, landedState)
-
-	case MAVLINK_MSG_ID_DISTANCE_SENSOR:
-		ds := msg.(*common.MessageDistanceSensor)
-		log.Printf("[Mavlink] DistanceSensor: SysID=%d, Distance=%.2fm, Type=%d",
-			systemID, float64(ds.CurrentDistance)/100.0, ds.Type)
-
-	case MAVLINK_MSG_ID_ALTITUDE:
-		alt := msg.(*common.MessageAltitude)
-		log.Printf("[Mavlink] Altitude: SysID=%d, AltitudeMonotonic=%.2f, AltitudeLocal=%.2f, \n Altitude = %v",
-			systemID, alt.AltitudeMonotonic, alt.AltitudeLocal, alt)
-
-	case MAVLINK_MSG_ID_ESTIMATOR_STATUS:
-		es := msg.(*common.MessageEstimatorStatus)
-		log.Printf("[Mavlink] EstimatorStatus: SysID=%d, Flags=0x%x", systemID, es.Flags)
-
-	default:
-		log.Printf("[Mavlink] Unknown Message ID: %d from SysID=%d, CompID=%d", msg.GetID(), systemID, componentID)
-	}
+    // 注释掉以下极高频的遥测数据日志以避免刷屏，不影响数据流传导：
+    /*
+    case *common.MessageHeartbeat:
+    case *common.MessageSysStatus:
+    case *common.MessageGpsRawInt:
+    case *common.MessageAttitude:
+    case *common.MessageGlobalPositionInt:
+    case *common.MessageMissionCurrent:
+    case *common.MessageMissionItemInt:
+    case *common.MessageRcChannelsRaw:
+    case *common.MessageRcChannelsOverride:
+    case *common.MessageRcChannels:
+    case *common.MessageBatteryStatus:
+    case *common.MessageExtendedSysState:
+    case *common.MessageDistanceSensor:
+    */
+    default:
+        // log.Printf("[Mavlink] Unknown Message ID: %d from SysID=%d, CompID=%d", msg.GetID(), systemID, componentID)
+    }
 }
 
 func (m *MavlinkCommander) handleCommandAck(ack *common.MessageCommandAck) {

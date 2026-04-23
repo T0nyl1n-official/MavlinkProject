@@ -228,26 +228,26 @@ func (ds *DroneSearch) handleBoardMessage(msg *Board.BoardMessage) {
 }
 
 func (ds *DroneSearch) checkDroneStatus() {
-	ds.mu.Lock()
-	defer ds.mu.Unlock()
+    ds.mu.Lock() // 1. 先加锁保护遍历和修改状态
+    cfg := ds.getConfigUnlocked()
+    now := time.Now()
 
-	cfg := ds.getConfigUnlocked()
-	now := time.Now()
+    var droneIDs []string
+    for boardID, drone := range ds.drones {
+        droneIDs = append(droneIDs, boardID)
+        if now.Sub(drone.LastUpdate) > cfg.StatusCheckTimeout {
+            log.Printf("[DroneSearch] Drone %s timeout, marking as unavailable", boardID)
+            drone.IsIdle = false
+        }
+    }
+    ds.mu.Unlock() // 🟢 2. 核心修复：遍历并设置结束后，在这里立刻释放全量写锁！如果不释放在这，下面会死锁
 
-	var droneIDs []string
-	for boardID, drone := range ds.drones {
-		droneIDs = append(droneIDs, boardID)
-		if now.Sub(drone.LastUpdate) > cfg.StatusCheckTimeout {
-			log.Printf("[DroneSearch] Drone %s timeout, marking as unavailable", boardID)
-			drone.IsIdle = false
-		}
-	}
+    if len(droneIDs) == 0 {
+        return
+    }
 
-	if len(droneIDs) == 0 {
-		return
-	}
-
-	ds.checkDroneConnectionParallel(droneIDs, cfg)
+    // 3. 执行非常耗时的并联网络检查时，不要锁定主锁，它自己内部已经有 RLock 保护了
+    ds.checkDroneConnectionParallel(droneIDs, cfg)
 }
 
 func (ds *DroneSearch) checkDroneConnectionParallel(droneIDs []string, cfg DroneConfig) {
