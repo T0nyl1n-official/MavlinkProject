@@ -42,6 +42,22 @@ func GenerateChainAndSendToCentral(req SensorAlertReq) error {
 
 	tasks := []Board.CentralTask{
 		{
+			TaskID:  "task_setmode",
+			Command: "SetMode", // 切换为引导模式
+			Data: map[string]interface{}{
+				"mode": "GUIDED",
+			},
+			Status: "pending",
+		},
+		{
+			TaskID:  "task_force_arm",
+			Command: "Arm", // 强制解锁
+			Data: map[string]interface{}{
+				"force": true,
+			},
+			Status: "pending",
+		},
+		{
 			TaskID:  "task_1_takeoff",
 			Command: "TakeOff",
 			Data: map[string]interface{}{
@@ -56,6 +72,7 @@ func GenerateChainAndSendToCentral(req SensorAlertReq) error {
 				"latitude":  req.Latitude,
 				"longitude": req.Longitude,
 				"altitude":  altitude,
+				"delay":     5.0, // 给予一定时间到达位置并悬停
 			},
 			Status: "pending",
 		},
@@ -65,16 +82,20 @@ func GenerateChainAndSendToCentral(req SensorAlertReq) error {
 		tasks = append(tasks, Board.CentralTask{
 			TaskID:  fmt.Sprintf("task_%d_photo", 3+i),
 			Command: "TakePhoto",
-			Data:    map[string]interface{}{},
+			Data: map[string]interface{}{
+				"delay": 5.0, // 给予树莓派充足的调用摄像头和网络上传时间
+			},
 			Status:  "pending",
 		})
 	}
 
 	tasks = append(tasks, Board.CentralTask{
-		TaskID:  "task_last_land",
-		Command: "Land",
-		Data:    map[string]interface{}{},
-		Status:  "pending",
+		TaskID:  "task_last_rtl",
+		Command: "SetMode", // 切换为返航模式 RTL
+		Data: map[string]interface{}{
+			"mode": "RTL", // 注意要在 central.go 中的 executeSetMode 处理 RTL 模式
+		},
+		Status: "pending",
 	})
 
 	centralChain := Board.CentralProgressChain{
