@@ -51,8 +51,44 @@ func (sm *SettingManager) LoadSetting(path string) error {
 		return err
 	}
 
+	sm.applyEnvOverrides()
 	sm.setDefaults()
 	return nil
+}
+
+func (sm *SettingManager) applyEnvOverrides() {
+	if val := os.Getenv("MavlinkProject_backend_database_mysql_host"); val != "" {
+		sm.setting.Database.MySQL.Host = val
+	}
+	if val := os.Getenv("MavlinkProject_backend_database_mysql_port"); val != "" {
+		sm.setting.Database.MySQL.Port = val
+	}
+	if val := os.Getenv("MavlinkProject_backend_database_mysql_user"); val != "" {
+		sm.setting.Database.MySQL.User = val
+	}
+	if val := os.Getenv("MavlinkProject_backend_database_mysql_password"); val != "" {
+		sm.setting.Database.MySQL.Password = val
+	}
+	if val := os.Getenv("MavlinkProject_backend_database_mysql_database"); val != "" {
+		sm.setting.Database.MySQL.Database = val
+	}
+	if val := os.Getenv("MavlinkProject_backend_database_mysql_charset"); val != "" {
+		sm.setting.Database.MySQL.Charset = val
+	}
+
+	if val := os.Getenv("MavlinkProject_backend_redis_host"); val != "" {
+		sm.setting.Redis.Host = val
+	}
+	if val := os.Getenv("MavlinkProject_backend_redis_port"); val != "" {
+		sm.setting.Redis.Port = val
+	}
+	if val := os.Getenv("MavlinkProject_backend_redis_password"); val != "" {
+		sm.setting.Redis.Password = val
+	}
+
+	if val := os.Getenv("MavlinkProject_backend_jwt_secret_key"); val != "" {
+		sm.setting.JWT.SecretKey = val
+	}
 }
 
 // 提高鲁棒性, 这些if值会导致系统错误
@@ -93,6 +129,7 @@ func (sm *SettingManager) ReloadSetting() error {
 		return err
 	}
 
+	sm.applyEnvOverrides()
 	sm.setDefaults()
 
 	oldSetting := sm.setting
