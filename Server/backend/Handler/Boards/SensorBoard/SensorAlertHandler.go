@@ -28,9 +28,8 @@ func (h *SensorAlertHandler) GetName() string {
 }
 
 func (h *SensorAlertHandler) CanHandle(msg *Board.BoardMessage) bool {
-	if msg.FromType == "sensor" || msg.FromType == "esp32" || msg.FromType == "alarm" {
-		return true
-	}
+	// 判断是不是真正的传感器报警，忽略心跳和一般状态包
+	// 如果是明确的警告类命令，则处理
 	if msg.Message.Attribute == Board.MessageAttribute_Warning ||
 		msg.Message.Attribute == Board.MessageAttribute_Mission {
 		if msg.Message.Command == "Alert" || msg.Message.Command == "SensorAlert" {
@@ -40,6 +39,8 @@ func (h *SensorAlertHandler) CanHandle(msg *Board.BoardMessage) bool {
 	if msg.Message.Command == "SensorAlert" || msg.Message.Command == "Alert" {
 		return true
 	}
+	
+	// 如果不是 Alert 命令，就不作为报警触发（即使它从 sensor 发来），防止心跳被当作报警下发任务
 	return false
 }
 
@@ -49,6 +50,16 @@ func (h *SensorAlertHandler) Handle(msg *Board.BoardMessage) error {
 	data := msg.Message.Data
 	if data == nil {
 		return fmt.Errorf("[SensorAlertHandler] No data in sensor alert message")
+	}
+
+	// 判断 type 是否为 none
+	alertType, _ := data["type"].(string)
+	if alertType == "" {
+		alertType, _ = data["alert_type"].(string)
+	}
+	if alertType == "none" || alertType == "None" || alertType == "NONE" {
+		log.Printf("[SensorAlertHandler] Alert type is '%s', indicating no actual alarm. Drone will not be scheduled.", alertType)
+		return nil
 	}
 
 	sensorID, _ := data["sensor_id"].(string)

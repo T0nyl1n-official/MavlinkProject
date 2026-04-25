@@ -10,6 +10,7 @@ import (
 )
 
 const CentralServerAddress = "frp-put.com:14465"
+//const CentralServerAddress = "localhost:8081"
 
 type BoardMessage struct {
 	MessageID   string      `json:"message_id"`
@@ -98,69 +99,38 @@ func SendProgressChainToCentral(chain ProgressChain) error {
 	return nil
 }
 
-func TestSimpleTakeOffChain(t *testing.T) {
+func TestForceArmTakeOffHoverLandChain(t *testing.T) {
 	chain := ProgressChain{
-		ChainID: "test_takeoff_001",
+		ChainID: "test_force_arm_takeoff_001",
 		Tasks: []Task{
 			{
-				TaskID:  "task_0",
-				Command: "TakeOff",
+				TaskID:  "task_setmode",
+				Command: "SetMode", // 切换为引导模式
+				Data: map[string]interface{}{
+					"mode": "GUIDED",
+				},
+				Status: "pending",
+			},
+			{
+				TaskID:  "task_force_arm",
+				Command: "Arm", // 强制解锁
+				Data: map[string]interface{}{
+					"force": true,
+				},
+				Status: "pending",
+			},
+			{
+				TaskID:  "task_takeoff",
+				Command: "TakeOff", // 起飞并悬停
 				Data: map[string]interface{}{
 					"altitude": 10.0,
-				},
-				Status: "pending",
-			},
-		},
-		Status: "pending",
-	}
-
-	log.Printf("发送简单起飞任务链: %s", chain.ChainID)
-	if err := SendProgressChainToCentral(chain); err != nil {
-		t.Errorf("发送失败: %v", err)
-	}
-}
-
-func TestFullMissionChain(t *testing.T) {
-	chain := ProgressChain{
-		ChainID: "test_mission_001",
-		Tasks: []Task{
-			{
-				TaskID:  "task_0",
-				Command: "TakeOff",
-				Data: map[string]interface{}{
-					"altitude": 15.0,
+					"delay":    10.0, // 悬停 10 秒
 				},
 				Status: "pending",
 			},
 			{
-				TaskID:  "task_1",
-				Command: "GoTo",
-				Data: map[string]interface{}{
-					"latitude":  39.9042,
-					"longitude": 116.4074,
-					"altitude":  50.0,
-				},
-				Status: "pending",
-			},
-			{
-				TaskID:  "task_2",
-				Command: "TakePhoto",
-				Data:    map[string]interface{}{},
-				Status:  "pending",
-			},
-			{
-				TaskID:  "task_3",
-				Command: "GoTo",
-				Data: map[string]interface{}{
-					"latitude":  39.9085,
-					"longitude": 116.4090,
-					"altitude":  30.0,
-				},
-				Status: "pending",
-			},
-			{
-				TaskID:  "task_4",
-				Command: "Land",
+				TaskID:  "task_land",
+				Command: "Land", // 降落
 				Data:    map[string]interface{}{},
 				Status:  "pending",
 			},
@@ -168,110 +138,7 @@ func TestFullMissionChain(t *testing.T) {
 		Status: "pending",
 	}
 
-	log.Printf("发送完整任务链: %s (共 %d 个任务)", chain.ChainID, len(chain.Tasks))
-	if err := SendProgressChainToCentral(chain); err != nil {
-		t.Errorf("发送失败: %v", err)
-	}
-}
-
-func TestMultipleChains(t *testing.T) {
-	chains := []ProgressChain{
-		{
-			ChainID: "test_multi_001",
-			Tasks: []Task{
-				{
-					TaskID:  "task_0",
-					Command: "TakeOff",
-					Data:    map[string]interface{}{"altitude": 10.0},
-					Status:  "pending",
-				},
-				{
-					TaskID:  "task_1",
-					Command: "Land",
-					Data:    map[string]interface{}{},
-					Status:  "pending",
-				},
-			},
-			Status: "pending",
-		},
-		{
-			ChainID: "test_multi_002",
-			Tasks: []Task{
-				{
-					TaskID:  "task_0",
-					Command: "TakeOff",
-					Data:    map[string]interface{}{"altitude": 20.0},
-					Status:  "pending",
-				},
-				{
-					TaskID:  "task_1",
-					Command: "SetSpeed",
-					Data:    map[string]interface{}{"speed": 5.0},
-					Status:  "pending",
-				},
-				{
-					TaskID:  "task_2",
-					Command: "Land",
-					Data:    map[string]interface{}{},
-					Status:  "pending",
-				},
-			},
-			Status: "pending",
-		},
-	}
-
-	for i, chain := range chains {
-		log.Printf("发送多任务链 %d/%d: %s", i+1, len(chains), chain.ChainID)
-		if err := SendProgressChainToCentral(chain); err != nil {
-			t.Errorf("发送任务链 %s 失败: %v", chain.ChainID, err)
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-}
-
-func TestChainWithPosition(t *testing.T) {
-	chain := ProgressChain{
-		ChainID: "test_position_001",
-		Tasks: []Task{
-			{
-				TaskID:  "task_0",
-				Command: "TakeOff",
-				Data: map[string]interface{}{
-					"altitude": 12.0,
-				},
-				Status: "pending",
-			},
-			{
-				TaskID:  "task_1",
-				Command: "SetPosition",
-				Data: map[string]interface{}{
-					"latitude":  39.9042,
-					"longitude": 116.4074,
-					"altitude":  40.0,
-				},
-				Status: "pending",
-			},
-			{
-				TaskID:  "task_2",
-				Command: "SetPosition",
-				Data: map[string]interface{}{
-					"latitude":  39.9085,
-					"longitude": 116.4090,
-					"altitude":  35.0,
-				},
-				Status: "pending",
-			},
-			{
-				TaskID:  "task_3",
-				Command: "Land",
-				Data:    map[string]interface{}{},
-				Status:  "pending",
-			},
-		},
-		Status: "pending",
-	}
-
-	log.Printf("发送位置控制任务链: %s", chain.ChainID)
+	log.Printf("发送强制解锁-起飞-悬停-降落任务链: %s", chain.ChainID)
 	if err := SendProgressChainToCentral(chain); err != nil {
 		t.Errorf("发送失败: %v", err)
 	}

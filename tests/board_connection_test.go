@@ -415,7 +415,7 @@ func TestSensorAlertToCentral(t *testing.T) {
 		t.Fatalf("Failed to marshal request payload: %v", err)
 	}
 
-	apiURL := "https://localhost:8888/mavlink/v2/sensor-alert"
+	apiURL := "https://localhost:8081/mavlink/v2/sensor-alert"
 	t.Logf("Sending POST request to %s with payload: %s", apiURL, string(body))
 
 	// 因为本地是自签发测试TLS，为了防止报错，可以忽略证书校验
@@ -425,7 +425,8 @@ func TestSensorAlertToCentral(t *testing.T) {
 	client := &http.Client{Transport: tr}
 	
 	// 先进行用户注册和登录获取 Token 
-    apiBaseUrl := "https://api.deeppluse.dpdns.org"
+    //apiBaseUrl := "https://api.deeppluse.dpdns.org"
+	apiBaseUrl := "https://localhost:8080"
 	username := fmt.Sprintf("test_sensor_%d", time.Now().Unix())
 	email := fmt.Sprintf("%s@example.com", username)
 	password := "TestPass@123"
@@ -475,26 +476,20 @@ func TestSensorAlertToCentral(t *testing.T) {
     apiURL = apiBaseUrl + "/api/sensor/message" 
 
     // 构造目前 ESP32 正在发送的完整 JSON 格式（包含 Heartbeat 结构或 BoardMessage 结构）
-    testMessage := Board.BoardMessage{
-        MessageID:   fmt.Sprintf("ALERT_%d", time.Now().Unix()),
-        MessageTime: time.Now(),
-        Message: Board.Message{
-            MessageType: "Request",  // 注意跟你后端处理的类型匹配
-            Command:     "SensorAlert",
-            Attribute:   Board.MessageAttribute_Default,
-            // 数据载荷对应 ESP32 发送的内容
-            Data: map[string]interface{}{
-                "sensor_id":   "esp32_sensor_001",
-                "latitude":    39.9042,
-                "longitude":   116.4074,
-                "radius":      50.0,
-                "photo_count": 5,
-                "altitude":    100.0,
-            },
+    testMessage := map[string]interface{}{
+        "sensor_id":   "esp32_sensor_001",
+        "sensor_name": "Test DHT11",
+        "alert_type":  "FIRE",          // 根据你后端的业务逻辑，最好带上具体的预警类型
+        "alert_msg":   "Temperature too high",
+        "latitude":    39.9042,
+        "longitude":   116.4074,
+        "severity":    "high",
+        "timestamp":   time.Now().Unix(),
+        "data": map[string]interface{}{
+            "radius":      50.0,
+            "photo_count": 5,
+            "altitude":    100.0,
         },
-        FromID:   "esp32_sensor_001",
-        FromType: "sensor", // 如果之前定义了具体的标识常量，或者强制为 "ESP32" 等
-        ToID:     "cloud_backend", 
     }
 
     msgBytes, err := json.Marshal(testMessage)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	BoardSensorHandler "MavlinkProject/Server/backend/Handler/Boards/SensorBoard"
 	Distribute "MavlinkProject/Server/backend/Utils/CentralBoard/Distribute"
 )
 
@@ -55,6 +56,31 @@ func ReceiveSensorMessage(c *gin.Context) {
 	log.Printf("[SensorRoutes] Alert received: sensor=%s, type=%s, msg=%s, lat=%.6f, lon=%.6f",
 		alert.SensorName, alert.AlertType, alert.AlertMsg, alert.Latitude, alert.Longitude)
 
+	if alert.AlertType == "none" || alert.AlertType == "None" || alert.AlertType == "NONE" {
+		log.Printf("[SensorRoutes] Alert type is 'none', indicating no actual alarm. Drone scheduling skipped.")
+		c.JSON(200, gin.H{
+			"code":       0,
+			"message":    "Alert received - type is none, no drone dispatched",
+			"sensor_id":  alert.SensorID,
+			"alert_type": alert.AlertType,
+		})
+		return
+	}
+
+	// 先验证告警类型，如果是不需要调度的类型（比如 heartbeat 等），generateTasksByAlertType 会返回空
+	// 此时直接返回，不再去请求 FRP 或分配无人机
+	tasks := generateTasksByAlertType(alert, nil)
+	if len(tasks) == 0 {
+		log.Printf("[SensorRoutes] No tasks generated for alert type: %s (Ignored)", alert.AlertType)
+		c.JSON(202, gin.H{
+			"code":       0,
+			"message":    "Alert received - Ignored or Unknown alert type",
+			"sensor_id":  alert.SensorID,
+			"alert_type": alert.AlertType,
+		})
+		return
+	}
+
 	droneSearch := Distribute.GetDroneSearch()
 	if droneSearch == nil {
 		log.Printf("[SensorRoutes] Error: DroneSearch not available")
@@ -67,15 +93,39 @@ func ReceiveSensorMessage(c *gin.Context) {
 
 	availableDrones := droneSearch.GetAvailableDrones()
 	if len(availableDrones) == 0 {
-		log.Printf("[SensorRoutes] Warning: No available drones for alert response")
-		log.Printf("[SensorRoutes] Alert logged: sensor=%s, type=%s at (%.6f, %.6f) - No drones available",
-			alert.SensorName, alert.AlertType, alert.Latitude, alert.Longitude)
-		c.JSON(202, gin.H{
+		log.Printf("[SensorRoutes] Warning: No available local drones for alert response. Trying to send to Central via FRP.")
+		
+		// 构建 SensorAlertReq 对象给 Central 发送任务链
+		frpReq := BoardSensorHandler.SensorAlertReq{
+			SensorID:   alert.SensorID,
+			Latitude:   alert.Latitude,
+			Longitude:  alert.Longitude,
+			Radius:     50, // 默认或者从 alert 里取
+			PhotoCount: 1,  // 默认拍1张
+			Altitude:   20, // 默认高度 20 米
+		}
+
+		err := BoardSensorHandler.GenerateChainAndSendToCentral(frpReq)
+		if err != nil {
+			log.Printf("[SensorRoutes] Failed to send chain to central: %v", err)
+			c.JSON(202, gin.H{
+				"code":       0,
+				"message":    "Alert received, logged - No available local drones and fail to send to central",
+				"sensor_id":  alert.SensorID,
+				"alert_type": alert.AlertType,
+				"drones":     0,
+				"error":      err.Error(),
+			})
+			return
+		}
+
+		log.Printf("[SensorRoutes] Successfully generated and sent mission chain to Central via FRP.")
+		c.JSON(200, gin.H{
 			"code":       0,
-			"message":    "Alert received, logged - No available drones",
+			"message":    "Task chain created and sent to Central via FRP",
 			"sensor_id":  alert.SensorID,
 			"alert_type": alert.AlertType,
-			"drones":     0,
+			"drones":     0, // 0 本地无人机，但分配了 FRP
 		})
 		return
 	}
@@ -95,18 +145,9 @@ func ReceiveSensorMessage(c *gin.Context) {
 		return
 	}
 
-	tasks := generateTasksByAlertType(alert, bestDrone)
-	if len(tasks) == 0 {
-		log.Printf("[SensorRoutes] No tasks generated for alert type: %s", alert.AlertType)
-		c.JSON(202, gin.H{
-			"code":       0,
-			"message":    "Alert received - Unknown alert type",
-			"sensor_id":  alert.SensorID,
-			"alert_type": alert.AlertType,
-		})
-		return
-	}
-
+	// tasks 已在前面生成，直接赋值给新任务链即可 （若需利用 bestDrone 特化可以再调用一次）
+	// tasks = generateTasksByAlertType(alert, bestDrone)
+	
 	chainID := generateChainID(alert)
 	chain := &Distribute.ProgressChain{
 		ChainID:       chainID,

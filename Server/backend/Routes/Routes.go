@@ -26,6 +26,7 @@ func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager 
 	Test_Routes(r)
 
 	InitSystemRoutes(r, settingManager, jwtManager)
+	InitPhotoRoutes(r)
 
 	MiscRoutes.SetMiscRoutes(r)
 	UsersRoutes.SetUsersRoutes(r, jwtManager, tokenManager, mysqlDB)
