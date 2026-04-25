@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -76,23 +77,29 @@ type VerificationManager struct {
 	VerificationConfig *VerificationConfig
 }
 
-func (cfg *VerificationConfig) Default(){
-	cfg.RedisAddr = "localhost:6379"
-	cfg.RedisPassword = ""
+func (cfg *VerificationConfig) Default() {
+	cfg.RedisAddr = getEnvOrDefault("SMTP_REDIS_ADDR", "localhost:6379")
+	cfg.RedisPassword = getEnvOrDefault("SMTP_REDIS_PASSWORD", "")
 	cfg.RedisDB = 15
-	cfg.SMTPHost = "smtp.qq.com"
+	cfg.SMTPHost = getEnvOrDefault("SMTP_HOST", "smtp.qq.com")
 	cfg.SMTPPort = 587
 	cfg.CodeLength = 5
 	cfg.Expiration = 5 * 60 * time.Minute
 	cfg.MaxAttempts = 20
 	cfg.CoolDownTime = 60 * time.Second
 
-	cfg.SMTPUsername = "mavlinkproject@qq.com"
-	cfg.SMTPPassword = "edrypqkdchkncffi"
+	cfg.SMTPUsername = getEnvOrDefault("SMTP_USERNAME", "")
+	cfg.SMTPPassword = getEnvOrDefault("SMTP_PASSWORD", "")
 
-	cfg.FromEmail = "mavlinkproject@qq.com"
-	cfg.FromName = "MavlinkProject"
-	
+	cfg.FromEmail = getEnvOrDefault("SMTP_FROM_EMAIL", "")
+	cfg.FromName = getEnvOrDefault("SMTP_FROM_NAME", "MavlinkProject")
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 // 验证管理器
