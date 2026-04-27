@@ -1,4 +1,4 @@
-package boardHandler
+package boards
 
 import (
 	"fmt"

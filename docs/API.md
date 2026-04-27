@@ -485,13 +485,20 @@ type TerminalResponse struct {
 9. [传感器接口 (无需认证)](#传感器接口-无需认证)
    - [9.1 POST /api/sensor/message 传感器警报](#91-post-apisensormessage-传感器警报)
    - [9.2 GET /api/sensor/status 获取无人机状态](#92-get-apisensorstatus-获取无人机状态)
-10. [进度链接口 (需认证)](#进度链接口-需认证)
-    - [10.1 链管理](#101-链管理)
-    - [10.2 节点管理](#102-节点管理)
-    - [10.3 执行控制](#103-执行控制)
-11. [消息处理流程](#消息处理流程)
-12. [错误响应格式](#错误响应格式)
-13. [注意事项](#注意事项)
+10. [视频流接口 (需认证)](#视频流接口-需认证)
+    - [10.1 视频流类型定义](#101-视频流类型定义)
+    - [10.2 Central 上传接口](#102-central-上传接口)
+    - [10.3 前端获取接口](#103-前端获取接口)
+    - [10.4 视频流架构说明](#104-视频流架构说明)
+    - [10.5 前端集成示例](#105-前端集成示例)
+    - [10.6 视频流错误码](#106-视频流错误码)
+11. [进度链接口 (需认证)](#进度链接口-需认证)
+    - [11.1 链管理](#111-链管理)
+    - [11.2 节点管理](#112-节点管理)
+    - [11.3 执行控制](#113-执行控制)
+12. [消息处理流程](#消息处理流程)
+13. [错误响应格式](#错误响应格式)
+14. [注意事项](#注意事项)
 
 ---
 
@@ -1456,13 +1463,721 @@ GET https://api.deeppluse.dpdns.org/api/sensor/status
 
 ---
 
-### 进度链接口 (需认证)
+### 视频流接口 (需认证)
+
+> ⚠️ 以下接口用于实时视频流的上传和获取
+> ⚠️ Central 上传接口使用设备JWT认证，前端获取接口使用用户JWT认证
+> ⚠️ 服务地址: `https://api.deeppluse.dpdns.org`
+
+基础路径: `/api/board/live` (Central上传) 和 `/api/backend/live` (前端获取)
+
+#### 10.1 视频流类型定义
+
+##### 10.1.1 视频流状态枚举
+
+```go
+type StreamStatus string
+
+const (
+    StreamStatus_Connected    StreamStatus = "connected"     // 已连接
+    StreamStatus_Disconnected StreamStatus = "disconnected"  // 已断开
+    StreamStatus_Buffering    StreamStatus = "buffering"     // 缓冲中
+    StreamStatus_Error        StreamStatus = "error"         // 错误
+)
+```
+
+##### 10.1.2 视频编码格式枚举
+
+```go
+type VideoCodec string
+
+const (
+    VideoCodec_H264  VideoCodec = "h264"   // H.264 编码
+    VideoCodec_H265  VideoCodec = "h265"   // H.265 编码
+    VideoCodec_MJPEG VideoCodec = "mjpeg"  // Motion JPEG
+)
+```
+
+##### 10.1.3 音频编码格式枚举
+
+```go
+type AudioCodec string
+
+const (
+    AudioCodec_AAC AudioCodec = "aac"   // AAC 音频
+    AudioCodec_PCM AudioCodec = "pcm"   // PCM 音频
+)
+```
+
+##### 10.1.4 视频流信息
+
+```go
+type LiveStreamInfo struct {
+    StreamID        string      `json:"stream_id"`        // 流唯一ID
+    TaskCode        string      `json:"task_code"`         // 关联任务代码
+    CentralID       string      `json:"central_id"`       // Central设备ID
+    DroneID         string      `json:"drone_id"`          // 无人机ID
+    StreamStatus    StreamStatus `json:"status"`            // 流状态
+    VideoCodec      VideoCodec  `json:"video_codec"`       // 视频编码
+    AudioCodec      AudioCodec  `json:"audio_codec"`       // 音频编码
+    Resolution      string      `json:"resolution"`       // 分辨率 (如 "1920x1080")
+    FPS             int         `json:"fps"`               // 帧率
+    Bitrate         int64       `json:"bitrate"`          // 比特率 (bytes/s)
+    Duration        int64       `json:"duration"`         // 持续时间 (秒)
+    StartTime       time.Time   `json:"start_time"`       // 开始时间
+    LastUpdateTime  time.Time   `json:"last_update_time"` // 最后更新时间
+    ViewerCount     int         `json:"viewer_count"`     // 当前观看人数
+}
+```
+
+##### 10.1.5 BoardMessage 格式上传 (LiveStreamRequest)
+
+```go
+type LiveStreamRequest struct {
+    MessageID   string                 `json:"message_id"`
+    MessageTime int64                  `json:"message_time"`
+    Message     LiveStreamMessageData  `json:"message"`
+    FromID      string                 `json:"from_id"`       // Central ID
+    FromType    string                 `json:"from_type"`     // "Central"
+    ToID        string                 `json:"to_id"`         // "backend"
+    ToType      string                 `json:"to_type"`       // "Backend"
+}
+
+type LiveStreamMessageData struct {
+    MessageType string                 `json:"message_type"` // Request
+    Attribute   string                 `json:"attribute"`    // Mission
+    Connection  string                 `json:"connection"`   // HTTPS
+    Command     string                 `json:"command"`      // VideoStream
+    Data        map[string]interface{} `json:"data"`         // 视频流参数
+}
+```
+
+#### 10.2 Central 上传接口 (设备JWT认证)
+
+##### 10.2.1 POST /api/board/live - BoardMessage格式上传
+
+使用 BoardMessage 格式上传视频流（推荐方式）
+
+**请求地址**:
+```
+POST https://api.deeppluse.dpdns.org/api/board/live
+```
+
+**请求头**:
+```
+Authorization: Bearer <device_token>
+X-Device-ID: <device_id>
+X-Device-Type: <device_type>
+Content-Type: multipart/form-data
+```
+
+**请求体** (multipart/form-data):
+
+| Part | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| metadata | JSON字符串 | 是 | LiveStreamRequest 结构体 |
+| stream_data | 二进制 | 是 | 视频流数据 |
+
+**metadata 示例**:
+```json
+{
+  "message_id": "msg_live_001",
+  "message_time": 1714234567,
+  "message": {
+    "message_type": "Request",
+    "attribute": "Mission",
+    "connection": "HTTPS",
+    "command": "VideoStream",
+    "data": {
+      "task_code": "TASK_20260427_001",
+      "video_codec": "h264",
+      "audio_codec": "aac",
+      "resolution": "1920x1080",
+      "fps": 30
+    }
+  },
+  "from_id": "central_001",
+  "from_type": "Central",
+  "to_id": "backend_001",
+  "to_type": "Backend"
+}
+```
+
+**参数说明** (metadata.data):
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| task_code | string | 是 | - | 任务代码（与原任务链相同） |
+| video_codec | string | 否 | "h264" | 视频编码 (h264/h265/mjpeg) |
+| audio_codec | string | 否 | - | 音频编码 (aac/pcm) |
+| resolution | string | 否 | "1920x1080" | 分辨率 |
+| fps | int | 否 | 30 | 帧率 |
+| drone_id | string | 否 | - | 无人机ID |
+
+**成功响应 (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "stream_id": "stream_abc123...",
+    "task_code": "TASK_20260427_001",
+    "bytes_received": 1048576,
+    "message": "视频流接收成功"
+  }
+}
+```
+
+**错误响应 (400)** - 缺少必要参数:
+```json
+{
+  "success": false,
+  "error": "缺少必要参数: X-Task-Code 和 X-Central-ID 必填",
+  "code": "MISSING_REQUIRED_PARAMS"
+}
+```
+
+---
+
+##### 10.2.2 POST /api/board/live/raw - Header元数据格式上传
+
+使用 HTTP Header 传递元数据，二进制流作为 Body
+
+**请求地址**:
+```
+POST https://api.deeppluse.dpdns.org/api/board/live/raw
+```
+
+**请求头**:
+```
+Authorization: Bearer <device_token>
+X-Device-ID: <device_id>
+X-Device-Type: <device_type>
+X-Task-Code: <task_code>          (必填)
+X-Central-ID: <central_id>        (必填)
+X-Drone-ID: <drone_id>            (可选)
+X-Video-Codec: <video_codec>      (可选，默认 h264)
+X-Audio-Codec: <audio_codec>      (可选)
+X-Resolution: <resolution>        (可选，默认 1920x1080)
+X-FPS: <fps>                      (可选，默认 30)
+Content-Type: application/octet-stream
+```
+
+**请求体**: 视频二进制数据流（H.264 NALU 单元）
+
+**成功响应 (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "stream_id": "stream_abc123...",
+    "task_code": "TASK_20260427_001",
+    "bytes_received": 1048576,
+    "message": "视频流接收成功"
+  }
+}
+```
+
+---
+
+##### 10.2.3 POST /api/board/live/rtmp/start - 启动RTMP转码监听
+
+启动 FFmpeg RTMP 转码监听服务，将 RTMP 流转换为 H.264
+
+**请求地址**:
+```
+POST https://api.deeppluse.dpdns.org/api/board/live/rtmp/start
+```
+
+**请求头**:
+```
+Authorization: Bearer <device_token>
+X-Device-ID: <device_id>
+X-Device-Type: <device_type>
+X-Task-Code: <task_code>          (必填)
+X-Central-ID: <central_id>       (必填)
+X-RTMP-URL: <rtmp_url>            (必填，RTMP流地址)
+X-Listen-Addr: <listen_addr>     (可选，默认 127.0.0.1:8554)
+```
+
+**参数说明**:
+
+| Header | 必填 | 说明 |
+|--------|------|------|
+| X-Task-Code | 是 | 任务代码 |
+| X-Central-ID | 是 | Central设备ID |
+| X-RTMP-URL | 是 | RTMP流地址 (如 `rtmp://source:1935/live/stream`) |
+| X-Listen-Addr | 否 | 监听地址，默认 `127.0.0.1:8554` |
+
+**成功响应 (200)**:
+```json
+{
+  "success": true,
+  "message": "RTMP 监听服务已启动",
+  "data": {
+    "task_code": "TASK_20260427_001",
+    "listen_addr": "127.0.0.1:8554",
+    "rtmp_url": "rtmp://source:1935/live/stream",
+    "ffmpeg_pid": 12345
+  }
+}
+```
+
+**错误响应 (409)** - 服务已在运行:
+```json
+{
+  "success": false,
+  "error": "RTMP 监听服务已在运行",
+  "code": "ALREADY_RUNNING"
+}
+```
+
+---
+
+##### 10.2.4 POST /api/board/live/rtmp/stop - 停止RTMP转码监听
+
+停止 FFmpeg RTMP 转码监听服务
+
+**请求地址**:
+```
+POST https://api.deeppluse.dpdns.org/api/board/live/rtmp/stop
+```
+
+**成功响应 (200)**:
+```json
+{
+  "success": true,
+  "message": "RTMP 监听服务已停止"
+}
+```
+
+---
+
+##### 10.2.5 GET /api/board/live/rtmp/status - 获取RTMP转码状态
+
+获取当前 RTMP 转码监听服务状态
+
+**请求地址**:
+```
+GET https://api.deeppluse.dpdns.org/api/board/live/rtmp/status
+```
+
+**成功响应 (200)** - 运行中:
+```json
+{
+  "success": true,
+  "data": {
+    "running": true,
+    "listen_addr": "127.0.0.1:8554",
+    "rtmp_url": "rtmp://source:1935/live/stream",
+    "task_code": "TASK_20260427_001",
+    "uptime_seconds": 3600,
+    "bytes_processed": 104857600
+  }
+}
+```
+
+**成功响应 (200)** - 未运行:
+```json
+{
+  "success": true,
+  "data": {
+    "running": false
+  }
+}
+```
+
+---
+
+#### 10.3 前端获取接口 (用户JWT认证)
+
+##### 10.3.1 GET /api/backend/live - 获取视频流
+
+获取实时视频流（支持 MJPEG/RAW/FLV 格式）
+
+**请求地址**:
+```
+GET https://api.deeppluse.dpdns.org/api/backend/live?stream_id=xxx&format=mjpeg
+```
+
+**Query参数**:
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| stream_id | string | 否* | - | 流ID（优先使用） |
+| task_code | string | 否* | - | 任务代码（备选） |
+| format | string | 否 | "raw" | 格式: raw/mjpeg/flv |
+
+*stream_id 和 task_code 至少提供一个
+
+**成功响应 (200)** - RAW格式:
+```
+Content-Type: video/h264
+[原始H.264二进制数据]
+```
+
+**成功响应 (200)** - MJPEG格式:
+```
+Content-Type: multipart/x-mixed-replace
+
+--frame
+Content-Type: image/jpeg
+[JPEG图像数据]
+--frame
+Content-Type: image/jpeg
+[JPEG图像数据]
+...
+```
+
+**错误响应 (404)** - 流不存在:
+```json
+{
+  "success": false,
+  "error": "视频流不存在",
+  "code": "STREAM_NOT_FOUND"
+}
+```
+
+---
+
+##### 10.3.2 GET /api/backend/live/ws - WebSocket视频流
+
+通过 WebSocket 获取实时视频流（低延迟推荐）
+
+**请求地址**:
+```
+wss://api.deeppluse.dpdns.org/api/backend/live/ws?stream_id=xxx
+```
+
+**Query参数**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| stream_id | string | 否* | 流ID（优先使用） |
+| task_code | string | 否* | 任务代码（备选） |
+
+*stream_id 和 task_code 至少提供一个
+
+**WebSocket消息格式**:
+
+| 消息类型 | 说明 | 格式 |
+|----------|------|------|
+| `h264` | H.264视频帧 | `{"type":"h264","data":"<base64>","timestamp":1234567890}` |
+| `mjpeg` | JPEG图像帧 | `{"type":"mjpeg","data":"<base64>","timestamp":1234567890}` |
+| `status` | 流状态更新 | `{"type":"status","status":"connected","viewers":5}` |
+| `error` | 错误信息 | `{"type":"error","error":"stream not found"}` |
+
+**前端接收示例** (JavaScript):
+```javascript
+const ws = new WebSocket('wss://api.deeppluse.dpdns.org/api/backend/live/ws?stream_id=stream_xxx');
+
+ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === 'h264') {
+        // 解码并显示H.264帧
+        const frameData = atob(msg.data);
+        // ... 使用VideoDecoder或类似库渲染
+    } else if (msg.type === 'mjpeg') {
+        // 显示MJPEG帧
+        const img = document.getElementById('video');
+        img.src = 'data:image/jpeg;base64,' + msg.data;
+    } else if (msg.type === 'status') {
+        console.log('Stream status:', msg.status, 'Viewers:', msg.viewers);
+    }
+};
+
+ws.onerror = (error) => {
+    console.error('WebSocket error:', error);
+};
+
+ws.onclose = () => {
+    console.log('WebSocket closed');
+};
+```
+
+---
+
+##### 10.3.3 GET /api/backend/live/list - 获取活跃流列表
+
+获取当前所有活跃视频流列表
+
+**请求地址**:
+```
+GET https://api.deeppluse.dpdns.org/api/backend/live/list
+```
+
+**成功响应 (200)**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "stream_id": "stream_abc123",
+      "task_code": "TASK_20260427_001",
+      "central_id": "central_001",
+      "drone_id": "drone_001",
+      "status": "connected",
+      "video_codec": "h264",
+      "resolution": "1920x1080",
+      "fps": 30,
+      "viewer_count": 2,
+      "start_time": "2026-04-27T10:00:00Z",
+      "last_update_time": "2026-04-27T10:30:00Z"
+    }
+  ]
+}
+```
+
+---
+
+##### 10.3.4 GET /api/backend/live/info/:stream_id - 获取流详情
+
+获取指定视频流的详细信息
+
+**请求地址**:
+```
+GET https://api.deeppluse.dpdns.org/api/backend/live/info/:stream_id
+```
+
+**成功响应 (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "stream_id": "stream_abc123",
+    "task_code": "TASK_20260427_001",
+    "central_id": "central_001",
+    "drone_id": "drone_001",
+    "status": "connected",
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "resolution": "1920x1080",
+    "fps": 30,
+    "bitrate": 5000000,
+    "duration": 1800,
+    "viewer_count": 2,
+    "start_time": "2026-04-27T10:00:00Z",
+    "last_update_time": "2026-04-27T10:30:00Z"
+  }
+}
+```
+
+**错误响应 (404)**:
+```json
+{
+  "success": false,
+  "error": "视频流不存在",
+  "code": "STREAM_NOT_FOUND"
+}
+```
+
+---
+
+##### 10.3.5 DELETE /api/backend/live/:stream_id - 停止视频流
+
+停止指定的视频流
+
+**请求地址**:
+```
+DELETE https://api.deeppluse.dpdns.org/api/backend/live/:stream_id
+```
+
+**成功响应 (200)**:
+```json
+{
+  "success": true,
+  "message": "视频流已停止",
+  "data": {
+    "stream_id": "stream_abc123",
+    "duration": 1800,
+    "total_bytes": 104857600
+  }
+}
+```
+
+---
+
+#### 10.4 视频流架构说明
+
+##### 架构方式一：Central 直接输出 H.264（推荐）
+
+```
+┌─────────────┐     POST /api/board/live      ┌─────────────┐
+│   Central   │ ─────────────────────────────→│   Backend   │
+│  (H.264)    │        设备JWT认证             │   (Go)      │
+└─────────────┘                               └──────┬──────┘
+                                                      │
+                              GET /api/backend/live   │
+                              GET /api/backend/live/ws │
+                                      │               │
+                                      ▼               ▼
+                               ┌─────────────────────────┐
+                               │       Frontend         │
+                               │   (Vite + Vue/React)   │
+                               └─────────────────────────┘
+```
+
+**特点**:
+- 无需转码，延迟最低（1-2秒）
+- Central 直接输出 H.264 NALU 单元
+- 适合已经具备 H.264 编码能力的设备
+
+##### 架构方式二：FFmpeg RTMP 转码
+
+```
+┌─────────────┐                        ┌─────────────────┐
+│   Central   │──RTMP──→  FFmpeg ──H.264→│    Backend     │
+│   (RTMP)    │         转码            │    (Go)        │
+└─────────────┘                        └────────┬────────┘
+                                                 │
+                              GET /api/backend/live/ws
+                                      │
+                                      ▼
+                               ┌─────────────────────────┐
+                               │       Frontend         │
+                               └─────────────────────────┘
+```
+
+**特点**:
+- FFmpeg 监听 RTMP 流，实时转码为 H.264
+- 延迟稍高（2-3秒）但兼容性更好
+- 支持 RTMP 协议的视频源接入
+
+---
+
+#### 10.5 前端集成示例
+
+##### React + Hooks 视频流组件
+
+```jsx
+import React, { useRef, useEffect, useState } from 'react';
+
+function VideoStream({ streamId, format = 'mjpeg' }) {
+    const imgRef = useRef(null);
+    const [status, setStatus] = useState('connecting');
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        if (format === 'mjpeg') {
+            imgRef.current.src = `https://api.deeppluse.dpdns.org/api/backend/live?stream_id=${streamId}&format=mjpeg`;
+        } else if (format === 'ws') {
+            const ws = new WebSocket(`wss://api.deeppluse.dpdns.org/api/backend/live/ws?stream_id=${streamId}`);
+
+            ws.onopen = () => setStatus('connected');
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'mjpeg' && imgRef.current) {
+                    imgRef.current.src = 'data:image/jpeg;base64,' + msg.data;
+                } else if (msg.type === 'status') {
+                    setStatus(msg.status);
+                } else if (msg.type === 'error') {
+                    setError(msg.error);
+                }
+            };
+            ws.onerror = () => setError('WebSocket连接失败');
+            ws.onclose = () => setStatus('disconnected');
+
+            return () => ws.close();
+        }
+    }, [streamId, format]);
+
+    if (error) return <div className="error">错误: {error}</div>;
+
+    return (
+        <div className="video-container">
+            <img ref={imgRef} alt="Video Stream" style={{ width: '100%' }} />
+            <div className="status">状态: {status}</div>
+        </div>
+    );
+}
+
+export default VideoStream;
+```
+
+##### Vue 3 视频流组件
+
+```vue
+<template>
+  <div class="video-stream">
+    <img v-if="format === 'mjpeg'" :src="mjpegUrl" alt="Video Stream" />
+    <canvas v-else ref="canvasRef"></canvas>
+    <div class="status">状态: {{ status }}</div>
+    <div v-if="error" class="error">错误: {{ error }}</div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+
+const props = defineProps({
+    streamId: { type: String, required: true },
+    format: { type: String, default: 'mjpeg' }
+});
+
+const status = ref('connecting');
+const error = ref(null);
+const canvasRef = ref(null);
+let ws = null;
+
+const mjpegUrl = computed(() =>
+    `https://api.deeppluse.dpdns.org/api/backend/live?stream_id=${props.streamId}&format=mjpeg`
+);
+
+onMounted(() => {
+    if (props.format === 'ws') {
+        ws = new WebSocket(`wss://api.deeppluse.dpdns.org/api/backend/live/ws?stream_id=${props.streamId}`);
+
+        ws.onopen = () => status.value = 'connected';
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'status') status.value = msg.status;
+            else if (msg.type === 'error') error.value = msg.error;
+            else if (msg.type === 'mjpeg' && canvasRef.value) {
+                const ctx = canvasRef.value.getContext('2d');
+                const img = new Image();
+                img.onload = () => {
+                    canvasRef.value.width = img.width;
+                    canvasRef.value.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = 'data:image/jpeg;base64,' + msg.data;
+            }
+        };
+        ws.onerror = () => error.value = 'WebSocket连接失败';
+        ws.onclose = () => status.value = 'disconnected';
+    }
+});
+
+onUnmounted(() => {
+    if (ws) ws.close();
+});
+</script>
+```
+
+---
+
+#### 10.6 视频流错误码
+
+| 错误码 | 说明 |
+|--------|------|
+| `MISSING_REQUIRED_PARAMS` | 缺少必要参数 |
+| `STREAM_NOT_FOUND` | 视频流不存在 |
+| `ALREADY_RUNNING` | RTMP监听服务已在运行 |
+| `FFMPEG_START_ERROR` | FFmpeg启动失败 |
+| `LISTENER_START_ERROR` | TCP监听启动失败 |
+| `METADATA_READ_ERROR` | 元数据读取失败 |
+| `METADATA_PARSE_ERROR` | 元数据JSON解析失败 |
+| `LIVE_ENDPOINT_NOT_FOUND` | 视频流接口不存在 |
+
+---
+
+## 十一、进度链接口 (需认证)
 
 > ⚠️ 以下接口需要在 Header 中携带有效的 JWT Token
 
 基础路径: `/api/chain`
 
-#### 10.1 链管理
+#### 11.1 链管理
 
 ##### POST /api/chain/create
 
@@ -1505,7 +2220,7 @@ GET https://api.deeppluse.dpdns.org/api/sensor/status
 
 ---
 
-#### 10.2 节点管理
+#### 11.2 节点管理
 
 ##### POST /api/chain/:id/node/add
 
@@ -1517,7 +2232,7 @@ GET https://api.deeppluse.dpdns.org/api/sensor/status
 
 ---
 
-#### 10.3 执行控制
+#### 11.3 执行控制
 
 ##### POST /api/chain/:id/start
 
@@ -1529,9 +2244,7 @@ GET https://api.deeppluse.dpdns.org/api/sensor/status
 
 ---
 
-## 六、消息处理流程
-
-### 整体架构
+## 十二、消息处理流程
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1586,7 +2299,6 @@ type BoardMessage struct {
     ToType      string    `json:"to_type"`
 }
 ```
-```
 
 ### 消息类型判断
 
@@ -1597,7 +2309,7 @@ type BoardMessage struct {
 
 ---
 
-## 七、错误响应格式
+## 十三、错误响应格式
 
 ### 通用错误响应
 
@@ -1621,7 +2333,7 @@ type BoardMessage struct {
 
 ---
 
-## 八、注意事项
+## 十四、注意事项
 
 1. 所有受保护接口都需要在 Header 中携带 JWT Token
 2. Token 默认存储在 Redis DB 13 中，登出后 Token 即失效

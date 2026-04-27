@@ -10,8 +10,8 @@ type StreamStatus string
 const (
 	StreamStatus_Connected    StreamStatus = "connected"
 	StreamStatus_Disconnected StreamStatus = "disconnected"
-	StreamStatus_Buffering     StreamStatus = "buffering"
-	StreamStatus_Error         StreamStatus = "error"
+	StreamStatus_Buffering    StreamStatus = "buffering"
+	StreamStatus_Error        StreamStatus = "error"
 )
 
 type VideoCodec string
@@ -30,30 +30,30 @@ const (
 )
 
 type LiveStreamInfo struct {
-	StreamID        string      `json:"stream_id"`
-	TaskCode        string      `json:"task_code"`
-	CentralID       string      `json:"central_id"`
-	DroneID         string      `json:"drone_id"`
-	StreamStatus    StreamStatus `json:"status"`
-	VideoCodec      VideoCodec   `json:"video_codec"`
-	AudioCodec      AudioCodec   `json:"audio_codec"`
-	Resolution      string      `json:"resolution"`
-	FPS             int         `json:"fps"`
-	Bitrate         int64       `json:"bitrate"`
-	Duration        int64       `json:"duration"`
-	StartTime       time.Time   `json:"start_time"`
-	LastUpdateTime  time.Time   `json:"last_update_time"`
-	ViewerCount     int         `json:"viewer_count"`
+	StreamID       string       `json:"stream_id"`
+	TaskCode       string       `json:"task_code"`
+	CentralID      string       `json:"central_id"`
+	DroneID        string       `json:"drone_id"`
+	StreamStatus   StreamStatus `json:"status"`
+	VideoCodec     VideoCodec   `json:"video_codec"`
+	AudioCodec     AudioCodec   `json:"audio_codec"`
+	Resolution     string       `json:"resolution"`
+	FPS            int          `json:"fps"`
+	Bitrate        int64        `json:"bitrate"`
+	Duration       int64        `json:"duration"`
+	StartTime      time.Time    `json:"start_time"`
+	LastUpdateTime time.Time    `json:"last_update_time"`
+	ViewerCount    int          `json:"viewer_count"`
 }
 
 type LiveStreamRequest struct {
-	MessageID   string                 `json:"message_id"`
-	MessageTime int64                  `json:"message_time"`
-	Message     LiveStreamMessageData  `json:"message"`
-	FromID      string                 `json:"from_id"`
-	FromType    string                 `json:"from_type"`
-	ToID        string                 `json:"to_id"`
-	ToType      string                 `json:"to_type"`
+	MessageID   string                `json:"message_id"`
+	MessageTime int64                 `json:"message_time"`
+	Message     LiveStreamMessageData `json:"message"`
+	FromID      string                `json:"from_id"`
+	FromType    string                `json:"from_type"`
+	ToID        string                `json:"to_id"`
+	ToType      string                `json:"to_type"`
 }
 
 type LiveStreamMessageData struct {
@@ -90,17 +90,17 @@ type LiveStreamListResponse struct {
 }
 
 type LiveStreamManager struct {
-	mu           sync.RWMutex
+	mu            sync.RWMutex
 	activeStreams map[string]*ActiveStream
-	streamIndex  map[string]*ActiveStream
+	streamIndex   map[string]*ActiveStream
 }
 
 type ActiveStream struct {
-	mu           sync.RWMutex
-	Info         *LiveStreamInfo
-	buffer       []byte
-	viewers      map[string]chan []byte
-	controlChan  chan int
+	mu            sync.RWMutex
+	Info          *LiveStreamInfo
+	buffer        []byte
+	viewers       map[string]chan []byte
+	controlChan   chan int
 	lastFrameTime time.Time
 }
 
@@ -212,4 +212,39 @@ func (s *ActiveStream) GetBuffer() []byte {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.buffer
+}
+
+func (s *ActiveStream) UpdateStatus(status StreamStatus) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Info.StreamStatus = status
+}
+
+func (s *ActiveStream) UpdateLastUpdateTime() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Info.LastUpdateTime = time.Now()
+}
+
+func (s *ActiveStream) GetStatus() StreamStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.Info.StreamStatus
+}
+
+func (s *ActiveStream) UpdateStreamStats(bitrate int64, duration float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Info.Bitrate = bitrate
+	s.Info.Duration = int64(duration)
+	s.Info.LastUpdateTime = time.Now()
+}
+
+func (lm *LiveStreamManager) WriteFrameToAll(data []byte) {
+	lm.mu.RLock()
+	defer lm.mu.RUnlock()
+
+	for _, stream := range lm.activeStreams {
+		stream.WriteData(data)
+	}
 }

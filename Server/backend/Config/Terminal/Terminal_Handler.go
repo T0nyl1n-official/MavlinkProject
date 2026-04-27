@@ -593,7 +593,7 @@ func (tm *TerminalManager) Log() *TerminalResponse {
 		for i := len(logFiles) - 1; i >= 0; i-- {
 			sortedFiles = append(sortedFiles, logFiles[i])
 		}
-	} else {
+	} else {	
 		sortedFiles = logFiles
 	}
 

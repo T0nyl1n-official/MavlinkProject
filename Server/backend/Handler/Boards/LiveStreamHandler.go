@@ -1,4 +1,4 @@
-package Boards
+package boards
 
 import (
 	"crypto/rand"
@@ -21,7 +21,9 @@ import (
 
 var (
 	globalLiveStreamManager *Board.LiveStreamManager
+	globalRTMPTranslator    *RTMPTranslator
 	liveStreamOnce          sync.Once
+	rtmpTranslatorOnce      sync.Once
 )
 
 func GetLiveStreamManager() *Board.LiveStreamManager {
@@ -29,6 +31,13 @@ func GetLiveStreamManager() *Board.LiveStreamManager {
 		globalLiveStreamManager = Board.NewLiveStreamManager()
 	})
 	return globalLiveStreamManager
+}
+
+func GetRTMPTranslator() *RTMPTranslator {
+	rtmpTranslatorOnce.Do(func() {
+		globalRTMPTranslator = NewRTMPTranslator(GetLiveStreamManager())
+	})
+	return globalRTMPTranslator
 }
 
 func generateStreamID() string {
@@ -126,10 +135,8 @@ func (h *LiveStreamHandler) HandleCentralUpload(c *gin.Context) {
 	existingStream, exists := manager.GetStreamByTask(taskCode)
 	if exists {
 		streamID = existingStream.Info.StreamID
-		existingStream.mu.Lock()
-		existingStream.Info.LastUpdateTime = now
-		existingStream.Info.StreamStatus = Board.StreamStatus_Connected
-		existingStream.mu.Unlock()
+		existingStream.UpdateLastUpdateTime()
+		existingStream.UpdateStatus(Board.StreamStatus_Connected)
 	} else {
 		manager.CreateStream(streamInfo)
 	}
@@ -147,11 +154,7 @@ func (h *LiveStreamHandler) HandleCentralUpload(c *gin.Context) {
 
 			if stream, ok := manager.GetStream(streamID); ok {
 				stream.WriteData(data)
-				stream.mu.Lock()
-				stream.Info.Bitrate = totalBytes
-				stream.Info.Duration = int64(time.Since(now).Seconds())
-				stream.Info.LastUpdateTime = time.Now()
-				stream.mu.Unlock()
+				stream.UpdateStreamStats(totalBytes, float64(time.Since(now).Seconds()))
 			}
 		}
 
@@ -164,10 +167,8 @@ func (h *LiveStreamHandler) HandleCentralUpload(c *gin.Context) {
 	}
 
 	if stream, ok := manager.GetStream(streamID); ok {
-		stream.mu.Lock()
-		stream.Info.StreamStatus = Board.StreamStatus_Disconnected
-		stream.Info.LastUpdateTime = time.Now()
-		stream.mu.Unlock()
+		stream.UpdateLastUpdateTime()
+		stream.UpdateStatus(Board.StreamStatus_Disconnected)
 	}
 
 	log.Printf("[LiveStream] 流接收完成: stream_id=%s, task_code=%s, total_bytes=%d",
@@ -176,10 +177,10 @@ func (h *LiveStreamHandler) HandleCentralUpload(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
-			"stream_id": streamID,
-			"task_code": taskCode,
+			"stream_id":      streamID,
+			"task_code":      taskCode,
 			"bytes_received": totalBytes,
-			"message": "视频流接收成功",
+			"message":        "视频流接收成功",
 		},
 	})
 }
@@ -281,7 +282,8 @@ func (h *LiveStreamHandler) HandleCentralUploadWithMetadata(c *gin.Context) {
 // 前端通过此接口获取实时视频流
 //
 // 请求:
-//   GET /api/backend/live?stream_id=xxx&task_code=xxx
+//
+//	GET /api/backend/live?stream_id=xxx&task_code=xxx
 //
 // Query Parameters:
 //   - stream_id: 流 ID（可选，优先使用）
@@ -322,9 +324,9 @@ func (h *LiveStreamHandler) HandleFrontendGetStream(c *gin.Context) {
 
 	switch format {
 	case "mjpeg":
-		c.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
-		c.Header().Set("Cache-Control", "no-cache")
-		c.Header().Set("Connection", "keep-alive")
+		c.Header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
 
 		writer := c.Writer
 		for data := range ch {
@@ -348,8 +350,8 @@ func (h *LiveStreamHandler) HandleFrontendGetStream(c *gin.Context) {
 		}
 
 	case "raw":
-		c.Header().Set("Content-Type", "application/octet-stream")
-		c.Header().Set("Cache-Control", "no-cache")
+		c.Header("Content-Type", "application/octet-stream")
+		c.Header("Cache-Control", "no-cache")
 
 		writer := c.Writer
 		for data := range ch {
@@ -361,8 +363,8 @@ func (h *LiveStreamHandler) HandleFrontendGetStream(c *gin.Context) {
 		}
 
 	case "flv":
-		c.Header().Set("Content-Type", "video/x-flv")
-		c.Header().Set("Cache-Control", "no-cache")
+		c.Header("Content-Type", "video/x-flv")
+		c.Header("Cache-Control", "no-cache")
 
 		writer := c.Writer
 		writer.Write([]byte("FLV\x01\x01\x00\x00\x00\x09"))
@@ -390,14 +392,17 @@ func (h *LiveStreamHandler) HandleFrontendGetStream(c *gin.Context) {
 // 前端通过 WebSocket 连接接收视频帧
 //
 // 连接:
-//   WS /api/backend/live/ws?stream_id=xxx
+//
+//	WS /api/backend/live/ws?stream_id=xxx
 //
 // 消息格式 (服务端→前端):
-//   type: binary (视频帧数据) 或 text (控制消息)
+//
+//	type: binary (视频帧数据) 或 text (控制消息)
 //
 // 控制消息示例:
-//   {"type":"info","data":{"stream_id":"...","status":"connected"}}
-//   {"type":"error","message":"..."}
+//
+//	{"type":"info","data":{"stream_id":"...","status":"connected"}}
+//	{"type":"error","message":"..."}
 func (h *LiveStreamHandler) HandleFrontendWebSocket(c *gin.Context) {
 	streamID := c.Query("stream_id")
 	taskCode := c.Query("task_code")
@@ -462,7 +467,8 @@ func (h *LiveStreamHandler) HandleFrontendWebSocket(c *gin.Context) {
 // HandleListStreams 获取当前活跃的视频流列表
 //
 // 请求:
-//   GET /api/backend/live/list
+//
+//	GET /api/backend/live/list
 //
 // 响应:
 //   - 200: 流列表
@@ -480,7 +486,8 @@ func (h *LiveStreamHandler) HandleListStreams(c *gin.Context) {
 // HandleGetStreamInfo 获取指定流的详细信息
 //
 // 请求:
-//   GET /api/backend/live/info/:stream_id
+//
+//	GET /api/backend/live/info/:stream_id
 //
 // 响应:
 //   - 200: 流信息
@@ -509,14 +516,15 @@ func (h *LiveStreamHandler) HandleGetStreamInfo(c *gin.Context) {
 // HandleStopStream 停止指定的视频流
 //
 // 请求:
-//   DELETE /api/backend/live/:stream_id
+//
+//	DELETE /api/backend/live/:stream_id
 //
 // 权限: 需要管理员权限
 func (h *LiveStreamHandler) HandleStopStream(c *gin.Context) {
 	streamID := c.Param("stream_id")
 
 	manager := GetLiveStreamManager()
-	stream, exists := manager.GetStream(streamId)
+	stream, exists := manager.GetStream(streamID)
 
 	if !exists || stream == nil {
 		c.JSON(http.StatusNotFound, Board.LiveStreamResponse{
@@ -531,6 +539,69 @@ func (h *LiveStreamHandler) HandleStopStream(c *gin.Context) {
 	c.JSON(http.StatusOK, Board.LiveStreamResponse{
 		Success: true,
 		Message: "视频流已停止",
+	})
+}
+
+func (h *LiveStreamHandler) HandleStartRTMPTranslator(c *gin.Context) {
+	var req struct {
+		ListenAddr string `json:"listen_addr"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		req.ListenAddr = ":1935"
+	}
+
+	translator := GetRTMPTranslator()
+	if err := translator.Start(req.ListenAddr); err != nil {
+		c.JSON(http.StatusInternalServerError, Board.LiveStreamResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Board.LiveStreamResponse{
+		Success: true,
+		Message: "RTMP Translator started",
+	})
+}
+
+func (h *LiveStreamHandler) HandleStopRTMPTranslator(c *gin.Context) {
+	translator := GetRTMPTranslator()
+	translator.Stop()
+
+	c.JSON(http.StatusOK, Board.LiveStreamResponse{
+		Success: true,
+		Message: "RTMP Translator stopped",
+	})
+}
+
+func (h *LiveStreamHandler) HandleRTMPStatus(c *gin.Context) {
+	translator := GetRTMPTranslator()
+	status := translator.GetStatus()
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"status":  status,
+	})
+}
+
+func (h *LiveStreamHandler) HandleFFmpegDirect(c *gin.Context) {
+	var req struct {
+		TaskCode  string `json:"task_code"`
+		CentralID string `json:"central_id"`
+		DroneID   string `json:"drone_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, Board.LiveStreamResponse{
+			Success: false,
+			Error:   "无效的请求参数",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, Board.LiveStreamResponse{
+		Success: true,
+		Message: "FFmpeg direct mode endpoint",
 	})
 }
 
