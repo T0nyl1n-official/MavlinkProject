@@ -251,6 +251,7 @@ func (tm *TerminalManager) Show() *TerminalResponse {
 	}
 }
 
+// Server: 服务器配置
 func (tm *TerminalManager) Server() *TerminalResponse {
 	if tm.SettingManager == nil {
 		return &TerminalResponse{Success: false, Message: "SettingManager not initialized"}
@@ -282,6 +283,7 @@ func (tm *TerminalManager) Server() *TerminalResponse {
 			}
 		}
 
+		// 重启服务器 - 新线程
 		go func() {
 			log.Println("[Terminal] Server restart scheduled in", restartTime, "seconds...")
 			time.Sleep(time.Duration(restartTime-5) * time.Second)
@@ -342,6 +344,7 @@ func (tm *TerminalManager) Server() *TerminalResponse {
 	}
 }
 
+// Backend: 后端配置
 func (tm *TerminalManager) Backend() *TerminalResponse {
 	if tm.SettingManager == nil {
 		return &TerminalResponse{Success: false, Message: "SettingManager not initialized"}
@@ -434,17 +437,16 @@ func (tm *TerminalManager) Backend() *TerminalResponse {
 }
 
 func (tm *TerminalManager) Frontend() *TerminalResponse {
-	// unfinished
 	return &TerminalResponse{
-		Success: true,
+		Success: false,
 		Message: map[string]interface{}{
-			"command": string(TCS_frontend),
-			"note":    "frontend details",
-			"args":    tm.Command.Args,
+			"error":   "frontend not implemented",
+			"message": "Fatal: frontend config request do not transport to Backend",
 		},
 	}
 }
 
+// Database: 数据库配置
 func (tm *TerminalManager) Database() *TerminalResponse {
 	if tm.SettingManager == nil {
 		return &TerminalResponse{Success: false, Message: "SettingManager not initialized"}
@@ -512,6 +514,7 @@ func (tm *TerminalManager) Database() *TerminalResponse {
 		},
 	}
 }
+
 
 func (tm *TerminalManager) Mavlink() *TerminalResponse {
 	// unfinished

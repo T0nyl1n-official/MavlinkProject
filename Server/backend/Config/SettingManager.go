@@ -1,6 +1,14 @@
 package Config
 
+/*
+	SettingManager: 负责对于Config文件夹内的setting文件进行加载, 重加载, 并提供设置的读取接口
+	LoadSetting: 加载setting文件
+	ReloadSetting: 重加载setting文件
+	GetSetting: 获取setting
+*/
+
 import (
+	"log"
 	"os"
 	"sync"
 
@@ -41,76 +49,149 @@ func (sm *SettingManager) LoadSetting(path string) error {
 
 	sm.configPath = path
 
+	sm.setting = &Setting{}
+
+	sm.setting.loadFromEnv()
+
 	data, err := os.ReadFile(path)
 	if err != nil {
+		log.Printf("[SettingManager] 警告: 无法读取配置文件 %s: %v, 使用环境变量和默认值", path, err)
+		sm.setting.setDefaults()
+		return nil
+	}
+
+	yamlSetting := &Setting{}
+	if err := yaml.Unmarshal(data, yamlSetting); err != nil {
 		return err
 	}
 
-	sm.setting = &Setting{}
-	if err := yaml.Unmarshal(data, sm.setting); err != nil {
-		return err
-	}
+	sm.setting.mergeFromYAML(yamlSetting)
 
-	sm.applyEnvOverrides()
-	sm.setDefaults()
+	sm.setting.setDefaults()
 	return nil
 }
 
-func (sm *SettingManager) applyEnvOverrides() {
+func (s *Setting) loadFromEnv() {
+	log.Println("[SettingManager] 优先从环境变量加载配置...")
+
 	if val := os.Getenv("MavlinkProject_backend_database_mysql_host"); val != "" {
-		sm.setting.Database.MySQL.Host = val
+		s.Database.MySQL.Host = val
+		log.Printf("[SettingManager] MySQL Host 从环境变量加载: %s", val)
 	}
 	if val := os.Getenv("MavlinkProject_backend_database_mysql_port"); val != "" {
-		sm.setting.Database.MySQL.Port = val
+		s.Database.MySQL.Port = val
+		log.Printf("[SettingManager] MySQL Port 从环境变量加载: %s", val)
 	}
 	if val := os.Getenv("MavlinkProject_backend_database_mysql_user"); val != "" {
-		sm.setting.Database.MySQL.User = val
+		s.Database.MySQL.User = val
+		log.Printf("[SettingManager] MySQL User 从环境变量加载: %s", val)
 	}
 	if val := os.Getenv("MavlinkProject_backend_database_mysql_password"); val != "" {
-		sm.setting.Database.MySQL.Password = val
+		s.Database.MySQL.Password = val
+		log.Printf("[SettingManager] MySQL Password 从环境变量加载 (长度: %d)", len(val))
 	}
 	if val := os.Getenv("MavlinkProject_backend_database_mysql_database"); val != "" {
-		sm.setting.Database.MySQL.Database = val
+		s.Database.MySQL.Database = val
+		log.Printf("[SettingManager] MySQL Database 从环境变量加载: %s", val)
 	}
 	if val := os.Getenv("MavlinkProject_backend_database_mysql_charset"); val != "" {
-		sm.setting.Database.MySQL.Charset = val
+		s.Database.MySQL.Charset = val
+		log.Printf("[SettingManager] MySQL Charset 从环境变量加载: %s", val)
 	}
 
 	if val := os.Getenv("MavlinkProject_backend_redis_host"); val != "" {
-		sm.setting.Redis.Host = val
+		s.Redis.Host = val
 	}
 	if val := os.Getenv("MavlinkProject_backend_redis_port"); val != "" {
-		sm.setting.Redis.Port = val
+		s.Redis.Port = val
 	}
 	if val := os.Getenv("MavlinkProject_backend_redis_password"); val != "" {
-		sm.setting.Redis.Password = val
+		s.Redis.Password = val
 	}
 
 	if val := os.Getenv("MavlinkProject_backend_jwt_secret_key"); val != "" {
-		sm.setting.JWT.SecretKey = val
+		s.JWT.SecretKey = val
 	}
+}
+
+func (s *Setting) mergeFromYAML(yamlSetting *Setting) {
+	log.Println("[SettingManager] 从YAML文件补充缺失的配置...")
+
+	if s.Database.MySQL.Host == "" && yamlSetting.Database.MySQL.Host != "" {
+		s.Database.MySQL.Host = yamlSetting.Database.MySQL.Host
+		log.Printf("[SettingManager] MySQL Host 从YAML加载: %s", yamlSetting.Database.MySQL.Host)
+	}
+	if s.Database.MySQL.Port == "" && yamlSetting.Database.MySQL.Port != "" {
+		s.Database.MySQL.Port = yamlSetting.Database.MySQL.Port
+		log.Printf("[SettingManager] MySQL Port 从YAML加载: %s", yamlSetting.Database.MySQL.Port)
+	}
+	if s.Database.MySQL.User == "" && yamlSetting.Database.MySQL.User != "" {
+		s.Database.MySQL.User = yamlSetting.Database.MySQL.User
+		log.Printf("[SettingManager] MySQL User 从YAML加载: %s", yamlSetting.Database.MySQL.User)
+	}
+	if s.Database.MySQL.Password == "" && yamlSetting.Database.MySQL.Password != "" {
+		s.Database.MySQL.Password = yamlSetting.Database.MySQL.Password
+		log.Printf("[SettingManager] MySQL Password 从YAML加载 (长度: %d)", len(yamlSetting.Database.MySQL.Password))
+	}
+	if s.Database.MySQL.Database == "" && yamlSetting.Database.MySQL.Database != "" {
+		s.Database.MySQL.Database = yamlSetting.Database.MySQL.Database
+		log.Printf("[SettingManager] MySQL Database 从YAML加载: %s", yamlSetting.Database.MySQL.Database)
+	}
+	if s.Database.MySQL.Charset == "" && yamlSetting.Database.MySQL.Charset != "" {
+		s.Database.MySQL.Charset = yamlSetting.Database.MySQL.Charset
+		log.Printf("[SettingManager] MySQL Charset 从YAML加载: %s", yamlSetting.Database.MySQL.Charset)
+	}
+
+	if s.Redis.Host == "" && yamlSetting.Redis.Host != "" {
+		s.Redis.Host = yamlSetting.Redis.Host
+	}
+	if s.Redis.Port == "" && yamlSetting.Redis.Port != "" {
+		s.Redis.Port = yamlSetting.Redis.Port
+	}
+	if s.Redis.Password == "" && yamlSetting.Redis.Password != "" {
+		s.Redis.Password = yamlSetting.Redis.Password
+	}
+
+	if s.JWT.SecretKey == "" && yamlSetting.JWT.SecretKey != "" {
+		s.JWT.SecretKey = yamlSetting.JWT.SecretKey
+	}
+
+	s.Database.MySQL.MaxIdleConns = yamlSetting.Database.MySQL.MaxIdleConns
+	s.Database.MySQL.MaxOpenConns = yamlSetting.Database.MySQL.MaxOpenConns
+	s.Database.MySQL.ConnMaxLifetime = yamlSetting.Database.MySQL.ConnMaxLifetime
+
+	s.Logger = yamlSetting.Logger
+	s.CORS = yamlSetting.CORS
+	s.RateLimit = yamlSetting.RateLimit
+	s.Board = yamlSetting.Board
+
+	log.Printf("[SettingManager] 最终配置: Host=%s, User=%s, Password长度=%d, Database=%s",
+		s.Database.MySQL.Host,
+		s.Database.MySQL.User,
+		len(s.Database.MySQL.Password),
+		s.Database.MySQL.Database)
 }
 
 // 提高鲁棒性, 这些if值会导致系统错误
-func (sm *SettingManager) setDefaults() {
-	if sm.setting.Logger.MonitorWindow <= 0 {
-		sm.setting.Logger.MonitorWindow = 15
+func (s *Setting) setDefaults() {
+	if s.Logger.MonitorWindow <= 0 {
+		s.Logger.MonitorWindow = 15
 	}
-	if sm.setting.Board.Connection.Timeout <= 0 {
-		sm.setting.Board.Connection.Timeout = 180
+	if s.Board.Connection.Timeout <= 0 {
+		s.Board.Connection.Timeout = 180
 	}
-	if sm.setting.Board.Connection.MaxRetryAttempts <= 0 {
-		sm.setting.Board.Connection.MaxRetryAttempts = 3
+	if s.Board.Connection.MaxRetryAttempts <= 0 {
+		s.Board.Connection.MaxRetryAttempts = 3
 	}
-	if sm.setting.Board.Connection.RetryDelay <= 0 {
-		sm.setting.Board.Connection.RetryDelay = 5
+	if s.Board.Connection.RetryDelay <= 0 {
+		s.Board.Connection.RetryDelay = 5
 	}
-	if sm.setting.Board.Connection.KeepaliveInterval <= 0 {
-		sm.setting.Board.Connection.KeepaliveInterval = 10
+	if s.Board.Connection.KeepaliveInterval <= 0 {
+		s.Board.Connection.KeepaliveInterval = 10
 	}
 }
 
-// 设置重加载
+// 设置重加载 从文件加载设置, 优先使用环境变量, 其次使用默认值, 最后使用文件中的值
 func (sm *SettingManager) ReloadSetting() error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -119,18 +200,24 @@ func (sm *SettingManager) ReloadSetting() error {
 		return nil
 	}
 
+	newSetting := &Setting{}
+	newSetting.loadFromEnv()
+
 	data, err := os.ReadFile(sm.configPath)
 	if err != nil {
+		log.Printf("[SettingManager] 警告: 无法读取配置文件 %s: %v, 使用环境变量和默认值", sm.configPath, err)
+		sm.setting = newSetting
+		sm.setting.setDefaults()
+		return nil
+	}
+
+	yamlSetting := &Setting{}
+	if err := yaml.Unmarshal(data, yamlSetting); err != nil {
 		return err
 	}
 
-	newSetting := &Setting{}
-	if err := yaml.Unmarshal(data, newSetting); err != nil {
-		return err
-	}
-
-	sm.applyEnvOverrides()
-	sm.setDefaults()
+	newSetting.mergeFromYAML(yamlSetting)
+	newSetting.setDefaults()
 
 	oldSetting := sm.setting
 	sm.setting = newSetting
@@ -148,7 +235,7 @@ func (sm *SettingManager) UpdateSetting(newSetting *Setting) error {
 	oldSetting := sm.setting
 	sm.setting = newSetting
 
-	sm.setDefaults()
+	sm.setting.setDefaults()
 
 	if sm.configPath != "" {
 		if err := sm.saveToFile(); err != nil {

@@ -1,0 +1,25 @@
+[2026-04-27 16:38:54] INFO GET / 200 1ms
+[2026-04-27 16:38:56] INFO GET /favicon.ico 200 101ms
+[2026-04-27 16:44:26] INFO GET /api/settings 404 0ms
+[2026-04-27 16:44:27] INFO GET /api/settings 404 0ms
+[2026-04-27 16:52:45] INFO 监控数据已重置
+[2026-04-27 16:57:11] INFO GET /robots.txt 304 9ms
+[2026-04-27 17:07:45] INFO 监控数据已重置
+[2026-04-27 17:09:12] INFO GET /terminal 404 0ms
+[2026-04-27 17:20:34] INFO OPTIONS /users/login 404 0ms
+[2026-04-27 17:21:42] INFO GET / 200 0ms
+[2026-04-27 17:21:49] INFO GET /favicon.ico 200 0ms
+[2026-04-27 17:22:45] INFO 监控数据已重置
+[2026-04-27 17:32:02] INFO POST /users/login 400 7ms
+[2026-04-27 17:32:52] INFO GET /api/settings 404 0ms
+[2026-04-27 17:32:58] INFO POST /users/login 400 0ms
+[2026-04-27 17:34:50] INFO POST /users/login 400 0ms
+[2026-04-27 17:35:28] INFO POST /users/register 400 0ms
+[2026-04-27 17:36:04] INFO POST /users/register 400 0ms
+[2026-04-27 17:36:37] INFO POST /users/logout 404 0ms
+[2026-04-27 17:36:38] INFO GET /api/settings 404 0ms
+[2026-04-27 17:37:12] INFO POST /users/register 500 5ms
+[2026-04-27 17:37:45] INFO 监控数据已重置
+[2026-04-27 17:39:54] INFO POST /users/register 400 0ms
+[2026-04-27 17:52:45] INFO 监控数据已重置
+[2026-04-27 18:07:45] INFO 监控数据已重置

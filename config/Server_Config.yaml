@@ -1,3 +1,5 @@
+# Server Config for MavlinkProject_Backend
+
 # 后端服务器配置
 backend:
   # 后端 API 地址
@@ -9,6 +11,6 @@ https:
   enabled: true
   port: "8080"
   # 证书文件路径
-  cert_file: "cert.pem"
-  key_file: "key.pem"
+  cert_file: "resources/cert.pem"
+  key_file: "resources/key.pem"
 

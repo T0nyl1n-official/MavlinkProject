@@ -67,7 +67,7 @@ func (h *UserHandler) RegisterUser(c *gin.Context) {
 	var count int64
 	h.Mysql.Model(&User.User{}).Where("email = ?", user.Email).Count(&count)
 	if count > 0 {
-		ErrorsMgr.HandleError(c, fmt.Errorf("该邮箱已被注册"))
+		ErrorsMgr.HandleError(c, ErrorsMgr.GlobalCreateValidationError("email", "该邮箱已被注册"))
 		return
 	}
 
