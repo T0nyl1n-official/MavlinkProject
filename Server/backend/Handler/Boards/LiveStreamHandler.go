@@ -19,6 +19,13 @@ import (
 	Board "MavlinkProject/Server/backend/Shared/Boards"
 )
 
+/*
+	===================================
+	LiveStreamHandler.go by Tonyl1n for MavlinkProject
+	本文件处理central传来的视频流上传,使其视频流数据能够被其他设备/客户端访问
+	===================================
+*/
+
 var (
 	globalLiveStreamManager *Board.LiveStreamManager
 	globalRTMPTranslator    *RTMPTranslator
@@ -292,8 +299,10 @@ func (h *LiveStreamHandler) HandleCentralUploadWithMetadata(c *gin.Context) {
 //
 // 响应:
 //   - 200: 视频二进制流 (Content-Type: video/mp4 或 image/jpeg)
+//   - 400: 缺少必要参数 (stream_id 或 task_code)
 //   - 404: 流不存在
 //   - 406: 不支持的格式
+//   - 503: 流已断开/不可用
 func (h *LiveStreamHandler) HandleFrontendGetStream(c *gin.Context) {
 	streamID := c.Query("stream_id")
 	taskCode := c.Query("task_code")
@@ -302,6 +311,19 @@ func (h *LiveStreamHandler) HandleFrontendGetStream(c *gin.Context) {
 	manager := GetLiveStreamManager()
 	var stream *Board.ActiveStream
 	var exists bool
+
+	if streamID == "" && taskCode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "缺少必要参数：stream_id 或 task_code 至少需要提供一个",
+			"code":    "MISSING_REQUIRED_PARAMS",
+			"details": gin.H{
+				"required_params": []string{"stream_id", "task_code"},
+				"provided_params": gin.H{},
+			},
+		})
+		return
+	}
 
 	if streamID != "" {
 		stream, exists = manager.GetStream(streamID)
@@ -314,6 +336,26 @@ func (h *LiveStreamHandler) HandleFrontendGetStream(c *gin.Context) {
 			"success": false,
 			"error":   "视频流不存在或已结束",
 			"code":    "STREAM_NOT_FOUND",
+			"details": gin.H{
+				"stream_id":  streamID,
+				"task_code":  taskCode,
+				"suggestion": "请确认流是否正在传输，或检查 stream_id/task_code 是否正确",
+			},
+		})
+		return
+	}
+
+	currentStatus := stream.GetStatus()
+	if currentStatus == Board.StreamStatus_Disconnected || currentStatus == Board.StreamStatus_Error {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"success": false,
+			"error":   "视频流已断开或不可用",
+			"code":    "STREAM_UNAVAILABLE",
+			"details": gin.H{
+				"current_status": currentStatus,
+				"stream_id":      stream.Info.StreamID,
+				"task_code":      stream.Info.TaskCode,
+			},
 		})
 		return
 	}
@@ -382,6 +424,11 @@ func (h *LiveStreamHandler) HandleFrontendGetStream(c *gin.Context) {
 			"success": false,
 			"error":   "不支持的格式: " + format,
 			"code":    "UNSUPPORTED_FORMAT",
+			"details": gin.H{
+				"requested_format":  format,
+				"supported_formats": []string{"mjpeg", "raw", "flv"},
+				"default_format":    "mjpeg",
+			},
 		})
 		return
 	}
@@ -403,6 +450,7 @@ func (h *LiveStreamHandler) HandleFrontendGetStream(c *gin.Context) {
 //
 //	{"type":"info","data":{"stream_id":"...","status":"connected"}}
 //	{"type":"error","message":"..."}
+
 func (h *LiveStreamHandler) HandleFrontendWebSocket(c *gin.Context) {
 	streamID := c.Query("stream_id")
 	taskCode := c.Query("task_code")
@@ -417,11 +465,16 @@ func (h *LiveStreamHandler) HandleFrontendWebSocket(c *gin.Context) {
 		stream, exists = manager.GetStreamByTask(taskCode)
 	}
 
+	// 检查流是否存在
 	if !exists || stream == nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"success": false,
-			"error":   "视频流不存在",
+			"error":   "视频流不存在或已结束",
 			"code":    "STREAM_NOT_FOUND",
+			"details": gin.H{
+				"stream_id": streamID,
+				"task_code": taskCode,
+			},
 		})
 		return
 	}

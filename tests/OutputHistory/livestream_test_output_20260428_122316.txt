@@ -1,0 +1,93 @@
+﻿================================================================================
+瑙嗛娴佷紶杈撶郴缁熸祴璇曞浠?娴嬭瘯鏃堕棿: 2026-04-28 12:23:17
+================================================================================
+=== RUN   TestLiveStreamManagerCreation
+    livestream_test.go:22: === 娴嬭瘯 LiveStreamManager 鍒濆鍖?===
+    livestream_test.go:29: 鉁?LiveStreamManager 鍒涘缓鎴愬姛: 0xc000214990
+--- PASS: TestLiveStreamManagerCreation (0.00s)
+=== RUN   TestCreateAndRetrieveStream
+    livestream_test.go:33: === 娴嬭瘯娴佸垱寤轰笌妫€绱?===
+    livestream_test.go:54: 鉁?娴佸垱寤烘垚鍔? stream_test_1777350197685817300
+    livestream_test.go:60: 鉁?閫氳繃 StreamID 妫€绱㈡垚鍔?    livestream_test.go:66: 鉁?閫氳繃 TaskCode 妫€绱㈡垚鍔?--- PASS: TestCreateAndRetrieveStream (0.00s)
+=== RUN   TestStreamDataWriteAndRead
+    livestream_test.go:76: === 娴嬭瘯娴佹暟鎹啓鍏ヤ笌璇诲彇 ===
+    livestream_test.go:101: 鉁?鏁版嵁鍐欏叆璇诲彇姝ｇ‘: 缂撳啿鍖哄ぇ灏?16
+--- PASS: TestStreamDataWriteAndRead (0.00s)
+=== RUN   TestViewerManagement
+    livestream_test.go:106: === 娴嬭瘯瑙備紬绠＄悊 ===
+    livestream_test.go:127: 鉁?瑙備紬娣诲姞鎴愬姛: viewer_test_001 (鍒濆瑙備紬鏁? 1)
+    livestream_test.go:138: 鉁?绗簩涓浼楁坊鍔犳垚鍔?(褰撳墠瑙備紬鏁? 2)
+    livestream_test.go:144: 鉁?瑙備紬绉婚櫎鎴愬姛 (鍓╀綑瑙備紬鏁? 1)
+    livestream_test.go:148: 鉁?瑙備紬閫氶亾宸插叧闂?--- PASS: TestViewerManagement (0.00s)
+=== RUN   TestDataDistributionToViewers
+    livestream_test.go:160: === 娴嬭瘯鏁版嵁鍒嗗彂鍒拌浼?===
+    livestream_test.go:189: 鉁?鏁版嵁鍒嗗彂鎴愬姛: 鏀跺埌 40 瀛楄妭
+--- PASS: TestDataDistributionToViewers (0.02s)
+=== RUN   TestStreamStatusUpdate
+    livestream_test.go:197: === 娴嬭瘯娴佺姸鎬佹洿鏂?===
+    livestream_test.go:216: 鉁?鍒濆鐘舵€? connected
+    livestream_test.go:223: 鉁?鐘舵€佹洿鏂颁负: buffering
+    livestream_test.go:227: 鉁?鏈€鍚庢洿鏂版椂闂村凡鏇存柊: 2026-04-28 12:23:17.7064417 +0800 CST m=+0.036576501
+--- PASS: TestStreamStatusUpdate (0.00s)
+=== RUN   TestStreamStatsUpdate
+    livestream_test.go:231: === 娴嬭瘯娴佺粺璁′俊鎭洿鏂?===
+    livestream_test.go:254: 鉁?姣旂壒鐜囨洿鏂版纭? 5000000 bps
+    livestream_test.go:260: 鉁?鏃堕暱鏇存柊姝ｇ‘: 120 绉?--- PASS: TestStreamStatsUpdate (0.00s)
+=== RUN   TestListStreams
+    livestream_test.go:265: === 娴嬭瘯鍒楀嚭鎵€鏈夋椿璺冩祦 ===
+    livestream_test.go:283: 鉁?褰撳墠娲昏穬娴佹暟閲? 3
+    livestream_test.go:286:   - StreamID: stream_list_0_1777350197706441700, TaskCode: TASK_LIST_0_1777350197706441700, Status: connected
+    livestream_test.go:286:   - StreamID: stream_list_1_1777350197706441700, TaskCode: TASK_LIST_1_1777350197706441700, Status: connected
+    livestream_test.go:286:   - StreamID: stream_list_2_1777350197706441700, TaskCode: TASK_LIST_2_1777350197706441700, Status: connected
+--- PASS: TestListStreams (0.00s)
+=== RUN   TestRemoveStream
+    livestream_test.go:296: === 娴嬭瘯鍒犻櫎娴?===
+    livestream_test.go:309: 鉁?娴佸垱寤烘垚鍔? stream_remove_1777350197706441700
+    livestream_test.go:322: 鉁?娴佸垹闄ゆ垚鍔? stream_remove_1777350197706441700
+    livestream_test.go:329: 鉁?TaskCode 绱㈠紩涔熷凡娓呯悊
+--- PASS: TestRemoveStream (0.00s)
+=== RUN   TestConcurrentStreamAccess
+    livestream_test.go:334: === 娴嬭瘯骞跺彂璁块棶 ===
+    livestream_test.go:377: 鉁?骞跺彂璁块棶娴嬭瘯閫氳繃 (10涓猤oroutine 脳 100娆℃搷浣?
+--- PASS: TestConcurrentStreamAccess (0.00s)
+=== RUN   TestBufferOverflowProtection
+    livestream_test.go:382: === 娴嬭瘯缂撳啿鍖烘孩鍑轰繚鎶?===
+    livestream_test.go:407: 鉁?缂撳啿鍖烘孩鍑轰繚鎶ゆ甯稿伐浣? 褰撳墠澶у皬=10485760 bytes (10.00 MB)
+--- PASS: TestBufferOverflowProtection (0.01s)
+=== RUN   TestRTMPTranslatorCreation
+    livestream_test.go:413: === 娴嬭瘯 RTMPTranslator 鍒濆鍖?===
+    livestream_test.go:419: 鉁?RTMPTranslator 鍒涘缓鎴愬姛: 0xc000140460
+--- PASS: TestRTMPTranslatorCreation (0.00s)
+=== RUN   TestLiveStreamHandlerCreation
+    livestream_test.go:423: === 娴嬭瘯 LiveStreamHandler 鍒濆鍖?===
+    livestream_test.go:429: 鉁?LiveStreamHandler 鍒涘缓鎴愬姛: 0x7ff7ea620840
+--- PASS: TestLiveStreamHandlerCreation (0.00s)
+=== RUN   TestHandleCentralUploadWithMetadata
+    livestream_test.go:433: === 娴嬭瘯 HandleCentralUploadWithMetadata API ===
+    livestream_test.go:463: 鍝嶅簲鐘舵€佺爜: 400
+    livestream_test.go:464: 鍝嶅簲浣? {"code":"MISSING_REQUIRED_PARAMS","error":"缂哄皯蹇呰鍙傛暟: X-Task-Code 鍜?X-Central-ID 蹇呭～","success":false}
+    livestream_test.go:467: 娉ㄦ剰: 鍝嶅簲鐘舵€佺爜涓?400 (鍙兘鏄腑闂翠欢鎷︽埅)
+--- PASS: TestHandleCentralUploadWithMetadata (0.00s)
+=== RUN   TestHandleFrontendGetStream
+    livestream_test.go:472: === 娴嬭瘯 HandleFrontendGetStream API ===
+    livestream_test.go:483: 鍝嶅簲鐘舵€佺爜: 404
+    livestream_test.go:486: 鉁?API 鍝嶅簲绗﹀悎棰勬湡 (鏃犳湁鏁堟祦鏃惰繑鍥為敊璇?
+--- PASS: TestHandleFrontendGetStream (0.00s)
+=== RUN   TestHandleListStreamsAPI
+    livestream_test.go:491: === 娴嬭瘯 HandleListStreams API ===
+    livestream_test.go:502: 鍝嶅簲鐘舵€佺爜: 200
+    livestream_test.go:503: 鍝嶅簲浣? {"success":true,"message":"鍏?0 涓椿璺冩祦"}
+    livestream_test.go:507: 鉁?鍝嶅簲瑙ｆ瀽鎴愬姛: success=true, streams_count=0
+--- PASS: TestHandleListStreamsAPI (0.00s)
+=== RUN   TestHandleStopStreamAPI
+    livestream_test.go:513: === 娴嬭瘯 HandleStopStream API ===
+    livestream_test.go:525: 鍝嶅簲鐘舵€佺爜: 404
+    livestream_test.go:526: 鍝嶅簲浣? {"success":false,"error":"瑙嗛娴佷笉瀛樺湪"}
+    livestream_test.go:529: 鉁?涓嶅瓨鍦ㄧ殑娴佽繑鍥?404 (绗﹀悎棰勬湡)
+--- PASS: TestHandleStopStreamAPI (0.00s)
+PASS
+
+================================================================================
+娴嬭瘯瀹屾垚
+================================================================================
+ok  	MavlinkProject/tests	0.167s

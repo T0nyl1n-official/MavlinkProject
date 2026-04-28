@@ -1,0 +1,112 @@
+﻿================================================================================
+视频流传输系统测试套件
+测试时间: 2026-04-28 12:33:55
+================================================================================
+=== RUN   TestLiveStreamManagerCreation
+    livestream_test.go:22: === 测试 LiveStreamManager 初始化 ===
+    livestream_test.go:29: ✓ LiveStreamManager 创建成功: 0xc000247050
+--- PASS: TestLiveStreamManagerCreation (0.00s)
+=== RUN   TestCreateAndRetrieveStream
+    livestream_test.go:33: === 测试流创建与检索 ===
+    livestream_test.go:54: ✓ 流创建成功: stream_test_1777350835439428900
+    livestream_test.go:60: ✓ 通过 StreamID 检索成功
+    livestream_test.go:66: ✓ 通过 TaskCode 检索成功
+--- PASS: TestCreateAndRetrieveStream (0.00s)
+=== RUN   TestStreamDataWriteAndRead
+    livestream_test.go:76: === 测试流数据写入与读取 ===
+    livestream_test.go:101: ✓ 数据写入读取正确: 缓冲区大小=16
+--- PASS: TestStreamDataWriteAndRead (0.00s)
+=== RUN   TestViewerManagement
+    livestream_test.go:106: === 测试观众管理 ===
+    livestream_test.go:127: ✓ 观众添加成功: viewer_test_001 (初始观众数: 1)
+    livestream_test.go:138: ✓ 第二个观众添加成功 (当前观众数: 2)
+    livestream_test.go:144: ✓ 观众移除成功 (剩余观众数: 1)
+    livestream_test.go:148: ✓ 观众通道已关闭
+--- PASS: TestViewerManagement (0.00s)
+=== RUN   TestDataDistributionToViewers
+    livestream_test.go:160: === 测试数据分发到观众 ===
+    livestream_test.go:189: ✓ 数据分发成功: 收到 40 字节
+--- PASS: TestDataDistributionToViewers (0.02s)
+=== RUN   TestStreamStatusUpdate
+    livestream_test.go:197: === 测试流状态更新 ===
+    livestream_test.go:216: ✓ 初始状态: connected
+    livestream_test.go:223: ✓ 状态更新为: buffering
+    livestream_test.go:227: ✓ 最后更新时间已更新: 2026-04-28 12:33:55.4604967 +0800 CST m=+0.036496601
+--- PASS: TestStreamStatusUpdate (0.00s)
+=== RUN   TestStreamStatsUpdate
+    livestream_test.go:231: === 测试流统计信息更新 ===
+    livestream_test.go:254: ✓ 比特率更新正确: 5000000 bps
+    livestream_test.go:260: ✓ 时长更新正确: 120 秒
+--- PASS: TestStreamStatsUpdate (0.00s)
+=== RUN   TestListStreams
+    livestream_test.go:265: === 测试列出所有活跃流 ===
+    livestream_test.go:283: ✓ 当前活跃流数量: 3
+    livestream_test.go:286:   - StreamID: stream_list_0_1777350835460496700, TaskCode: TASK_LIST_0_1777350835460496700, Status: connected
+    livestream_test.go:286:   - StreamID: stream_list_1_1777350835460496700, TaskCode: TASK_LIST_1_1777350835460496700, Status: connected
+    livestream_test.go:286:   - StreamID: stream_list_2_1777350835460496700, TaskCode: TASK_LIST_2_1777350835460496700, Status: connected
+--- PASS: TestListStreams (0.00s)
+=== RUN   TestRemoveStream
+    livestream_test.go:296: === 测试删除流 ===
+    livestream_test.go:309: ✓ 流创建成功: stream_remove_1777350835460496700
+    livestream_test.go:322: ✓ 流删除成功: stream_remove_1777350835460496700
+    livestream_test.go:329: ✓ TaskCode 索引也已清理
+--- PASS: TestRemoveStream (0.00s)
+=== RUN   TestConcurrentStreamAccess
+    livestream_test.go:334: === 测试并发访问 ===
+    livestream_test.go:377: ✓ 并发访问测试通过 (10个goroutine × 100次操作)
+--- PASS: TestConcurrentStreamAccess (0.00s)
+=== RUN   TestBufferOverflowProtection
+    livestream_test.go:382: === 测试缓冲区溢出保护 ===
+    livestream_test.go:407: ✓ 缓冲区溢出保护正常工作: 当前大小=10485760 bytes (10.00 MB)
+--- PASS: TestBufferOverflowProtection (0.01s)
+=== RUN   TestRTMPTranslatorCreation
+    livestream_test.go:413: === 测试 RTMPTranslator 初始化 ===
+    livestream_test.go:419: ✓ RTMPTranslator 创建成功: 0xc0000de7d0
+--- PASS: TestRTMPTranslatorCreation (0.00s)
+=== RUN   TestLiveStreamHandlerCreation
+    livestream_test.go:423: === 测试 LiveStreamHandler 初始化 ===
+    livestream_test.go:429: ✓ LiveStreamHandler 创建成功: 0x7ff6bc253840
+--- PASS: TestLiveStreamHandlerCreation (0.00s)
+=== RUN   TestHandleCentralUploadWithMetadata
+    livestream_test.go:433: === 测试 HandleCentralUploadWithMetadata API ===
+    livestream_test.go:463: 响应状态码: 400
+    livestream_test.go:464: 响应体: {"code":"MISSING_REQUIRED_PARAMS","error":"缺少必要参数: X-Task-Code 和 X-Central-ID 必填","success":false}
+    livestream_test.go:467: 注意: 响应状态码为 400 (可能是中间件拦截)
+--- PASS: TestHandleCentralUploadWithMetadata (0.00s)
+=== RUN   TestHandleFrontendGetStream
+    livestream_test.go:472: === 测试 HandleFrontendGetStream API ===
+    livestream_test.go:480: 场景1: 无参数请求 - 应返回 400
+    livestream_test.go:484:   响应状态码: 400 (期望: 400)
+    livestream_test.go:488:   ✓ 正确返回 400: {"code":"MISSING_REQUIRED_PARAMS","details":{"provided_params":{},"required_params":["stream_id","task_code"]},"error":"缺少必要参数：stream_id 或 task_code 至少需要提供一个","success":false}
+    livestream_test.go:491: 场景2: 无效的 stream_id - 应返回 404
+    livestream_test.go:495:   响应状态码: 404 (期望: 404)
+    livestream_test.go:499:   ✓ 正确返回 404: {"code":"STREAM_NOT_FOUND","details":{"stream_id":"nonexistent_stream_123","suggestion":"请确认流是否正在传输，或检查 stream_id/task_code 是否正确","task_code":""},"error":"视频流不存在或已结束","success":false}
+    livestream_test.go:502: 场景3: 无效的 task_code - 应返回 404
+    livestream_test.go:506:   响应状态码: 404 (期望: 404)
+    livestream_test.go:510:   ✓ 正确返回 404: {"code":"STREAM_NOT_FOUND","details":{"stream_id":"","suggestion":"请确认流是否正在传输，或检查 stream_id/task_code 是否正确","task_code":"INVALID_TASK"},"error":"视频流不存在或已结束","success":false}
+    livestream_test.go:513: 场景4: 真实流但格式不支持 - 应返回 406
+    livestream_test.go:526:   响应状态码: 406 (期望: 406)
+    livestream_test.go:530:   ✓ 正确返回 406: {"code":"UNSUPPORTED_FORMAT","details":{"default_format":"mjpeg","requested_format":"unsupported","supported_formats":["mjpeg","raw","flv"]},"error":"不支持的格式: unsupported","success":false}
+    livestream_test.go:534: 场景5: 有效流但已断开 - 应返回 503
+    livestream_test.go:549:   响应状态码: 503 (期望: 503)
+    livestream_test.go:553:   ✓ 正确返回 503: {"code":"STREAM_UNAVAILABLE","details":{"current_status":"disconnected","stream_id":"stream_disconnected_1777350835469992700","task_code":"TASK_DISCONNECTED_1777350835469992700"},"error":"视频流已断开或不可用","success":false}
+    livestream_test.go:557: ✓ HandleFrontendGetStream 错误处理测试完成
+--- PASS: TestHandleFrontendGetStream (0.00s)
+=== RUN   TestHandleListStreamsAPI
+    livestream_test.go:561: === 测试 HandleListStreams API ===
+    livestream_test.go:572: 响应状态码: 200
+    livestream_test.go:573: 响应体: {"success":true,"message":"共 0 个活跃流"}
+    livestream_test.go:577: ✓ 响应解析成功: success=true, streams_count=0
+--- PASS: TestHandleListStreamsAPI (0.00s)
+=== RUN   TestHandleStopStreamAPI
+    livestream_test.go:583: === 测试 HandleStopStream API ===
+    livestream_test.go:595: 响应状态码: 404
+    livestream_test.go:596: 响应体: {"success":false,"error":"视频流不存在"}
+    livestream_test.go:599: ✓ 不存在的流返回 404 (符合预期)
+--- PASS: TestHandleStopStreamAPI (0.00s)
+PASS
+
+================================================================================
+测试完成
+================================================================================
+ok  	MavlinkProject/tests	0.156s
