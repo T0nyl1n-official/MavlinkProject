@@ -23,7 +23,7 @@ import (
 	jwtUtils "MavlinkProject/Server/backend/Middles/Jwt/Claims-Manager"
 	Listening "MavlinkProject/Server/backend/Middles/Listening"
 	Routes "MavlinkProject/Server/backend/Routes"
-	Distribute "MavlinkProject/Server/backend/Utils/CentralBoard/Distribute"
+	FRPHelper "MavlinkProject/Server/backend/Utils/FRPHelper"
 	Verification "MavlinkProject/Server/backend/Utils/Verification"
 	WarningHandler "MavlinkProject/Server/backend/Utils/WarningHandle"
 )
@@ -45,8 +45,8 @@ func GetGlobalBackendServer() *BackendServer {
 	return GlobalBackendServer
 }
 
-func GetDroneSearch() *Distribute.DroneSearch {
-	return Distribute.GetDroneSearch()
+func GetCentralClient() *FRPHelper.CentralHTTPClient {
+	return FRPHelper.GetCentralClient()
 }
 
 type BackendServer struct {
@@ -222,24 +222,9 @@ func (bs *BackendServer) Start(addr, port string, httpsConfig HTTPSConfig) *Back
 	backendServer = bs
 	bs.New()
 
-	droneSearch := Distribute.GetDroneSearch()
-	dsConfig := bs.SettingManager.GetSetting().DroneSearch
-	droneSearch.UpdateConfig(Distribute.DroneConfig{
-		Timeout:            time.Duration(dsConfig.Timeout) * time.Second,
-		Retry:              dsConfig.Retry,
-		Batch:              dsConfig.Batch,
-		MinBatteryLevel:    dsConfig.MinBattery,
-		MaxDroneDistance:   dsConfig.MaxDistance,
-		StatusCheckTimeout: time.Duration(dsConfig.StatusCheckInterval) * time.Second,
-	})
-	log.Printf("[DroneSearch] Config loaded: timeout=%ds, retry=%d, batch=%d, min_battery=%.1f, max_distance=%.1f",
-		dsConfig.Timeout, dsConfig.Retry, dsConfig.Batch, dsConfig.MinBattery, dsConfig.MaxDistance)
-
-	if err := droneSearch.Start(); err != nil {
-		log.Printf("[Backend] Failed to start DroneSearch: %v", err)
-	} else {
-		log.Printf("[Backend] DroneSearch started")
-	}
+	// 初始化 CentralBoard HTTP 客户端
+	FRPHelper.InitCentralClient()
+	log.Printf("[Backend] CentralBoard HTTP client initialized")
 
 	bs.Run(port, httpsConfig)
 	log.Printf("Backend server starting...")

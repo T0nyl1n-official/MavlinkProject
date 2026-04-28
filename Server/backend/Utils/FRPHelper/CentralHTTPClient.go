@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	Conf "MavlinkProject/Server/backend/Config"
@@ -14,9 +16,74 @@ import (
 )
 
 type CentralHTTPClient struct {
-	client          *http.Client
+	client           *http.Client
 	maxRetryAttempts int
-	centralURL      string
+	centralURL       string
+}
+
+var centralClient *CentralHTTPClient
+
+func InitCentralClient() {
+	setting := Conf.GetSetting()
+	cfgs := setting.Board.FRP.CentralServers
+	if len(cfgs) == 0 {
+		centralClient = NewCentralHTTPClient("https://central.deeppluse.dpdns.org:8084/central/message", 10*time.Second, 3)
+		return
+	}
+	cfg := cfgs[0]
+	centralURL := fmt.Sprintf("https://%s/central/message", cfg.Address)
+	frpCfg := setting.Board.FRP
+	centralClient = NewCentralHTTPClient(centralURL, time.Duration(frpCfg.Timeout)*time.Second, frpCfg.MaxRetryAttempts)
+	log.Printf("[FRPHelper] CentralBoard client initialized: %s", centralURL)
+}
+
+func GetCentralClient() *CentralHTTPClient {
+	return centralClient
+}
+
+type DroneInfo struct {
+	BoardID      string  `json:"board_id"`
+	BatteryLevel float64 `json:"battery_level"`
+	Latitude     float64 `json:"latitude"`
+	Longitude    float64 `json:"longitude"`
+	Altitude     float64 `json:"altitude"`
+	IsIdle       bool    `json:"is_idle"`
+}
+
+func (c *CentralHTTPClient) GetAvailableDrones() ([]DroneInfo, error) {
+	if c == nil || c.centralURL == "" {
+		return nil, fmt.Errorf("central client not initialized")
+	}
+
+	statusURL := fmt.Sprintf("https://%s/api/drones/available", strings.TrimPrefix(c.centralURL, "https://"))
+	statusURL = strings.TrimSuffix(statusURL, "/central/message")
+
+	req, err := http.NewRequest("GET", statusURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Code   int         `json:"code"`
+		Drones []DroneInfo `json:"drones"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return []DroneInfo{}, nil
+	}
+
+	return result.Drones, nil
 }
 
 type CentralServerHTTPInfo struct {

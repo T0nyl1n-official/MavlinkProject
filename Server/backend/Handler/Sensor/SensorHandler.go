@@ -7,20 +7,20 @@ import (
 	"github.com/gin-gonic/gin"
 
 	BoardSensorHandler "MavlinkProject/Server/backend/Handler/Boards/SensorBoard"
-	Distribute "MavlinkProject/Server/backend/Utils/CentralBoard/Distribute"
+	FRPHelper "MavlinkProject/Server/backend/Utils/FRPHelper"
 )
 
 type SensorAlert struct {
-	SensorID   string                 `json:"sensor_id"`   // 传感器ID (必填)
-	SensorIP   string                 `json:"sensor_ip"`   // 传感器IP地址
-	SensorName string                 `json:"sensor_name"` // 传感器名称 (可选，未填则用SensorIP)
-	AlertType  string                 `json:"alert_type"`  // 警报类型 (必填)
-	AlertMsg   string                 `json:"alert_msg"`   // 预警消息
-	Latitude   float64                `json:"latitude"`    // GPS纬度 (必填)
-	Longitude  float64                `json:"longitude"`   // GPS经度 (必填)
-	Timestamp  int64                  `json:"timestamp"`   // 时间戳，默认当前时间
-	Severity   string                 `json:"severity"`    // 严重程度
-	Data       map[string]interface{} `json:"data"`        // 传感器数据 (GAS/TEMP/PRESS/ALT/AMB/OBJ/WiFi/RSSI等)
+	SensorID   string                 `json:"sensor_id"`
+	SensorIP   string                 `json:"sensor_ip"`
+	SensorName string                 `json:"sensor_name"`
+	AlertType  string                 `json:"alert_type"`
+	AlertMsg   string                 `json:"alert_msg"`
+	Latitude   float64                `json:"latitude"`
+	Longitude  float64                `json:"longitude"`
+	Timestamp  int64                  `json:"timestamp"`
+	Severity   string                 `json:"severity"`
+	Data       map[string]interface{} `json:"data"`
 }
 
 func ReceiveSensorMessage(c *gin.Context) {
@@ -67,9 +67,7 @@ func ReceiveSensorMessage(c *gin.Context) {
 		return
 	}
 
-	// 先验证告警类型，如果是不需要调度的类型（比如 heartbeat 等），generateTasksByAlertType 会返回空
-	// 此时直接返回，不再去请求 FRP 或分配无人机
-	tasks := generateTasksByAlertType(alert, nil)
+	tasks := generateTasksByAlertType(alert)
 	if len(tasks) == 0 {
 		log.Printf("[SensorRoutes] No tasks generated for alert type: %s (Ignored)", alert.AlertType)
 		c.JSON(202, gin.H{
@@ -81,351 +79,154 @@ func ReceiveSensorMessage(c *gin.Context) {
 		return
 	}
 
-	droneSearch := Distribute.GetDroneSearch()
-	if droneSearch == nil {
-		log.Printf("[SensorRoutes] Error: DroneSearch not available")
-		c.JSON(500, gin.H{
-			"code":    1,
-			"message": "DroneSearch not available",
-		})
-		return
-	}
+	client := FRPHelper.GetCentralClient()
+	if client == nil {
+		log.Printf("[SensorRoutes] Warning: CentralBoard client not available")
+	} else {
+		drones, err := client.GetAvailableDrones()
+		if err != nil || len(drones) == 0 {
+			log.Printf("[SensorRoutes] No available drones from CentralBoard: %v", err)
+		} else if len(drones) > 0 {
+			bestDrone := drones[0]
+			frpReq := BoardSensorHandler.SensorAlertReq{
+				SensorID:   alert.SensorID,
+				Latitude:   alert.Latitude,
+				Longitude:  alert.Longitude,
+				Radius:     50,
+				PhotoCount: 1,
+				Altitude:   20,
+			}
 
-	availableDrones := droneSearch.GetAvailableDrones()
-	if len(availableDrones) == 0 {
-		log.Printf("[SensorRoutes] Warning: No available local drones for alert response. Trying to send to Central via FRP.")
-		
-		// 构建 SensorAlertReq 对象给 Central 发送任务链
-		frpReq := BoardSensorHandler.SensorAlertReq{
-			SensorID:   alert.SensorID,
-			Latitude:   alert.Latitude,
-			Longitude:  alert.Longitude,
-			Radius:     50, // 默认或者从 alert 里取
-			PhotoCount: 1,  // 默认拍1张
-			Altitude:   20, // 默认高度 20 米
-		}
+			err := BoardSensorHandler.GenerateChainAndSendToCentral(frpReq)
+			if err != nil {
+				log.Printf("[SensorRoutes] Failed to send chain to central: %v", err)
+				c.JSON(202, gin.H{
+					"code":       0,
+					"message":    "Alert received, logged - Failed to send to Central",
+					"sensor_id":  alert.SensorID,
+					"alert_type": alert.AlertType,
+					"drones":     len(drones),
+					"error":      err.Error(),
+				})
+				return
+			}
 
-		err := BoardSensorHandler.GenerateChainAndSendToCentral(frpReq)
-		if err != nil {
-			log.Printf("[SensorRoutes] Failed to send chain to central: %v", err)
-			c.JSON(202, gin.H{
-				"code":       0,
-				"message":    "Alert received, logged - No available local drones and fail to send to central",
-				"sensor_id":  alert.SensorID,
-				"alert_type": alert.AlertType,
-				"drones":     0,
-				"error":      err.Error(),
+			log.Printf("[SensorRoutes] Task chain sent to CentralBoard via FRP")
+			c.JSON(200, gin.H{
+				"code":           0,
+				"message":        "Task chain created and sent to CentralBoard",
+				"sensor_id":      alert.SensorID,
+				"alert_type":     alert.AlertType,
+				"assigned_drone": bestDrone.BoardID,
+				"task_count":     len(tasks),
 			})
 			return
 		}
-
-		log.Printf("[SensorRoutes] Successfully generated and sent mission chain to Central via FRP.")
-		c.JSON(200, gin.H{
-			"code":       0,
-			"message":    "Task chain created and sent to Central via FRP",
-			"sensor_id":  alert.SensorID,
-			"alert_type": alert.AlertType,
-			"drones":     0, // 0 本地无人机，但分配了 FRP
-		})
-		return
 	}
 
-	bestDrone, err := droneSearch.FindBestDrone()
+	frpReq := BoardSensorHandler.SensorAlertReq{
+		SensorID:   alert.SensorID,
+		Latitude:   alert.Latitude,
+		Longitude:  alert.Longitude,
+		Radius:     50,
+		PhotoCount: 1,
+		Altitude:   20,
+	}
+
+	err := BoardSensorHandler.GenerateChainAndSendToCentral(frpReq)
 	if err != nil {
-		log.Printf("[SensorRoutes] Warning: No suitable drone found: %v", err)
-		log.Printf("[SensorRoutes] Alert logged: sensor=%s, type=%s - No suitable drone: %v",
-			alert.SensorName, alert.AlertType, err)
+		log.Printf("[SensorRoutes] Failed to send chain to central: %v", err)
 		c.JSON(202, gin.H{
 			"code":       0,
-			"message":    "Alert received, logged - No suitable drone",
+			"message":    "Alert received, logged - fail to send to central",
 			"sensor_id":  alert.SensorID,
 			"alert_type": alert.AlertType,
-			"drones":     len(availableDrones),
+			"drones":     0,
+			"error":      err.Error(),
 		})
 		return
 	}
 
-	// tasks 已在前面生成，直接赋值给新任务链即可 （若需利用 bestDrone 特化可以再调用一次）
-	// tasks = generateTasksByAlertType(alert, bestDrone)
-	
-	chainID := generateChainID(alert)
-	chain := &Distribute.ProgressChain{
-		ChainID:       chainID,
-		Tasks:         tasks,
-		CurrentTask:   0,
-		Status:        "pending",
-		StartTime:     time.Now(),
-		AssignedDrone: bestDrone.BoardID,
-	}
-
-	err = droneSearch.SubmitProgressChain(chain)
-	if err != nil {
-		log.Printf("[SensorRoutes] Failed to submit progress chain: %v", err)
-		c.JSON(202, gin.H{
-			"code":    0,
-			"message": "Alert received, logged - Failed to submit task chain",
-			"error":   err.Error(),
-		})
-		return
-	}
-
-	log.Printf("[SensorRoutes] Task chain submitted: chain_id=%s, drone=%s, tasks=%d",
-		chainID, bestDrone.BoardID, len(tasks))
-
+	log.Printf("[SensorRoutes] Successfully generated and sent mission chain to Central via FRP.")
 	c.JSON(200, gin.H{
-		"code":           0,
-		"message":        "Task chain created and submitted",
-		"chain_id":       chainID,
-		"assigned_drone": bestDrone.BoardID,
-		"task_count":     len(tasks),
-		"alert_type":     alert.AlertType,
-		"target": map[string]float64{
-			"latitude":  alert.Latitude,
-			"longitude": alert.Longitude,
-		},
+		"code":       0,
+		"message":    "Task chain created and sent to Central via FRP",
+		"sensor_id":  alert.SensorID,
+		"alert_type": alert.AlertType,
+		"drones":     0,
 	})
+	return
 }
 
-// 任务分拣，根据告警类型生成不同的任务链
-func generateTasksByAlertType(alert SensorAlert, drone *Distribute.DroneStatus) []Distribute.Task {
-	var tasks []Distribute.Task
+type Task struct {
+	TaskID     string                 `json:"task_id"`
+	Command    string                 `json:"command"`
+	Data       map[string]interface{} `json:"data"`
+	Status     string                 `json:"status"`
+	RetryCount int                    `json:"retry_count"`
+	MaxRetries int                    `json:"max_retries"`
+	Timeout    time.Duration          `json:"timeout"`
+	StartTime  time.Time              `json:"start_time"`
+	EndTime    time.Time              `json:"end_time"`
+}
+
+func generateTasksByAlertType(alert SensorAlert) []Task {
+	var tasks []Task
 
 	switch alert.AlertType {
 	case "fire", "Fire", "FIRE":
-		tasks = []Distribute.Task{
-			{
-				TaskID:  "task_0",
-				Command: "takeoff",
-				Data: map[string]interface{}{
-					"altitude": 30.0,
-				},
-				Status:     "pending",
-				MaxRetries: 3,
-				Timeout:    30 * time.Second,
-			},
-			{
-				TaskID:  "task_1",
-				Command: "goto",
-				Data: map[string]interface{}{
-					"latitude":  alert.Latitude,
-					"longitude": alert.Longitude,
-					"altitude":  25.0,
-				},
-				Status:     "pending",
-				MaxRetries: 3,
-				Timeout:    60 * time.Second,
-			},
-			{
-				TaskID:  "task_2",
-				Command: "survey",
-				Data: map[string]interface{}{
-					"latitude":  alert.Latitude,
-					"longitude": alert.Longitude,
-					"radius":    50.0,
-					"duration":  120,
-				},
-				Status:     "pending",
-				MaxRetries: 2,
-				Timeout:    180 * time.Second,
-			},
+		tasks = []Task{
+			{TaskID: "task_0", Command: "TakeOff", Data: map[string]interface{}{"altitude": 30.0}, Status: "pending", MaxRetries: 3, Timeout: 30 * time.Second},
+			{TaskID: "task_1", Command: "GoTo", Data: map[string]interface{}{"latitude": alert.Latitude, "longitude": alert.Longitude, "altitude": 25.0}, Status: "pending", MaxRetries: 3, Timeout: 60 * time.Second},
+			{TaskID: "task_2", Command: "FourDirectionPhoto", Data: map[string]interface{}{"latitude": alert.Latitude, "longitude": alert.Longitude, "radius": 50.0}, Status: "pending", MaxRetries: 2, Timeout: 180 * time.Second},
 		}
-
 	case "rescue", "Rescue", "RESCUE", "missing", "Missing", "MISSING":
-		tasks = []Distribute.Task{
-			{
-				TaskID:  "task_0",
-				Command: "takeoff",
-				Data: map[string]interface{}{
-					"altitude": 50.0,
-				},
-				Status:     "pending",
-				MaxRetries: 3,
-				Timeout:    30 * time.Second,
-			},
-			{
-				TaskID:  "task_1",
-				Command: "goto",
-				Data: map[string]interface{}{
-					"latitude":  alert.Latitude,
-					"longitude": alert.Longitude,
-					"altitude":  40.0,
-				},
-				Status:     "pending",
-				MaxRetries: 3,
-				Timeout:    90 * time.Second,
-			},
-			{
-				TaskID:  "task_2",
-				Command: "survey_grid",
-				Data: map[string]interface{}{
-					"latitude":  alert.Latitude,
-					"longitude": alert.Longitude,
-					"width":     200.0,
-					"height":    200.0,
-					"altitude":  30.0,
-				},
-				Status:     "pending",
-				MaxRetries: 2,
-				Timeout:    300 * time.Second,
-			},
-			{
-				TaskID:  "task_3",
-				Command: "land",
-				Data: map[string]interface{}{
-					"latitude":  alert.Latitude,
-					"longitude": alert.Longitude,
-				},
-				Status:     "pending",
-				MaxRetries: 2,
-				Timeout:    60 * time.Second,
-			},
+		tasks = []Task{
+			{TaskID: "task_0", Command: "TakeOff", Data: map[string]interface{}{"altitude": 50.0}, Status: "pending", MaxRetries: 3, Timeout: 30 * time.Second},
+			{TaskID: "task_1", Command: "GoTo", Data: map[string]interface{}{"latitude": alert.Latitude, "longitude": alert.Longitude, "altitude": 40.0}, Status: "pending", MaxRetries: 3, Timeout: 90 * time.Second},
+			{TaskID: "task_2", Command: "Orbit", Data: map[string]interface{}{"latitude": alert.Latitude, "longitude": alert.Longitude, "radius": 100.0}, Status: "pending", MaxRetries: 2, Timeout: 300 * time.Second},
+			{TaskID: "task_3", Command: "Land", Data: map[string]interface{}{}, Status: "pending", MaxRetries: 2, Timeout: 60 * time.Second},
 		}
-
 	case "patrol", "Patrol", "PATROL":
-		tasks = []Distribute.Task{
-			{
-				TaskID:  "task_0",
-				Command: "takeoff",
-				Data: map[string]interface{}{
-					"altitude": 40.0,
-				},
-				Status:     "pending",
-				MaxRetries: 3,
-				Timeout:    30 * time.Second,
-			},
-			{
-				TaskID:  "task_1",
-				Command: "goto",
-				Data: map[string]interface{}{
-					"latitude":  alert.Latitude,
-					"longitude": alert.Longitude,
-					"altitude":  35.0,
-				},
-				Status:     "pending",
-				MaxRetries: 3,
-				Timeout:    60 * time.Second,
-			},
-			{
-				TaskID:  "task_2",
-				Command: "orbit",
-				Data: map[string]interface{}{
-					"latitude":  alert.Latitude,
-					"longitude": alert.Longitude,
-					"radius":    30.0,
-					"duration":  60,
-				},
-				Status:     "pending",
-				MaxRetries: 2,
-				Timeout:    90 * time.Second,
-			},
-			{
-				TaskID:     "task_3",
-				Command:    "return_to_home",
-				Data:       map[string]interface{}{},
-				Status:     "pending",
-				MaxRetries: 2,
-				Timeout:    60 * time.Second,
-			},
+		tasks = []Task{
+			{TaskID: "task_0", Command: "TakeOff", Data: map[string]interface{}{"altitude": 40.0}, Status: "pending", MaxRetries: 3, Timeout: 30 * time.Second},
+			{TaskID: "task_1", Command: "GoTo", Data: map[string]interface{}{"latitude": alert.Latitude, "longitude": alert.Longitude, "altitude": 35.0}, Status: "pending", MaxRetries: 3, Timeout: 60 * time.Second},
+			{TaskID: "task_2", Command: "Orbit", Data: map[string]interface{}{"latitude": alert.Latitude, "longitude": alert.Longitude, "radius": 30.0}, Status: "pending", MaxRetries: 2, Timeout: 90 * time.Second},
+			{TaskID: "task_3", Command: "AutoReturn", Data: map[string]interface{}{}, Status: "pending", MaxRetries: 2, Timeout: 60 * time.Second},
 		}
-
-	case "flood", "Flood", "FLOOD":
-		tasks = []Distribute.Task{
-			{
-				TaskID:  "task_0",
-				Command: "takeoff",
-				Data: map[string]interface{}{
-					"altitude": 60.0,
-				},
-				Status:     "pending",
-				MaxRetries: 3,
-				Timeout:    30 * time.Second,
-			},
-			{
-				TaskID:  "task_1",
-				Command: "goto",
-				Data: map[string]interface{}{
-					"latitude":  alert.Latitude,
-					"longitude": alert.Longitude,
-					"altitude":  50.0,
-				},
-				Status:     "pending",
-				MaxRetries: 3,
-				Timeout:    90 * time.Second,
-			},
-			{
-				TaskID:  "task_2",
-				Command: "survey",
-				Data: map[string]interface{}{
-					"latitude":  alert.Latitude,
-					"longitude": alert.Longitude,
-					"radius":    100.0,
-					"duration":  180,
-				},
-				Status:     "pending",
-				MaxRetries: 2,
-				Timeout:    240 * time.Second,
-			},
-		}
-
 	default:
-		tasks = []Distribute.Task{
-			{
-				TaskID:  "task_0",
-				Command: "takeoff",
-				Data: map[string]interface{}{
-					"altitude": 30.0,
-				},
-				Status:     "pending",
-				MaxRetries: 3,
-				Timeout:    30 * time.Second,
-			},
-			{
-				TaskID:  "task_1",
-				Command: "goto",
-				Data: map[string]interface{}{
-					"latitude":  alert.Latitude,
-					"longitude": alert.Longitude,
-					"altitude":  25.0,
-				},
-				Status:     "pending",
-				MaxRetries: 3,
-				Timeout:    60 * time.Second,
-			},
-			{
-				TaskID:     "task_2",
-				Command:    "return_to_home",
-				Data:       map[string]interface{}{},
-				Status:     "pending",
-				MaxRetries: 2,
-				Timeout:    60 * time.Second,
-			},
+		tasks = []Task{
+			{TaskID: "task_0", Command: "TakeOff", Data: map[string]interface{}{"altitude": 30.0}, Status: "pending", MaxRetries: 3, Timeout: 30 * time.Second},
+			{TaskID: "task_1", Command: "GoTo", Data: map[string]interface{}{"latitude": alert.Latitude, "longitude": alert.Longitude, "altitude": 25.0}, Status: "pending", MaxRetries: 3, Timeout: 60 * time.Second},
+			{TaskID: "task_2", Command: "AutoReturn", Data: map[string]interface{}{}, Status: "pending", MaxRetries: 2, Timeout: 60 * time.Second},
 		}
 	}
 
 	return tasks
 }
 
-func generateChainID(alert SensorAlert) string {
-	return time.Now().Format("20060102150405") + "_" + alert.AlertType
-}
-
 func GetSensorStatus(c *gin.Context) {
-	droneSearch := Distribute.GetDroneSearch()
-	if droneSearch == nil {
+	client := FRPHelper.GetCentralClient()
+	if client == nil {
 		c.JSON(500, gin.H{
 			"code":    1,
-			"message": "DroneSearch not available",
+			"message": "CentralBoard client not available",
 		})
 		return
 	}
 
-	drones := droneSearch.GetAvailableDrones()
+	drones, err := client.GetAvailableDrones()
+	if err != nil {
+		c.JSON(500, gin.H{
+			"code":    1,
+			"message": "Failed to get drone status",
+			"error":   err.Error(),
+		})
+		return
+	}
+
 	c.JSON(200, gin.H{
 		"code":   0,
 		"drones": drones,
 	})
-}
-
-func generateMessageID() string {
-	return time.Now().Format("20060102150405.000")
 }

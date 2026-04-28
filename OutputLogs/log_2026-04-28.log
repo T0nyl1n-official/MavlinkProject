@@ -1,2 +1,11 @@
 [2026-04-28 12:10:43] INFO 监控数据已重置
 [2026-04-28 12:25:43] INFO 监控数据已重置
+[2026-04-28 15:24:37] INFO GET / 200 0ms
+[2026-04-28 15:24:39] INFO GET /favicon.ico 200 114ms
+[2026-04-28 15:35:59] INFO GET /api/board/list 401 12ms
+[2026-04-28 15:36:08] INFO GET /api/settings 404 0ms
+[2026-04-28 15:36:14] INFO GET /api/settings 404 0ms
+[2026-04-28 15:36:20] INFO GET /api/backend/live 401 1ms
+[2026-04-28 15:36:24] INFO GET /api/board/list 401 0ms
+[2026-04-28 15:36:29] INFO GET /api/photo/latest 404 0ms
+[2026-04-28 15:39:00] INFO GET /api/photo/latest 404 0ms
