@@ -1,5 +1,0 @@
-=== Test Output: TestEndToEndSensorAlertToCentral ===
-Time: 2026-04-07 22:47:58
-
-[INFO] SensorAlertHandler auto-execute disabled for test
-[PASS] End-to-end sensor alert message sent

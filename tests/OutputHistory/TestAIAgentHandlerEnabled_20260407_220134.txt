@@ -1,6 +1,0 @@
-=== Test Output: TestAIAgentHandlerEnabled ===
-Time: 2026-04-07 22:01:34
-
-[PASS] AIAgentHandler correctly disabled by default
-[PASS] AIAgentHandler correctly enabled
-[PASS] AIAgentHandler correctly disabled

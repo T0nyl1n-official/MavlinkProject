@@ -1,7 +1,0 @@
-=== Test Output: TestBoardHandlerCanHandle ===
-Time: 2026-04-07 21:25:54
-
-[PASS] Board FromType
-[PASS] Drone FromType
-[PASS] FC FromType
-[PASS] Sensor FromType (should not be handled by BoardHandler)

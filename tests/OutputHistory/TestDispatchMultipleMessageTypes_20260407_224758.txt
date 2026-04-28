@@ -1,6 +1,0 @@
-=== Test Output: TestDispatchMultipleMessageTypes ===
-Time: 2026-04-07 22:47:58
-
-[PASS] Dispatch msg_1 succeeded
-[INFO] Dispatch msg_2: [SensorAlertHandler] No data in sensor alert message
-[PASS] Dispatch msg_3 succeeded
