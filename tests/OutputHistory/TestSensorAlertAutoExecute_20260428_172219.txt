@@ -1,5 +1,0 @@
-=== Test Output: TestSensorAlertAutoExecute ===
-Time: 2026-04-28 17:22:19
-
-[PASS] SensorAlertHandler correctly has auto-execute enabled by default
-[PASS] SensorAlertHandler correctly has auto-execute disabled

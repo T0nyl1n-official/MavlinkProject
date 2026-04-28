@@ -256,3 +256,8 @@
 [2026-04-28 17:22:07] INFO POST /users/login 200 4ms
 [2026-04-28 17:22:09] INFO POST /api/sensor/message 202 1910ms
 [2026-04-28 17:22:09] WARN 🚨 慢请求警告: POST /api/sensor/message 耗时 1.9100589s
+[2026-04-28 17:32:23] INFO 监控数据已重置
+[2026-04-28 17:33:04] INFO GET / 200 0ms
+[2026-04-28 17:47:23] INFO 监控数据已重置
+[2026-04-28 18:00:53] INFO GET /robots.txt 304 0ms
+[2026-04-28 18:02:23] INFO 监控数据已重置
