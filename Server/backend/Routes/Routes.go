@@ -37,7 +37,6 @@ func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager 
 	MavlinkRoutes.SetupDefaultMavlinkRoutesV2(r, jwtManager, tokenManager)
 	MavlinkRoutes.SetupMavlinkV1Routes(r, jwtManager, tokenManager)
 
-
 	TerminalRoutes.SetTerminalRoutes(r, jwtManager, tokenManager, mysqlDB, settingManager, terminalConfig)
 
 	SensorRoutes.SetupSensorRoutes(r)
@@ -48,7 +47,8 @@ func Test_Routes(r *gin.Engine) {
 		c.JSON(200, gin.H{
 			"status":  "success",
 			"message": "Hello world! - Welcome to The Mavlink Project!",
-			"version": "Pre-Release 0.2.0",
+			"version": "Release 1.0.0",
+			"author":  "Tonyl1n and Deeppluse co, ltd.",
 		})
 	})
 }
