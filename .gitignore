@@ -1,0 +1,52 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.a
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go module files
+go.sum
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Configuration files
+config.yaml
+*.env
+
+# Build output
+*.bin
+
+# ffmpeg directory - too large for GitHub
+utils/ffmpeg/
+utils/ffmpeg_bin/
+
+# Test output
+tests/OutputHistory/
+tests/camera_preview_tool/
+
+# Temporary files
+tmp/
+temp/
+
+# .trae directory
+.trae/
