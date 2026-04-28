@@ -52,13 +52,44 @@ CentralBoard/
 
 ## 快速开始
 
-### 1. 安装依赖
+### 1. 安装 FFmpeg（视频流功能必需）
+
+本项目的视频流处理功能依赖 FFmpeg，在使用视频相关功能前必须安装：
+
+**Windows:**
+```powershell
+# 使用 winget 安装
+winget install FFmpeg.FFmpeg
+
+# 或手动下载并添加到 PATH
+# 下载地址: https://www.gyan.dev/ffmpeg/builds/
+```
+
+**macOS:**
+```bash
+brew install ffmpeg
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt update
+sudo apt install ffmpeg
+```
+
+安装完成后验证：
+```bash
+ffmpeg -version
+```
+
+> ⚠️ **重要**: 如果不安装 FFmpeg，视频流相关功能将无法使用。
+
+### 2. 安装 Go 依赖
 
 ```bash
 go mod tidy
 ```
 
-### 2. 配置文件
+### 3. 配置文件
 
 复制并编辑配置文件：
 
@@ -74,13 +105,13 @@ cp config.yaml config.yaml.local
 - `backend.token`: 后端认证令牌
 - `drone.search.*`: 无人机搜索相关阈值
 
-### 3. 编译
+### 4. 编译
 
 ```bash
 go build -o CentralServer.exe .
 ```
 
-### 4. 运行
+### 5. 运行
 
 ```bash
 # 使用默认配置
