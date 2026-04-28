@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { getDroneStatusApi, getDronePositionApi } from '@/api/mavlink'
 import type { DroneStatus, DronePosition } from '@/types/mavlink'
+import { USE_REAL_API } from '@/utils/constants'
 
 interface ChainStatus {
   chainId: string
@@ -37,6 +38,63 @@ interface MonitorState {
   loading: boolean
 }
 
+function createSnapshotRecord(kind: string, payload: unknown) {
+  return { type: kind, data: payload, timestamp: Date.now() }
+}
+
+function createMockDroneStatus(): DroneStatus {
+  return {
+    armed: false,
+    mode: 'STABILIZE',
+    battery: 85,
+    altitude: 10,
+    speed: 0,
+    position: {
+      latitude: 22.5431,
+      longitude: 114.0523,
+      altitude: 10
+    }
+  }
+}
+
+function createMockDronePosition(): DronePosition {
+  return {
+    latitude: 22.5431,
+    longitude: 114.0523,
+    altitude: 10,
+    heading: 45,
+    speed: 0
+  }
+}
+
+function createMockChainStatus(): ChainStatus {
+  return {
+    chainId: '1',
+    status: 'running',
+    currentNode: 'takeoff',
+    progress: 30,
+    startTime: new Date().toISOString(),
+    lastUpdate: new Date().toISOString()
+  }
+}
+
+function createMockSystemInfo(): SystemInfo {
+  return {
+    cpuUsage: 45,
+    memoryUsage: 60,
+    diskUsage: 30,
+    networkStatus: '正常',
+    systemTime: new Date().toLocaleString()
+  }
+}
+
+function createMockErrors(): ErrorInfo[] {
+  return [
+    { id: '1', chainId: 'chain_001', error: '起飞失败', timestamp: '2026-04-17 10:00:00' },
+    { id: '2', chainId: 'chain_002', error: '连接超时', timestamp: '2026-04-17 10:05:00' }
+  ]
+}
+
 export const useMonitorStore = defineStore('monitor', {
   state: (): MonitorState => ({
     lastError: null,
@@ -59,14 +117,19 @@ export const useMonitorStore = defineStore('monitor', {
     async fetchDroneStatus() {
       this.loading = true
       try {
-        const res = await getDroneStatusApi()
-        if ((res.success || res.code === 0) && res.data) {
-          this.droneStatus = res.data
-          this.lastSnapshot = { type: 'status', data: res.data, timestamp: Date.now() }
+        if (USE_REAL_API) {
+          const response = await getDroneStatusApi()
+          if ((response.success || response.code === 0) && response.data) {
+            this.droneStatus = response.data
+            this.lastSnapshot = createSnapshotRecord('status', response.data)
+          }
+        } else {
+          this.droneStatus = createMockDroneStatus()
+          this.lastSnapshot = createSnapshotRecord('status', this.droneStatus)
         }
       } catch (error) {
-        console.log('获取无人机状态失败')
-        this.setError('获取无人机状态失败')
+        console.error('[monitor] 获取无人机状态失败', error)
+        this.setError('无人机状态暂时拿不到')
       } finally {
         this.loading = false
       }
@@ -74,14 +137,19 @@ export const useMonitorStore = defineStore('monitor', {
     async fetchDronePosition() {
       this.loading = true
       try {
-        const res = await getDronePositionApi()
-        if ((res.success || res.code === 0) && res.data) {
-          this.dronePosition = res.data
-          this.lastSnapshot = { type: 'position', data: res.data, timestamp: Date.now() }
+        if (USE_REAL_API) {
+          const response = await getDronePositionApi()
+          if ((response.success || response.code === 0) && response.data) {
+            this.dronePosition = response.data
+            this.lastSnapshot = createSnapshotRecord('position', response.data)
+          }
+        } else {
+          this.dronePosition = createMockDronePosition()
+          this.lastSnapshot = createSnapshotRecord('position', this.dronePosition)
         }
       } catch (error) {
-        console.log('获取无人机位置失败')
-        this.setError('获取无人机位置失败')
+        console.error('[monitor] 获取无人机位置失败', error)
+        this.setError('无人机位置暂时拿不到')
       } finally {
         this.loading = false
       }
@@ -92,29 +160,9 @@ export const useMonitorStore = defineStore('monitor', {
         this.fetchDronePosition()
       ])
 
-      // 模拟数据
-      this.chainStatus = {
-        chainId: '1',
-        status: 'running',
-        currentNode: 'takeoff',
-        progress: 30,
-        startTime: new Date().toISOString(),
-        lastUpdate: new Date().toISOString()
-      }
-
-      this.systemInfo = {
-        cpuUsage: 45,
-        memoryUsage: 60,
-        diskUsage: 30,
-        networkStatus: '正常',
-        systemTime: new Date().toLocaleString()
-      }
-
-      // Mock 错误数据示例
-      this.errors = [
-        { "id": "1", "chainId": "chain_001", "error": "起飞失败", "timestamp": "2026-04-17 10:00:00" },
-        { "id": "2", "chainId": "chain_002", "error": "连接超时", "timestamp": "2026-04-17 10:05:00" }
-      ]
+      this.chainStatus = createMockChainStatus()
+      this.systemInfo = createMockSystemInfo()
+      this.errors = createMockErrors()
     }
   }
 })

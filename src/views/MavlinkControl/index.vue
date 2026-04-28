@@ -16,9 +16,9 @@
       </div>
     </div>
 
-    <!-- V1 控制区 -->
+    <!-- MAVLink V1 控制区 -->
     <div style="margin-bottom: 32px">
-      <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 16px; color: var(--text-primary)">V1 控制区</h2>
+      <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 16px; color: var(--text-primary)">MAVLink V1 控制区</h2>
       <div style="background: var(--bg-card); border-radius: var(--radius-md); padding: 24px; border: 1px solid var(--border-color)">
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 24px">
           <!-- 起飞按钮 -->
@@ -64,9 +64,9 @@
       </div>
     </div>
 
-    <!-- V2 控制区 -->
+    <!-- MAVLink V2 控制区 -->
     <div>
-      <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 16px; color: var(--text-primary)">V2 控制区</h2>
+      <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 16px; color: var(--text-primary)">MAVLink V2 控制区</h2>
       <div style="background: var(--bg-card); border-radius: var(--radius-md); padding: 24px; border: 1px solid var(--border-color)">
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px">
           <!-- 一键起飞 -->
@@ -103,7 +103,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { takeoffApi, landApi, returnApi, moveApi, sensorAlertApi } from '@/api/mavlink'
+import { takeoffApi, landApi, returnApi, moveApi, sensorAlertApi, v2TakeoffApi, v2LandApi } from '@/api/mavlink'
 import { config } from '@/utils/mockService'
 
 onMounted(() => {
@@ -124,16 +124,26 @@ const moveSpeed = ref(5)
 // V2 控制参数
 const v2TakeoffAltitude = ref(10)
 const v2LandSpeed = ref(1)
+const systemId = ref(1)
+
+function showActionError(error: any, fallbackMessage: string) {
+  if (error?.response?.status === 401) {
+    ElMessage.error('登录已过期，请重新登录后再发送指令')
+    return
+  }
+
+  ElMessage.error(fallbackMessage)
+}
 
 // 处理起飞
 const handleTakeoff = async () => {
-  const params = { altitude: takeoffAltitude.value }
+  const params = { system_id: systemId.value, altitude: takeoffAltitude.value }
   if (config.USE_REAL_API) {
     try {
       await takeoffApi(params)
       ElMessage.success(`真实模式：已发送起飞指令，高度 ${takeoffAltitude.value}m`)
     } catch (error) {
-      ElMessage.error('发送起飞指令失败')
+      showActionError(error, '发送起飞指令失败')
     }
   } else {
     console.log('Mock模式：发送起飞指令', params)
@@ -143,13 +153,13 @@ const handleTakeoff = async () => {
 
 // 处理降落
 const handleLand = async () => {
-  const params = { speed: landSpeed.value }
+  const params = { system_id: systemId.value, speed: landSpeed.value }
   if (config.USE_REAL_API) {
     try {
       await landApi(params)
       ElMessage.success(`真实模式：已发送降落指令，速度 ${landSpeed.value}m/s`)
     } catch (error) {
-      ElMessage.error('发送降落指令失败')
+      showActionError(error, '发送降落指令失败')
     }
   } else {
     console.log('Mock模式：发送降落指令', params)
@@ -160,6 +170,7 @@ const handleLand = async () => {
 // 处理移动
 const handleMove = async () => {
   const params = {
+    system_id: systemId.value,
     latitude: parseFloat(moveLatitude.value),
     longitude: parseFloat(moveLongitude.value),
     altitude: parseFloat(moveAltitude.value),
@@ -170,7 +181,7 @@ const handleMove = async () => {
       await moveApi(params)
       ElMessage.success(`真实模式：已发送移动指令到坐标 (${moveLatitude.value}, ${moveLongitude.value})，高度 ${moveAltitude.value}m`)
     } catch (error) {
-      ElMessage.error('发送移动指令失败')
+      showActionError(error, '发送移动指令失败')
     }
   } else {
     console.log('Mock模式：发送移动指令', params)
@@ -185,7 +196,7 @@ const handleReturn = async () => {
       await returnApi()
       ElMessage.success('真实模式：已发送返航指令')
     } catch (error) {
-      ElMessage.error('发送返航指令失败')
+      showActionError(error, '发送返航指令失败')
     }
   } else {
     console.log('Mock模式：发送返航指令')
@@ -195,13 +206,13 @@ const handleReturn = async () => {
 
 // 处理 V2 起飞
 const handleV2Takeoff = async () => {
-  const params = { altitude: v2TakeoffAltitude.value }
+  const params = { system_id: systemId.value, altitude: v2TakeoffAltitude.value }
   if (config.USE_REAL_API) {
     try {
-      await takeoffApi(params)
+      await v2TakeoffApi(params)
       ElMessage.success(`真实模式：已发送V2起飞指令，高度 ${v2TakeoffAltitude.value}m`)
     } catch (error) {
-      ElMessage.error('发送V2起飞指令失败')
+      showActionError(error, '发送V2起飞指令失败')
     }
   } else {
     console.log('Mock模式：发送V2起飞指令', params)
@@ -211,13 +222,13 @@ const handleV2Takeoff = async () => {
 
 // 处理 V2 降落
 const handleV2Land = async () => {
-  const params = { speed: v2LandSpeed.value }
+  const params = { system_id: systemId.value, speed: v2LandSpeed.value }
   if (config.USE_REAL_API) {
     try {
-      await landApi(params)
+      await v2LandApi(params)
       ElMessage.success(`真实模式：已发送V2降落指令，速度 ${v2LandSpeed.value}m/s`)
     } catch (error) {
-      ElMessage.error('发送V2降落指令失败')
+      showActionError(error, '发送V2降落指令失败')
     }
   } else {
     console.log('Mock模式：发送V2降落指令', params)
@@ -240,7 +251,7 @@ const handleSensorAlert = async () => {
       await sensorAlertApi(params)
       ElMessage.success('真实模式：已发送火灾警报指令')
     } catch (error) {
-      ElMessage.error('发送传感器警报指令失败')
+      showActionError(error, '发送传感器警报指令失败')
     }
   } else {
     console.log('Mock模式：发送传感器警报指令', params)

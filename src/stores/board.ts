@@ -9,6 +9,10 @@ interface BoardState {
   loading: boolean
 }
 
+function logBoardStoreError(action: string, error: unknown) {
+  console.error(`[board] ${action}`, error)
+}
+
 export const useBoardStore = defineStore('board', {
   state: (): BoardState => ({
     boards: [],
@@ -18,12 +22,12 @@ export const useBoardStore = defineStore('board', {
     async fetchBoards() {
       this.loading = true
       try {
-        const res = await getBoardListApi()
-        if (res.success && res.data?.boards) {
-          this.boards = res.data.boards
+        const response = await getBoardListApi()
+        if (response.success && response.data?.boards) {
+          this.boards = response.data.boards
         }
       } catch (error) {
-        console.log('获取板子列表失败，使用模拟数据')
+        logBoardStoreError('获取板子列表失败', error)
         this.boards = [
           {
             boardId: 'drone_001',
@@ -40,36 +44,36 @@ export const useBoardStore = defineStore('board', {
     },
     async createBoard(params: CreateBoardParams) {
       try {
-        const res = await createBoardApi(params)
-        if (res.success) {
+        const response = await createBoardApi(params)
+        if (response.success) {
           await this.fetchBoards()
           return true
         }
         return false
       } catch (error) {
-        console.log('创建板子失败')
+        logBoardStoreError('创建板子失败', error)
         return false
       }
     },
     async sendMessage(params: SendMessageParams) {
       try {
-        const res = await sendMessageApi(params)
-        return res.success
+        const response = await sendMessageApi(params)
+        return response.success
       } catch (error) {
-        console.log('发送消息失败')
+        logBoardStoreError('发送消息失败', error)
         return false
       }
     },
     async stopBoard() {
       try {
-        const res = await stopBoardApi()
-        if (res.success) {
+        const response = await stopBoardApi()
+        if (response.success) {
           await this.fetchBoards()
           return true
         }
         return false
       } catch (error) {
-        console.log('停止板子失败')
+        logBoardStoreError('停止板子失败', error)
         return false
       }
     }

@@ -14,17 +14,25 @@ export interface LoginParams {
 }
 
 export interface LoginResponseData extends JsonObject {
-  token: string
-  User_ID: number
-  Username: string
-  Email: string
-  Role: UserRole
+  token?: string
+  user_id?: string
+  username?: string
+  email?: string
+  is_admin?: boolean
+  is_blocked?: boolean
+  created_at?: number
+  User_ID?: number
+  Username?: string
+  Email?: string
+  Role?: UserRole
   message?: string
 }
 
 export interface LoginResponse {
   success: boolean
-  data: LoginResponseData
+  data?: LoginResponseData
+  token?: string
+  expire_time?: number
   message?: string
 }
 
@@ -48,7 +56,7 @@ export interface LogoutResponse {
 
 export interface UserProfileResponse {
   success: boolean
-  data: {
+  data?: {
     user?: JsonObject
   } & JsonObject
   message?: string
@@ -68,7 +76,7 @@ export type VerificationType = 'register' | 'login' | 'reset_password'
 
 export interface SendEmailVerificationParams {
   email: string
-  type: VerificationType
+  type?: VerificationType
 }
 
 export interface SendEmailVerificationResponse {

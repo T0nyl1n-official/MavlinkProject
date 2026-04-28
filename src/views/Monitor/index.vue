@@ -2,59 +2,103 @@
 import { watch, onMounted, ref } from 'vue'
 import { usePolling } from '@/composables/usePolling'
 import { useMonitorStore } from '@/stores/monitor'
-import { ElMessage, ElTable, ElTableColumn, ElTag, ElTabs, ElTabPane, ElButton } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import FieldSnapshot from '@/components/FieldSnapshot.vue'
+import TrajectoryAnimation from '@/components/TrajectoryAnimation.vue'
+import VideoStream from '@/components/VideoStream.vue'
 
 const monitorStore = useMonitorStore()
+const pollingInterval = ref(5000)
+const trajectoryAnimationRef = ref<any>(null)
 
-// 轮询配置
-const pollingInterval = ref(5000) // 5秒
-
-const { data, error, loading, stop, start } = usePolling(async () => {
+const { data: latestSnapshot, error: pollingError, loading, stop, start } = usePolling(async () => {
   await monitorStore.fetchAllData()
   return monitorStore.lastSnapshot
 }, pollingInterval.value)
 
+const statusTagMap: Record<string, 'success' | 'primary' | 'danger' | 'info' | 'warning'> = {
+  running: 'success',
+  completed: 'info',
+  failed: 'danger',
+  pending: 'warning',
+  stopped: 'warning'
+}
+
+function getStatusType(status: string): 'success' | 'primary' | 'danger' | 'info' | 'warning' {
+  return statusTagMap[status] || 'info'
+}
+
+function pushToast(message: string, type: 'info' | 'warning' | 'error' = 'info') {
+  if (type === 'error') {
+    ElMessage.error(message)
+    return
+  }
+
+  if (type === 'warning') {
+    ElMessage.warning(message)
+    return
+  }
+
+  ElMessage.info(message)
+}
+
 onMounted(() => {
   monitorStore.fetchAllData()
-  start() // 自动开始轮询
+  start()
 })
 
-watch(data, snapshot => {
+watch(latestSnapshot, snapshot => {
   if (!snapshot) return
   monitorStore.setSnapshot(snapshot)
 })
 
-watch(error, msg => {
-  if (!msg) return
-  monitorStore.setError(msg)
-  ElMessage.error(msg)
+watch(pollingError, message => {
+  if (!message) return
+  monitorStore.setError(message)
+  pushToast(message, 'error')
 })
 
-// 方法
 function handleRefresh() {
   monitorStore.fetchAllData()
-  ElMessage.info('手动刷新数据')
+  pushToast('已手动刷新')
 }
 
 function handleStartPolling() {
   start()
-  ElMessage.info('开始轮询')
+  pushToast('开始轮询')
 }
 
 function handleStopPolling() {
   stop()
-  ElMessage.info('停止轮询')
+  pushToast('已暂停轮询')
 }
 
 function handleChangeInterval() {
   stop()
   start()
-  ElMessage.info(`轮询间隔已设置为 ${pollingInterval.value}ms`)
+  pushToast(`轮询间隔已调整为 ${pollingInterval.value}ms`)
 }
 
 function handleClearErrors() {
   monitorStore.errors = []
-  ElMessage.info('错误日志已清空')
+  pushToast('错误日志已清空')
+}
+
+function handleAlertTriggered(event: { coordinates: { lat: string; lon: string }; message: string } | string) {
+  const alertMessage = typeof event === 'string' ? event : event.message
+  const alertLog = {
+    id: `alert-${Date.now()}`,
+    chainId: 'CHAIN-001',
+    error: alertMessage,
+    timestamp: new Date().toISOString()
+  }
+
+  monitorStore.errors = [alertLog, ...monitorStore.errors]
+  pushToast(alertMessage, 'warning')
+}
+
+function handleTriggerTrajectory() {
+  trajectoryAnimationRef.value?.triggerAlert()
 }
 </script>
 
@@ -138,56 +182,40 @@ function handleClearErrors() {
       </el-tab-pane>
 
       <el-tab-pane label="任务链状态">
-        <div class="monitor-content">
-          <div v-if="monitorStore.chainStatus" class="card">
-            <div class="card-title">任务链状态</div>
-            <el-table :data="[monitorStore.chainStatus]" style="width: 100%">
-              <el-table-column prop="chainId" label="任务链ID" />
-              <el-table-column prop="status" label="状态">
-                <template #default="{ row }">
-                  <el-tag :type="row.status === 'running' ? 'success' : row.status === 'completed' ? 'info' : row.status === 'failed' ? 'danger' : 'warning'">
-                    {{ row.status }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column prop="currentNode" label="当前节点" />
-              <el-table-column prop="progress" label="进度">
-                <template #default="{ row }">
-                  <div class="progress-bar">
-                    <div class="progress-fill" :style="{ width: row.progress + '%' }"></div>
-                    <span class="progress-text">{{ row.progress }}%</span>
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column prop="startTime" label="开始时间" />
-              <el-table-column prop="lastUpdate" label="最后更新" />
-            </el-table>
-          </div>
-
-          <div v-if="!monitorStore.chainStatus" class="empty">
-            暂无任务链数据
-          </div>
+        <div class="table-section">
+          <el-table v-if="monitorStore.chainStatus" :data="[monitorStore.chainStatus]" class="monitor-table">
+            <el-table-column prop="chainId" label="任务链ID" />
+            <el-table-column prop="status" label="状态">
+              <template #default="{ row }">
+                <el-tag :type="getStatusType(row.status)">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="currentNode" label="当前节点" />
+            <el-table-column prop="progress" label="进度">
+              <template #default="{ row }">
+                <el-progress :percentage="row.progress" :stroke-width="8" />
+              </template>
+            </el-table-column>
+            <el-table-column prop="startTime" label="开始时间" />
+            <el-table-column prop="lastUpdate" label="最后更新" />
+          </el-table>
+          <div v-else class="empty">暂无任务链数据</div>
         </div>
       </el-tab-pane>
 
       <el-tab-pane label="错误信息">
-        <div class="monitor-content">
-          <div v-if="monitorStore.errors.length > 0" class="card error">
-            <div class="card-header">
-              <div class="card-title">错误日志</div>
-              <el-button size="small" type="danger" @click="handleClearErrors">清空日志</el-button>
-            </div>
-            <el-table :data="monitorStore.errors" style="width: 100%">
-              <el-table-column prop="id" label="错误ID" />
-              <el-table-column prop="chainId" label="任务链ID" />
-              <el-table-column prop="error" label="错误信息" />
-              <el-table-column prop="timestamp" label="时间" />
-            </el-table>
+        <div class="table-section">
+          <div v-if="monitorStore.errors.length > 0" class="error-header">
+            <span>错误日志 ({{ monitorStore.errors.length }})</span>
+            <el-button size="small" type="danger" @click="handleClearErrors">清空日志</el-button>
           </div>
-
-          <div v-if="monitorStore.errors.length === 0" class="empty">
-            暂无错误信息
-          </div>
+          <el-table v-if="monitorStore.errors.length > 0" :data="monitorStore.errors" class="monitor-table">
+            <el-table-column prop="id" label="错误ID" />
+            <el-table-column prop="chainId" label="任务链ID" />
+            <el-table-column prop="error" label="错误信息" />
+            <el-table-column prop="timestamp" label="时间" />
+          </el-table>
+          <div v-else class="empty">暂无错误信息</div>
         </div>
       </el-tab-pane>
 
@@ -219,15 +247,32 @@ function handleClearErrors() {
             </div>
           </div>
 
-          <div v-if="data" class="card">
+          <div v-if="latestSnapshot" class="card">
             <div class="card-title">最近一次轮询快照</div>
-            <pre class="pre">{{ JSON.stringify(data, null, 2) }}</pre>
+            <pre class="pre">{{ JSON.stringify(latestSnapshot, null, 2) }}</pre>
           </div>
 
-          <div v-if="!monitorStore.systemInfo && !data" class="empty">
+          <div v-if="!monitorStore.systemInfo && !latestSnapshot" class="empty">
             暂无系统数据
           </div>
         </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="现场快照">
+        <FieldSnapshot @alert-triggered="handleAlertTriggered" @trigger-trajectory="handleTriggerTrajectory" />
+      </el-tab-pane>
+
+      <el-tab-pane label="实时视频">
+        <div class="monitor-content">
+          <div class="card">
+            <div class="card-title">视频流</div>
+            <VideoStream mode="mjpeg" task-code="TASK_001" />
+          </div>
+        </div>
+      </el-tab-pane>
+      
+      <el-tab-pane label="飞行轨迹">
+        <TrajectoryAnimation ref="trajectoryAnimationRef" @alert-triggered="handleAlertTriggered" />
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -295,23 +340,6 @@ function handleClearErrors() {
   box-shadow: 0 4px 12px rgba(30, 136, 229, 0.1);
 }
 
-.card.error {
-  border-color: #FF4488;
-  background: #FFF5F7;
-}
-
-.card.error:hover {
-  border-color: #FF4488;
-  box-shadow: 0 4px 12px rgba(255, 68, 136, 0.2);
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
 .card-title {
   color: var(--text-primary);
   font-weight: 600;
@@ -364,13 +392,7 @@ function handleClearErrors() {
   border-radius: var(--radius-sm);
 }
 
-.error-message {
-  color: #ff4488;
-  font-size: 14px;
-}
-
 .empty {
-  grid-column: 1 / -1;
   color: var(--text-secondary);
   text-align: center;
   padding: 40px;
@@ -379,44 +401,55 @@ function handleClearErrors() {
   background: var(--bg-card);
 }
 
-/* 进度条样式 */
-.progress-bar {
-  position: relative;
-  height: 20px;
-  background: #E0E0E0;
-  border-radius: 10px;
+.table-section {
+  margin-top: 16px;
+}
+
+.monitor-table {
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
-.progress-fill {
-  height: 100%;
-  background: var(--primary-gradient);
-  border-radius: 10px;
-  transition: width 0.3s ease;
+.monitor-table :deep(.el-table__header) {
+  th {
+    background: var(--bg-table-header) !important;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 13px;
+    padding: 12px 0;
+    height: 48px;
+  }
 }
 
-.progress-text {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+.monitor-table :deep(.el-table__body) {
+  td {
+    padding: 12px 0;
+    height: 48px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  
+  tr:hover > td {
+    background: var(--bg-table-header) !important;
+  }
+}
+
+.monitor-table :deep(.el-table__row) {
+  height: 48px;
+}
+
+.error-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  font-size: 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 7, 58, 0.1);
+  border: 1px solid rgba(255, 7, 58, 0.3);
+  border-radius: var(--radius-sm);
+  color: var(--neon-red);
+  font-size: 13px;
   font-weight: 500;
-  color: var(--text-primary);
-}
-
-/* 表格样式 */
-:deep(.el-table) {
-  --el-table-bg-color: var(--bg-card);
-  --el-table-border-color: var(--border-color);
-  --el-table-header-bg-color: var(--bg-table-header);
-  --el-table-header-text-color: var(--text-primary);
-  --el-table-row-hover-bg-color: #F5F7FA;
-  --el-table-text-color: var(--text-secondary);
 }
 
 /* 标签页样式 */
@@ -450,5 +483,6 @@ function handleClearErrors() {
   --el-input-button-border-color: var(--border-color);
   --el-input-button-text-color: var(--text-primary);
 }
-</style>
 
+
+</style>

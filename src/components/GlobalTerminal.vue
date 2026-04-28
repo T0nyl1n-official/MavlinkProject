@@ -78,14 +78,22 @@ const sendCommand = async () => {
   
   try {
     if (config.USE_REAL_API) {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        throw new Error('未检测到登录 token，请先重新登录')
+      }
       const response = await fetch('/terminal/message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ cmd, objects, args })
       })
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `请求失败(${response.status})`)
+      }
       const result = await response.json()
       history.value.push({ cmd: rawCommand, result: `✓ ${JSON.stringify(result.message, null, 2)}` })
     } else {
@@ -141,10 +149,22 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
 })
 
+// 添加日志
+const addLog = (message: string) => {
+  history.value.push({ cmd: '[SYSTEM]', result: message })
+  // 滚动到最新输出
+  nextTick(() => {
+    if (outputRef.value) {
+      outputRef.value.scrollTop = outputRef.value.scrollHeight
+    }
+  })
+}
+
 // 暴露方法
 defineExpose({
   open,
-  close
+  close,
+  addLog
 })
 </script>
 

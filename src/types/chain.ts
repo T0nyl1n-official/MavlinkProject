@@ -1,6 +1,24 @@
 import type { ApiResponse, JsonObject } from './api'
 
-export type ChainNodeType = 'takeoff' | 'land' | 'move' | 'return' | 'wait' | 'custom' | (string & {})
+export type ChainNodeType =
+  | 'takeoff'
+  | 'land'
+  | 'goto'
+  | 'goto_location'
+  | 'return_to_home'
+  | 'rtl'
+  | 'survey'
+  | 'survey_grid'
+  | 'orbit'
+  | 'take_photo'
+  | 'start_video'
+  | 'stop_video'
+  | 'set_mode'
+  | 'move'
+  | 'return'
+  | 'wait'
+  | 'custom'
+  | (string & {})
 export type ChainStatus = 'idle' | 'running' | 'paused' | 'completed' | 'failed' | (string & {})
 
 export interface ChainNode extends JsonObject {

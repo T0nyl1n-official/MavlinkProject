@@ -58,6 +58,11 @@ const router = createRouter({
             component: () => import('@/views/Terminal/index.vue')
         },
         {
+            path: '/test-api',
+            name: 'TestApi',
+            component: () => import('@/views/TestApi/index.vue')
+        },
+        {
             path: '/admin',
             name: 'Admin',
             component: () => import('@/views/Admin/index.vue'),

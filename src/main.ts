@@ -6,6 +6,12 @@ import router from './router'
 import pinia from './stores'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
+import { config } from '@/utils/mockService'
+
+const savedUseRealApi = localStorage.getItem('useRealApi')
+if (savedUseRealApi !== null) {
+  config.USE_REAL_API = savedUseRealApi === 'true'
+}
 
 const app = createApp(App)
 app.use(router)

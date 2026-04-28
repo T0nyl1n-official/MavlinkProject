@@ -26,6 +26,16 @@ export default defineConfig({
         target: 'https://api.deeppluse.dpdns.org',
         changeOrigin: true,
         secure: false
+      },
+      '/mavlink': {
+        target: 'https://api.deeppluse.dpdns.org',
+        changeOrigin: true,
+        secure: false
+      },
+      '/admin': {
+        target: 'https://api.deeppluse.dpdns.org',
+        changeOrigin: true,
+        secure: false
       }
     }
   }

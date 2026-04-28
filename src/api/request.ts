@@ -1,21 +1,45 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
-// 从响应数据中提取错误信息
-function getErrorMessage(responseData: any): string {
-  if (!responseData || typeof responseData !== 'object') {
+function resolveErrorMessage(payload: any): string {
+  if (!payload || typeof payload !== 'object') {
     return '请求失败'
   }
 
   return (
-    responseData.message ||
-    responseData.err_info?.message ||
-    responseData.error?.message ||
-    responseData.err_info?.description ||
-    responseData.data?.message ||
-    responseData.validations?.[0]?.message ||
+    payload.message ||
+    payload.err_info?.message ||
+    payload.error?.message ||
+    payload.err_info?.description ||
+    payload.data?.message ||
+    payload.validations?.[0]?.message ||
     '请求失败'
   )
+}
+
+function shouldBypass401Redirect(): boolean {
+  if (typeof window === 'undefined') return false
+
+  return ['/test-api', '/mavlink'].some(path => window.location.pathname.startsWith(path))
+}
+
+function clearSession() {
+  localStorage.removeItem('token')
+  localStorage.removeItem('user')
+  localStorage.removeItem('role')
+}
+
+function normalizeResponse(responseBody: any) {
+  if (
+    responseBody &&
+    typeof responseBody === 'object' &&
+    responseBody.success === undefined &&
+    typeof responseBody.code === 'number'
+  ) {
+    responseBody.success = responseBody.code === 0
+  }
+
+  return responseBody
 }
 
 // 创建 axios 实例
@@ -42,31 +66,31 @@ request.interceptors.request.use(
 // 响应拦截器 - 统一处理响应
 request.interceptors.response.use(
   (response) => {
-    const responseData = response.data
+    const responseBody = normalizeResponse(response.data)
     
-    // 处理业务错误
-    if (responseData.success !== undefined && !responseData.success) {
-      const errorMessage = getErrorMessage(responseData)
-      ElMessage.error(errorMessage)
-      return Promise.reject(new Error(errorMessage))
+    if (responseBody?.success !== undefined && !responseBody.success) {
+      const message = resolveErrorMessage(responseBody)
+      ElMessage.error(message)
+      return Promise.reject(new Error(message))
     }
     
-    return responseData
+    return responseBody
   },
   (error) => {
-    // 处理网络和服务器错误
     if (error.response?.status === 401) {
-      // 登录过期，跳转到登录页
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      localStorage.removeItem('role')
-      window.location.href = '/login'
+      if (shouldBypass401Redirect()) {
+        const authError = new Error('401 Unauthorized')
+        ;(authError as any).response = error.response
+        return Promise.reject(authError)
+      }
+
+      clearSession()
       ElMessage.error('登录已过期，请重新登录')
+      window.location.href = '/login'
     } else if (error.code === 'ERR_NETWORK') {
-      ElMessage.error('网络错误，无法连接服务器')
+      ElMessage.error('网络连不上，请稍后再试')
     } else {
-      const errorMessage = getErrorMessage(error.response?.data) || '请求失败，请检查后端服务'
-      ElMessage.error(errorMessage)
+      ElMessage.error(resolveErrorMessage(error.response?.data) || '请求没有成功，请稍后再试')
     }
     return Promise.reject(error)
   }

@@ -65,7 +65,11 @@ const authStore = useAuthStore()
 const users = ref<User[]>([])
 const loading = ref(false)
 
-const currentUserId = computed(() => authStore.userInfo?.User_ID)
+const currentUserId = computed(() => {
+  const user = authStore.userInfo as Record<string, unknown> | null
+  if (!user) return undefined
+  return Number(user.User_ID || user.user_id || 0)
+})
 
 const fetchUsers = async () => {
   loading.value = true

@@ -16,7 +16,22 @@ export function getAllUsersApi() {
             message: 'Success'
         })
     }
-    return request.get('/admin/all-profile')
+    return request.get('/admin/all-profile').then((res: any) => ({
+        code: typeof res?.code === 'number' ? res.code : 0,
+        success: res?.success ?? res?.code === 0,
+        message: res?.message || 'Success',
+        data: {
+            users: Array.isArray(res?.data)
+                ? res.data.map((user: any) => ({
+                    User_ID: Number(user.user_id || 0),
+                    Username: user.username || '',
+                    Email: user.email || '',
+                    Role: user.is_admin ? 'admin' : 'user'
+                }))
+                : (res?.data?.users || [])
+        },
+        pagination: res?.pagination
+    }))
 }
 
 export function deleteUserApi(userId: number) {

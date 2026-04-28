@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Local Cloudflare tunnel runtime (PID / generated config)
+.deploy-tunnel/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

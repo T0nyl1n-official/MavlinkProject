@@ -17,8 +17,12 @@ interface ChainState {
   loading: boolean
 }
 
-function makeId() {
+function createLocalNodeId() {
   return `${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`
+}
+
+function logChainStoreError(action: string, error: unknown) {
+  console.error(`[chain] ${action}`, error)
 }
 
 export const useChainStore = defineStore('chain', {
@@ -32,12 +36,12 @@ export const useChainStore = defineStore('chain', {
     async fetchChains() {
       this.loading = true
       try {
-        const res = await getChainListApi()
-        if (res.success && res.data?.chains) {
-          this.chains = res.data.chains
+        const response = await getChainListApi()
+        if (response.success && response.data?.chains) {
+          this.chains = response.data.chains
         }
       } catch (error) {
-        console.log('获取任务链列表失败，使用模拟数据')
+        logChainStoreError('获取任务链列表失败', error)
         this.chains = []
       } finally {
         this.loading = false
@@ -45,64 +49,64 @@ export const useChainStore = defineStore('chain', {
     },
     async createChain(name: string, description?: string) {
       try {
-        const res = await createChainApi({ name, description })
-        if (res.success) {
+        const response = await createChainApi({ name, description })
+        if (response.success) {
           await this.fetchChains()
           return true
         }
         return false
       } catch (error) {
-        console.log('创建任务链失败')
+        logChainStoreError('创建任务链失败', error)
         return false
       }
     },
-    async fetchChainDetail(id: string) {
+    async fetchChainDetail(chainId: string) {
       try {
-        const res = await getChainApi(id)
-        if (res.success && res.data?.chain) {
-          this.currentChain = res.data.chain
-          this.nodes = res.data.chain.nodes
+        const response = await getChainApi(chainId)
+        if (response.success && response.data?.chain) {
+          this.currentChain = response.data.chain
+          this.nodes = response.data.chain.nodes
         }
       } catch (error) {
-        console.log('获取任务链详情失败')
+        logChainStoreError('获取任务链详情失败', error)
       }
     },
-    setNodes(nodes: ChainNode[]) {
-      this.nodes = nodes
+    setNodes(chainNodes: ChainNode[]) {
+      this.nodes = chainNodes
     },
     reorderNodesByIds(ids: string[]) {
-      const map = new Map(this.nodes.map(n => [n.id, n]))
-      const next: ChainNode[] = []
+      const nodeMap = new Map(this.nodes.map(node => [node.id, node]))
+      const reorderedNodes: ChainNode[] = []
 
       for (const id of ids) {
-        const node = map.get(id)
-        if (node) next.push(node)
+        const node = nodeMap.get(id)
+        if (node) reorderedNodes.push(node)
       }
 
-      if (next.length !== this.nodes.length) {
-        const picked = new Set(next.map(n => n.id))
-        for (const n of this.nodes) {
-          if (!picked.has(n.id)) next.push(n)
+      if (reorderedNodes.length !== this.nodes.length) {
+        const appendedIds = new Set(reorderedNodes.map(node => node.id))
+        for (const node of this.nodes) {
+          if (!appendedIds.has(node.id)) reorderedNodes.push(node)
         }
       }
 
-      this.nodes = next
+      this.nodes = reorderedNodes
     },
     async addNode(nodeType: ChainNodeType, params: Record<string, unknown>) {
       if (this.currentChain) {
         try {
-          const res = await addNodeApi(this.currentChain.id, { nodeType, params })
-          if (res.success) {
+          const response = await addNodeApi(this.currentChain.id, { nodeType, params })
+          if (response.success) {
             await this.fetchChainDetail(this.currentChain.id)
             return true
           }
         } catch (error) {
-          console.log('添加节点失败')
+          logChainStoreError('添加节点失败', error)
         }
       }
 
       this.nodes.push({
-        id: makeId(),
+        id: createLocalNodeId(),
         nodeType,
         params
       })
@@ -111,13 +115,13 @@ export const useChainStore = defineStore('chain', {
     async removeNode(nodeId: string) {
       if (this.currentChain) {
         try {
-          const res = await deleteNodeApi(this.currentChain.id, nodeId)
-          if (res.success) {
+          const response = await deleteNodeApi(this.currentChain.id, nodeId)
+          if (response.success) {
             await this.fetchChainDetail(this.currentChain.id)
             return true
           }
         } catch (error) {
-          console.log('删除节点失败')
+          logChainStoreError('删除节点失败', error)
         }
       }
 
@@ -126,27 +130,27 @@ export const useChainStore = defineStore('chain', {
     },
     async startChain(chainId: string) {
       try {
-        const res = await startChainApi(chainId)
-        if (res.success) {
+        const response = await startChainApi(chainId)
+        if (response.success) {
           await this.fetchChains()
           return true
         }
         return false
       } catch (error) {
-        console.log('启动任务链失败')
+        logChainStoreError('启动任务链失败', error)
         return false
       }
     },
     async stopChain(chainId: string) {
       try {
-        const res = await stopChainApi(chainId)
-        if (res.success) {
+        const response = await stopChainApi(chainId)
+        if (response.success) {
           await this.fetchChains()
           return true
         }
         return false
       } catch (error) {
-        console.log('停止任务链失败')
+        logChainStoreError('停止任务链失败', error)
         return false
       }
     }

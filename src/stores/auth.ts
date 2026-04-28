@@ -2,6 +2,10 @@ import { defineStore } from 'pinia'
 import { getProfileApi, loginApi, logoutApi } from '@/api/auth'
 import type { LoginParams, LoginResponse, UserProfileResponse, LoginResponseData, UserProfileData } from '@/types/auth'
 
+const TOKEN_KEY = 'token'
+const USER_KEY = 'user'
+const ROLE_KEY = 'role'
+
 function getStoredUser(): LoginResponseData | null {
   const rawUser = localStorage.getItem('user')
   if (!rawUser) return null
@@ -19,49 +23,63 @@ interface AuthState {
   role: string | null
 }
 
+function resolveUserRole(profile: LoginResponseData) {
+  return (
+    profile.Role ||
+    (profile.is_admin === true ? 'admin' : profile.is_admin === false ? 'user' : null)
+  )
+}
+
+function resetSessionState(store: AuthState) {
+  store.token = null
+  store.userInfo = null
+  store.role = null
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
+  localStorage.removeItem(ROLE_KEY)
+}
+
 export const useAuthStore = defineStore('auth', {
   state: (): AuthState => ({
-    token: localStorage.getItem('token'),
+    token: localStorage.getItem(TOKEN_KEY),
     userInfo: getStoredUser(),
-    role: localStorage.getItem('role')
+    role: localStorage.getItem(ROLE_KEY)
   }),
   actions: {
-    async login(params: LoginParams) {
-      const res: LoginResponse = await loginApi(params)
+    async login(credentials: LoginParams) {
+      const response: LoginResponse = await loginApi(credentials)
+      const token = response.data?.token || response.token
+      const profile = response.data || {}
+      const role = resolveUserRole(profile)
 
-      if (res.success && res.data?.token) {
-        this.token = res.data.token
-        this.userInfo = res.data
-        this.role = res.data.Role || null
+      if (response.success && token) {
+        this.token = token
+        this.userInfo = profile
+        this.role = role
 
-        localStorage.setItem('token', res.data.token)
-        localStorage.setItem('user', JSON.stringify(res.data))
-        if (res.data.Role) {
-          localStorage.setItem('role', res.data.Role)
+        localStorage.setItem(TOKEN_KEY, token)
+        localStorage.setItem(USER_KEY, JSON.stringify(profile))
+        if (role) {
+          localStorage.setItem(ROLE_KEY, role)
         }
 
-        return res
+        return response
       }
 
-      throw new Error(res.message || res.data?.message || '登录失败')
+      throw new Error(response.message || response.data?.message || '账号或密码不对')
     },
     async fetchProfile() {
-      const res: UserProfileResponse = await getProfileApi()
+      const response: UserProfileResponse = await getProfileApi()
 
-      if (res.success && res.data) {
-        this.userInfo = res.data.user || res.data
+      if (response.success && response.data) {
+        this.userInfo = response.data.user || response.data
       }
     },
     async logout() {
       try {
         await logoutApi()
       } finally {
-        this.token = null
-        this.userInfo = null
-        this.role = null
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        localStorage.removeItem('role')
+        resetSessionState(this)
       }
     }
   }

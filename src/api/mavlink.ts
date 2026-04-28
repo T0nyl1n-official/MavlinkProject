@@ -214,7 +214,17 @@ export function sensorAlertApi(params: SensorAlertParams): Promise<CommandRespon
       message: 'Sensor alert sent successfully'
     })
   }
-  return request.post('/mavlink/v2/sensor-alert', params)
+  return request.post('/api/sensor/message', {
+    sensor_id: params.sensor_id,
+    sensor_ip: '127.0.0.1',
+    sensor_name: params.sensor_id,
+    alert_type: 'fire',
+    alert_msg: '前端模拟告警',
+    latitude: params.latitude,
+    longitude: params.longitude,
+    timestamp: Math.floor(Date.now() / 1000),
+    severity: 'high'
+  })
 }
 
 export function connectApi(params: ConnectParams): Promise<MavlinkResponse> {
@@ -264,5 +274,22 @@ export function getConnectionsApi(): Promise<MavlinkConnectionsResponse> {
       message: 'Connections retrieved successfully'
     }))
   }
-  return request.get('/mavlink/connections')
+  return request.get('/api/sensor/status').then((res: any) => ({
+    code: typeof res?.code === 'number' ? res.code : 0,
+    success: res?.success ?? res?.code === 0,
+    message: res?.message || 'Connections retrieved successfully',
+    data: {
+      connections: Array.isArray(res?.drones)
+        ? res.drones.map((drone: any) => ({
+            id: drone.board_id || drone.system_id || '',
+            version: 'v1',
+            ip: drone.ip || '',
+            port: Number(drone.port || 0),
+            sysid: Number(drone.system_id || 0),
+            compid: Number(drone.compid || 0),
+            connected: Boolean(drone.is_idle ?? true)
+          }))
+        : []
+    }
+  }))
 }

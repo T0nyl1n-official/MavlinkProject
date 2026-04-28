@@ -1,4 +1,13 @@
 <template>
+  <!-- 科技网格线背景层 -->
+  <div class="tech-grid"></div>
+
+  <!-- 顶部流动光带 -->
+  <div class="top-light-bar"></div>
+
+  <!-- 扫描线效果 -->
+  <div class="scanline-overlay"></div>
+
   <MainLayout v-if="showLayout" />
   <router-view v-else v-slot="{ Component }">
     <transition name="page-fade" mode="out-in">
@@ -37,18 +46,18 @@ html, body, #app {
 
 body {
   background: var(--bg-body);
-  font-family: 'Microsoft YaHei', sans-serif;
+  font-family: var(--font-tech);
 }
 
 /* 页面切换动画 */
 .page-fade-enter-active,
 .page-fade-leave-active {
-  transition: all 0.3s ease-out;
+  transition: all 0.4s ease-out;
 }
 
 .page-fade-enter-from {
   opacity: 0;
-  transform: translateY(20px);
+  transform: translateY(30px);
 }
 
 .page-fade-leave-to {

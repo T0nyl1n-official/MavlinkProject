@@ -22,14 +22,17 @@ export interface DronePosition extends JsonObject {
 }
 
 export interface TakeoffParams {
+  system_id?: number
   altitude: number
 }
 
 export interface LandParams {
+  system_id?: number
   speed?: number
 }
 
 export interface MoveParams {
+  system_id?: number
   latitude: number
   longitude: number
   altitude: number

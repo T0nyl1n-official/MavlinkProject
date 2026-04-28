@@ -58,67 +58,45 @@
             
             <!-- 节点参数 -->
             <div class="node-params">
-              <template v-if="node.type === 'takeoff'">
-                <el-form-item label="高度" size="small">
-                  <el-input-number 
-                    v-model="node.params.altitude" 
-                    :min="1" 
-                    :max="1000" 
-                    :step="1"
-                    placeholder="高度(米)"
+              <div v-if="getNodeSchema(node.type).fields.length > 0" class="params-grid">
+                <el-form-item
+                  v-for="field in getNodeSchema(node.type).fields"
+                  :key="`${node.id}-${field.key}`"
+                  :label="field.label"
+                  size="small"
+                  class="param-item"
+                >
+                  <el-input-number
+                    v-if="field.component === 'number'"
+                    v-model="node.params[field.key]"
+                    :min="field.min"
+                    :max="field.max"
+                    :step="field.step ?? 1"
+                    :placeholder="field.placeholder"
+                    class="param-control"
+                  />
+                  <el-select
+                    v-else-if="field.component === 'select'"
+                    v-model="node.params[field.key]"
+                    :placeholder="field.placeholder"
+                    class="param-control"
+                  >
+                    <el-option
+                      v-for="option in field.options || []"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                  <el-input
+                    v-else
+                    v-model="node.params[field.key]"
+                    :placeholder="field.placeholder"
+                    class="param-control"
                   />
                 </el-form-item>
-              </template>
-              
-              <template v-if="node.type === 'move'">
-                <el-form-item label="纬度" size="small">
-                  <el-input 
-                    v-model="node.params.lat" 
-                    type="number" 
-                    placeholder="纬度"
-                  />
-                </el-form-item>
-                <el-form-item label="经度" size="small">
-                  <el-input 
-                    v-model="node.params.lng" 
-                    type="number" 
-                    placeholder="经度"
-                  />
-                </el-form-item>
-                <el-form-item label="高度" size="small">
-                  <el-input-number 
-                    v-model="node.params.alt" 
-                    :min="1" 
-                    :max="1000" 
-                    :step="1"
-                    placeholder="高度(米)"
-                  />
-                </el-form-item>
-              </template>
-              
-              <template v-if="node.type === 'take_photo'">
-                <el-form-item label="照片数量" size="small">
-                  <el-input-number 
-                    v-model="node.params.count" 
-                    :min="1" 
-                    :max="100" 
-                    :step="1"
-                    placeholder="照片数量"
-                  />
-                </el-form-item>
-              </template>
-              
-              <template v-if="node.type === 'hover'">
-                <el-form-item label="时长" size="small">
-                  <el-input-number 
-                    v-model="node.params.duration" 
-                    :min="1" 
-                    :max="3600" 
-                    :step="1"
-                    placeholder="时长(秒)"
-                  />
-                </el-form-item>
-              </template>
+              </div>
+              <div v-else class="empty-params">该节点无需额外参数</div>
             </div>
           </div>
         </div>
@@ -137,11 +115,13 @@
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="takeoff">起飞</el-dropdown-item>
-              <el-dropdown-item command="move">移动到位置</el-dropdown-item>
-              <el-dropdown-item command="take_photo">拍照</el-dropdown-item>
-              <el-dropdown-item command="hover">悬停</el-dropdown-item>
-              <el-dropdown-item command="land">降落</el-dropdown-item>
+              <el-dropdown-item
+                v-for="schema in nodeSchemas"
+                :key="schema.type"
+                :command="schema.type"
+              >
+                {{ schema.label }}
+              </el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -195,11 +175,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { nextTick, ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Delete, ArrowUp, ArrowDown, DocumentRemove, Check } from '@element-plus/icons-vue'
 import { createChainApi, addNodeApi, startChainApi } from '@/api/chain'
 import Sortable from 'sortablejs'
+import type { ChainNodeType } from '@/types/chain'
 
 // 任务链名称
 const chainName = ref('')
@@ -215,144 +196,305 @@ const nodesListRef = ref<HTMLElement | null>(null)
 // 任务节点接口
 interface TaskNode {
   id: string
-  type: string
-  params: any
+  type: ChainNodeType
+  params: Record<string, any>
 }
 
-// 节点ID计数器
+interface FieldOption {
+  label: string
+  value: string
+}
+
+interface NodeField {
+  key: string
+  label: string
+  component: 'number' | 'input' | 'select'
+  placeholder: string
+  min?: number
+  max?: number
+  step?: number
+  options?: FieldOption[]
+}
+
+interface NodeSchema {
+  type: ChainNodeType
+  label: string
+  defaults: Record<string, any>
+  fields: NodeField[]
+}
+
 let nodeIdCounter = 0
-// 任务节点列表
 const nodes = ref<TaskNode[]>([])
 
-// 节点类型默认参数
-const nodeTypeDefaults = {
-  takeoff: { altitude: 10 },
-  move: { lat: 40.7128, lng: -74.0060, alt: 10 },
-  take_photo: { count: 5 },
-  hover: { duration: 10 },
-  land: {}
-}
+const flightModeOptions: FieldOption[] = [
+  { label: 'STABILIZE', value: 'STABILIZE' },
+  { label: 'ALT_HOLD', value: 'ALT_HOLD' },
+  { label: 'LOITER', value: 'LOITER' },
+  { label: 'RTL', value: 'RTL' },
+  { label: 'AUTO', value: 'AUTO' },
+  { label: 'GUIDED', value: 'GUIDED' }
+]
 
-// 生成节点ID
+const nodeSchemas: NodeSchema[] = [
+  {
+    type: 'takeoff',
+    label: '起飞',
+    defaults: { altitude: 10, timeout: 30 },
+    fields: [
+      { key: 'altitude', label: '高度', component: 'number', placeholder: '起飞高度(米)', min: 1, max: 1000 },
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 3600 }
+    ]
+  },
+  {
+    type: 'land',
+    label: '降落',
+    defaults: { latitude: 22.543123, longitude: 114.052345, timeout: 60 },
+    fields: [
+      { key: 'latitude', label: '纬度', component: 'number', placeholder: '降落点纬度', min: -90, max: 90, step: 0.000001 },
+      { key: 'longitude', label: '经度', component: 'number', placeholder: '降落点经度', min: -180, max: 180, step: 0.000001 },
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 3600 }
+    ]
+  },
+  {
+    type: 'goto',
+    label: '飞往目标',
+    defaults: { latitude: 22.543123, longitude: 114.052345, altitude: 20, timeout: 60 },
+    fields: [
+      { key: 'latitude', label: '纬度', component: 'number', placeholder: '目标纬度', min: -90, max: 90, step: 0.000001 },
+      { key: 'longitude', label: '经度', component: 'number', placeholder: '目标经度', min: -180, max: 180, step: 0.000001 },
+      { key: 'altitude', label: '高度', component: 'number', placeholder: '目标高度(米)', min: 1, max: 1000 },
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 3600 }
+    ]
+  },
+  {
+    type: 'goto_location',
+    label: '飞往目标(兼容别名)',
+    defaults: { latitude: 22.543123, longitude: 114.052345, altitude: 20, timeout: 60 },
+    fields: [
+      { key: 'latitude', label: '纬度', component: 'number', placeholder: '目标纬度', min: -90, max: 90, step: 0.000001 },
+      { key: 'longitude', label: '经度', component: 'number', placeholder: '目标经度', min: -180, max: 180, step: 0.000001 },
+      { key: 'altitude', label: '高度', component: 'number', placeholder: '目标高度(米)', min: 1, max: 1000 },
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 3600 }
+    ]
+  },
+  {
+    type: 'return_to_home',
+    label: '返航',
+    defaults: { timeout: 60 },
+    fields: [
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 3600 }
+    ]
+  },
+  {
+    type: 'rtl',
+    label: '返航(兼容别名)',
+    defaults: { timeout: 60 },
+    fields: [
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 3600 }
+    ]
+  },
+  {
+    type: 'survey',
+    label: '区域侦察',
+    defaults: { latitude: 22.543123, longitude: 114.052345, radius: 50, duration: 30, timeout: 120 },
+    fields: [
+      { key: 'latitude', label: '中心纬度', component: 'number', placeholder: '中心纬度', min: -90, max: 90, step: 0.000001 },
+      { key: 'longitude', label: '中心经度', component: 'number', placeholder: '中心经度', min: -180, max: 180, step: 0.000001 },
+      { key: 'radius', label: '半径', component: 'number', placeholder: '侦察半径(米)', min: 1, max: 10000 },
+      { key: 'duration', label: '时长', component: 'number', placeholder: '侦察时长(秒)', min: 1, max: 3600 },
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 7200 }
+    ]
+  },
+  {
+    type: 'survey_grid',
+    label: '网格搜索',
+    defaults: { latitude: 22.543123, longitude: 114.052345, width: 100, height: 100, altitude: 20, timeout: 180 },
+    fields: [
+      { key: 'latitude', label: '起点纬度', component: 'number', placeholder: '起点纬度', min: -90, max: 90, step: 0.000001 },
+      { key: 'longitude', label: '起点经度', component: 'number', placeholder: '起点经度', min: -180, max: 180, step: 0.000001 },
+      { key: 'width', label: '宽度', component: 'number', placeholder: '搜索宽度(米)', min: 1, max: 10000 },
+      { key: 'height', label: '高度范围', component: 'number', placeholder: '搜索高度/范围(米)', min: 1, max: 10000 },
+      { key: 'altitude', label: '飞行高度', component: 'number', placeholder: '飞行高度(米)', min: 1, max: 1000 },
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 7200 }
+    ]
+  },
+  {
+    type: 'orbit',
+    label: '盘旋巡逻',
+    defaults: { latitude: 22.543123, longitude: 114.052345, radius: 30, duration: 30, timeout: 120 },
+    fields: [
+      { key: 'latitude', label: '中心纬度', component: 'number', placeholder: '中心纬度', min: -90, max: 90, step: 0.000001 },
+      { key: 'longitude', label: '中心经度', component: 'number', placeholder: '中心经度', min: -180, max: 180, step: 0.000001 },
+      { key: 'radius', label: '盘旋半径', component: 'number', placeholder: '盘旋半径(米)', min: 1, max: 10000 },
+      { key: 'duration', label: '盘旋时长', component: 'number', placeholder: '盘旋时长(秒)', min: 1, max: 3600 },
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 7200 }
+    ]
+  },
+  {
+    type: 'take_photo',
+    label: '拍照',
+    defaults: { timeout: 30 },
+    fields: [
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 3600 }
+    ]
+  },
+  {
+    type: 'start_video',
+    label: '开始录像',
+    defaults: { timeout: 30 },
+    fields: [
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 3600 }
+    ]
+  },
+  {
+    type: 'stop_video',
+    label: '停止录像',
+    defaults: { timeout: 30 },
+    fields: [
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 3600 }
+    ]
+  },
+  {
+    type: 'set_mode',
+    label: '设置模式',
+    defaults: { mode: 'GUIDED', timeout: 30 },
+    fields: [
+      { key: 'mode', label: '飞行模式', component: 'select', placeholder: '请选择模式', options: flightModeOptions },
+      { key: 'timeout', label: '超时', component: 'number', placeholder: '超时(秒)', min: 1, max: 3600 }
+    ]
+  }
+]
+
+const nodeSchemaMap = Object.fromEntries(nodeSchemas.map(schema => [schema.type, schema])) as Record<string, NodeSchema>
+
 function generateNodeId(): string {
   return `node_${Date.now()}_${nodeIdCounter++}`
 }
 
-// Sortable实例
 let sortableInstance: Sortable | null = null
 
-// 页面加载时初始化拖拽
-onMounted(() => {
-  if (nodesListRef.value) {
-    sortableInstance = Sortable.create(nodesListRef.value, {
-      animation: 200,
-      handle: '.node-item',
-      ghostClass: 'sortable-ghost',
-      onEnd: (evt) => {
-        const { oldIndex, newIndex } = evt
-        if (oldIndex !== undefined && newIndex !== undefined && oldIndex !== newIndex) {
-          const movedNode = nodes.value.splice(oldIndex, 1)[0]
-          nodes.value.splice(newIndex, 0, movedNode)
-          ElMessage.success('节点顺序已更新')
-        }
-      }
-    })
-  }
-})
-
-// 页面卸载时清理
-onUnmounted(() => {
-  sortableInstance?.destroy()
-  sortableInstance = null
-})
-
-// 获取节点类型的中文名称
-function getNodeTypeName(type: string): string {
-  const typeMap: Record<string, string> = {
-    takeoff: '起飞',
-    move: '移动到位置',
-    take_photo: '拍照',
-    hover: '悬停',
-    land: '降落'
-  }
-  return typeMap[type] || type
+function cloneDefaults<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value))
 }
 
-// 添加新节点
-function addNode(type: string) {
-  const newNode: TaskNode = {
-    id: generateNodeId(),
-    type,
-    params: JSON.parse(JSON.stringify(nodeTypeDefaults[type as keyof typeof nodeTypeDefaults]))
-  }
-  nodes.value.push(newNode)
+function swapNodes(currentIndex: number, targetIndex: number) {
+  const currentNode = nodes.value[currentIndex]
+  nodes.value[currentIndex] = nodes.value[targetIndex]
+  nodes.value[targetIndex] = currentNode
+  ElMessage.success('节点顺序已更新')
 }
 
-// 删除节点
-function removeNode(index: number) {
-  const newNodes = nodes.value.filter((_, i) => i !== index)
-  nodes.value = newNodes
-  console.log('删除后节点数量:', nodes.value.length)
-  ElMessage.success('节点已删除')
-  
-  // 重新初始化 Sortable 实例
-  if (sortableInstance) {
-    sortableInstance.destroy()
-    sortableInstance = null
-  }
-  
-  setTimeout(() => {
-    if (nodesListRef.value) {
-      sortableInstance = Sortable.create(nodesListRef.value, {
-        animation: 200,
-        handle: '.node-item',
-        ghostClass: 'sortable-ghost',
-        onEnd: (evt) => {
-          const { oldIndex, newIndex } = evt
-          if (oldIndex !== undefined && newIndex !== undefined && oldIndex !== newIndex) {
-            const movedNode = nodes.value.splice(oldIndex, 1)[0]
-            nodes.value.splice(newIndex, 0, movedNode)
-            ElMessage.success('节点顺序已更新')
-          }
-        }
-      })
-    }
-  }, 50)
-}
-
-// 上移节点
-function moveNodeUp(index: number) {
-  if (index > 0) {
-    const temp = nodes.value[index]
-    nodes.value[index] = nodes.value[index - 1]
-    nodes.value[index - 1] = temp
-    ElMessage.success('节点顺序已更新')
-  }
-}
-
-// 下移节点
-function moveNodeDown(index: number) {
-  if (index < nodes.value.length - 1) {
-    const temp = nodes.value[index]
-    nodes.value[index] = nodes.value[index + 1]
-    nodes.value[index + 1] = temp
-    ElMessage.success('节点顺序已更新')
-  }
-}
-
-// 清空所有内容
-function clearAll() {
+function resetComposer() {
   nodes.value = []
   chainName.value = ''
-  
-  // 清理 Sortable 实例
-  if (sortableInstance) {
-    sortableInstance.destroy()
-    sortableInstance = null
+  destroySortable()
+}
+
+function getActionErrorMessage(error: any) {
+  if (error?.response?.status === 401) {
+    return '登录状态失效了，请重新登录后再试'
+  }
+
+  return error?.message || '任务没有发送成功'
+}
+
+function initSortable() {
+  if (!nodesListRef.value || sortableInstance) {
+    return
+  }
+
+  sortableInstance = Sortable.create(nodesListRef.value, {
+    animation: 200,
+    handle: '.node-item',
+    ghostClass: 'sortable-ghost',
+    onEnd: (evt) => {
+      const { oldIndex, newIndex } = evt
+      if (oldIndex !== undefined && newIndex !== undefined && oldIndex !== newIndex) {
+        const movedNode = nodes.value.splice(oldIndex, 1)[0]
+        nodes.value.splice(newIndex, 0, movedNode)
+        ElMessage.success('节点顺序已更新')
+      }
+    }
+  })
+}
+
+function destroySortable() {
+  sortableInstance?.destroy()
+  sortableInstance = null
+}
+
+onMounted(() => {
+  initSortable()
+})
+
+onUnmounted(() => {
+  destroySortable()
+})
+
+function getNodeSchema(type: string): NodeSchema {
+  return nodeSchemaMap[type] || {
+    type,
+    label: type,
+    defaults: {},
+    fields: []
   }
 }
 
-// 发送任务链
+function getNodeTypeName(type: string): string {
+  return getNodeSchema(type).label
+}
+
+async function addNode(type: string) {
+  const schema = getNodeSchema(type)
+  const node: TaskNode = {
+    id: generateNodeId(),
+    type: type as ChainNodeType,
+    params: cloneDefaults(schema.defaults)
+  }
+  nodes.value.push(node)
+  await nextTick()
+  initSortable()
+}
+
+function removeNode(index: number) {
+  nodes.value = nodes.value.filter((_, currentIndex) => currentIndex !== index)
+  ElMessage.success('节点已删除')
+
+  if (nodes.value.length === 0) {
+    destroySortable()
+  }
+}
+
+function moveNodeUp(index: number) {
+  if (index > 0) {
+    swapNodes(index, index - 1)
+  }
+}
+
+function moveNodeDown(index: number) {
+  if (index < nodes.value.length - 1) {
+    swapNodes(index, index + 1)
+  }
+}
+
+function clearAll() {
+  resetComposer()
+}
+
+function validateNodeParams(node: TaskNode): string | null {
+  const schema = getNodeSchema(node.type)
+
+  for (const field of schema.fields) {
+    const value = node.params[field.key]
+
+    if (value === '' || value === null || value === undefined) {
+      return `${schema.label} 节点缺少参数：${field.label}`
+    }
+  }
+
+  return null
+}
+
 const sendChain = async () => {
   if (!chainName.value) {
     ElMessage.warning('请输入任务链名称')
@@ -363,17 +505,23 @@ const sendChain = async () => {
     return
   }
 
+  for (const node of nodes.value) {
+    const errorMessage = validateNodeParams(node)
+    if (errorMessage) {
+      ElMessage.warning(errorMessage)
+      return
+    }
+  }
+
   loading.value = true
 
   try {
-    // 创建任务链
-    const createRes = await createChainApi({ name: chainName.value })
-    const chainId = createRes.data?.chain_id
+    const createdChain = await createChainApi({ name: chainName.value })
+    const chainId = createdChain.data?.chain_id
     if (!chainId) {
       throw new Error('未返回任务链ID')
     }
 
-    // 批量添加节点
     for (const node of nodes.value) {
       await addNodeApi(chainId, {
         nodeType: node.type,
@@ -381,24 +529,21 @@ const sendChain = async () => {
       })
     }
 
-    // 启动任务链
     await startChainApi(chainId)
 
-    // 显示成功信息
-    ElMessage.success(`✅ 任务链已发送给中控！ID: ${chainId}`)
+    ElMessage.success(`任务链已下发，编号 ${chainId}`)
     successChainId.value = chainId
     successDialogVisible.value = true
 
   } catch (error: any) {
-    ElMessage.error(`发送失败: ${error.message || '未知错误'}`)
+    ElMessage.error(getActionErrorMessage(error))
   } finally {
     loading.value = false
   }
 }
 
-// 创建新任务链
 function createNewChain() {
-  clearAll()
+  resetComposer()
   successDialogVisible.value = false
 }
 </script>
@@ -517,6 +662,25 @@ function createNewChain() {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--primary-soft);
+}
+
+.params-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px 16px;
+}
+
+.param-item {
+  margin-bottom: 0;
+}
+
+.param-control {
+  width: 100%;
+}
+
+.empty-params {
+  color: var(--text-secondary);
+  font-size: 14px;
 }
 
 .empty-nodes {

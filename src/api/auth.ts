@@ -111,5 +111,7 @@ export function sendEmailVerificationApi(
       message: 'Verification email sent'
     })
   }
-  return request.post('/users/send-email-verification', params)
+  return request.post('/users/send-email-verification', {
+    email: params.email
+  })
 }

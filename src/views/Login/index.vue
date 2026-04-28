@@ -9,16 +9,15 @@
       <!-- 登录表单 -->
       <div class="login-container">
         <el-form
-          ref="loginFormRef"
-          :model="loginForm"
-          :rules="loginRules"
+          :model="credentials"
+          :rules="formRules"
           class="login-form"
           @submit.prevent="handleLogin"
         >
           <h2 class="login-title gradient-title">登录</h2>
           <el-form-item prop="email">
             <el-input
-              v-model="loginForm.email"
+              v-model="credentials.email"
               prefix-icon="el-icon-user"
               placeholder="邮箱"
               autocomplete="email"
@@ -27,7 +26,7 @@
           </el-form-item>
           <el-form-item prop="password">
             <el-input
-              v-model="loginForm.password"
+              v-model="credentials.password"
               prefix-icon="el-icon-lock"
               placeholder="密码"
               autocomplete="current-password"
@@ -41,7 +40,7 @@
               :loading="loading"
               type="primary"
               class="login-btn"
-              @click="submitForm"
+              native-type="submit"
               round
             >
               <span v-if="!loading">登录</span>
@@ -67,14 +66,12 @@ const router = useRouter()
 const loading = ref(false)
 const authStore = useAuthStore()
 
-// 登录表单数据
-const loginForm = reactive({
+const credentials = reactive({
   email: '',
   password: ''
 })
 
-// 表单验证规则
-const loginRules = {
+const formRules = {
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
     { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
@@ -85,31 +82,25 @@ const loginRules = {
   ]
 }
 
-// 处理登录
 const handleLogin = async () => {
   loading.value = true
   try {
-    const loginResult = await authStore.login({
-      email: loginForm.email,
-      password: loginForm.password
+    const response = await authStore.login({
+      email: credentials.email,
+      password: credentials.password
     })
     
-    if (loginResult.success && loginResult.data?.token) {
-      ElMessage.success(loginResult.data.message || loginResult.message || '登录成功')
+    if (response.success && response.data?.token) {
+      ElMessage.success(response.data.message || response.message || '欢迎回来')
       await router.push('/chain-create')
     } else {
-      ElMessage.error(loginResult.data?.message || loginResult.message || '登录失败')
+      ElMessage.error(response.data?.message || response.message || '登录没有成功')
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '登录时发生错误')
+    ElMessage.error(error.message || '登录失败，请稍后再试')
   } finally {
     loading.value = false
   }
-}
-
-// 提交表单
-function submitForm() {
-  handleLogin()
 }
 </script>
 
@@ -201,7 +192,6 @@ function submitForm() {
   transform: scale(0.98);
 }
 
-/* 修改 ElementPlus 表单校验提示颜色 */
 .el-form-item__error {
   color: #ff4488;
   font-size: 13px;
@@ -227,7 +217,6 @@ function submitForm() {
   text-decoration: underline;
 }
 
-/* 响应式设计 */
 @media (max-width: 768px) {
   .login-wrapper {
     flex-direction: column;
