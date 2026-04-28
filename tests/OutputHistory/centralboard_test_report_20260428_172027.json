@@ -1,0 +1,339 @@
+{
+  "suite_name": "CentralBoard Business Flow Integration",
+  "start_time": "2026-04-28T17:20:11.8857579+08:00",
+  "end_time": "2026-04-28T17:20:27.9846204+08:00",
+  "total_tests": 20,
+  "passed_tests": 20,
+  "failed_tests": 0,
+  "skipped_tests": 0,
+  "results": [
+    {
+      "test_name": "T001_摄像头初始化",
+      "status": "passed",
+      "message": "OS=windows, 设备=USB2.0 HD UVC WebCam, 可用=true, 输出目录=..\\..\\tests\\OutputHistory\\photos",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:15.7604418+08:00",
+      "data": {
+        "available": true,
+        "device_name": "USB2.0 HD UVC WebCam",
+        "duration_ms": 214,
+        "existing_files": 21,
+        "os": "windows",
+        "output_dir": "..\\..\\tests\\OutputHistory\\photos",
+        "resolution": "1280x720"
+      }
+    },
+    {
+      "test_name": "T002_单张拍照",
+      "status": "passed",
+      "message": "文件=..\\..\\tests\\OutputHistory\\photos\\drone_photo_20260428_172015.jpg, 大小=2764854 bytes, 耗时=960ms",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:16.7212036+08:00",
+      "data": {
+        "duration_ms": 960,
+        "elapsed_ms": 960,
+        "error": "\u003cnil\u003e",
+        "file_path": "..\\..\\tests\\OutputHistory\\photos\\drone_photo_20260428_172015.jpg",
+        "file_size": 2764854
+      }
+    },
+    {
+      "test_name": "T003_四向拍照",
+      "status": "passed",
+      "message": "成功=4/4, 文件=..\\..\\tests\\OutputHistory\\photos\\drone_photo_front_20260428_172016.jpg, ..\\..\\tests\\OutputHistory\\photos\\drone_photo_right_20260428_172018.jpg, ..\\..\\tests\\OutputHistory\\photos\\drone_photo_back_20260428_172019.jpg, ..\\..\\tests\\OutputHistory\\photos\\drone_photo_left_20260428_172021.jpg, 总耗时=5748ms",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:22.4696891+08:00",
+      "data": {
+        "elapsed_ms": 5748,
+        "files": [
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_front_20260428_172016.jpg",
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_right_20260428_172018.jpg",
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_back_20260428_172019.jpg",
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_left_20260428_172021.jpg"
+        ],
+        "success_count": 4,
+        "total": 4,
+        "total_duration_ms": 5748
+      }
+    },
+    {
+      "test_name": "T004_开始录像(2秒)",
+      "status": "passed",
+      "message": "文件=..\\..\\tests\\OutputHistory\\photos\\drone_video_test_record_20260428_172022.mp4, 大小=2097152 bytes",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:23.2503404+08:00",
+      "data": {
+        "duration_ms": 780,
+        "error": "\u003cnil\u003e",
+        "file_path": "..\\..\\tests\\OutputHistory\\photos\\drone_video_test_record_20260428_172022.mp4",
+        "file_size": 2097152
+      }
+    },
+    {
+      "test_name": "T005_CentralServer生命周期",
+      "status": "passed",
+      "message": "启动成功, DroneSearch初始化=true",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:23.3517161+08:00",
+      "data": {
+        "drone_search_ok": true,
+        "elapsed_ms": 101,
+        "port": "18081",
+        "server_started": true
+      }
+    },
+    {
+      "test_name": "T006_DroneSearch配置更新",
+      "status": "passed",
+      "message": "状态报告: total=0, available=0",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:23.5520249+08:00",
+      "data": {
+        "config_applied": true,
+        "elapsed_ms": 200,
+        "max_distance": 2000,
+        "min_battery": 25,
+        "status_report": {
+          "active_task_details": {},
+          "active_tasks": 0,
+          "available_drones": 0,
+          "drone_details": {},
+          "total_drones": 0
+        }
+      }
+    },
+    {
+      "test_name": "T007_MAVLink命令器初始化",
+      "status": "passed",
+      "message": "命令器创建成功, 已连接=false (预期false因为无真实飞控)",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:23.5520249+08:00",
+      "data": {
+        "commander_created": true,
+        "elapsed_ms": 0,
+        "is_connected": false,
+        "target_system": 1
+      }
+    },
+    {
+      "test_name": "T008_任务链创建",
+      "status": "passed",
+      "message": "ChainID=chain_test_1777368023552024900, 任务数=4, 命令列表=[TakeOff, GoTo, AutoReturn, TakePhoto]",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:23.5520249+08:00",
+      "data": {
+        "chain_id": "chain_test_1777368023552024900",
+        "elapsed_ms": 0,
+        "status": "pending",
+        "task_count": 4,
+        "tasks": [
+          "TakeOff",
+          "GoTo",
+          "AutoReturn",
+          "TakePhoto"
+        ]
+      }
+    },
+    {
+      "test_name": "T009_新命令类型验证",
+      "status": "passed",
+      "message": "验证了 5 个新命令: [AutoReturn, StartRecord, StopRecord, Orbit, SetRPM], 有效=5/5",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:23.5520249+08:00",
+      "data": {
+        "all_valid": true,
+        "command_names": [
+          "AutoReturn",
+          "StartRecord",
+          "StopRecord",
+          "Orbit",
+          "SetRPM"
+        ],
+        "commands_tested": 5,
+        "elapsed_ms": 0,
+        "valid_commands": 5
+      }
+    },
+    {
+      "test_name": "T010_完整任务流程",
+      "status": "passed",
+      "message": "任务链提交=true, ChainID=mission_full_1777368023552024900, 任务数=7, 命令=[SetMode, Arm, TakeOff, GoTo, Orbit, FourDirectionPhoto, AutoReturn]",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:23.5520249+08:00",
+      "data": {
+        "assigned_drone": "virtual_drone_for_test",
+        "chain_id": "mission_full_1777368023552024900",
+        "chain_submitted": true,
+        "elapsed_ms": 0,
+        "task_count": 7,
+        "tasks": [
+          "SetMode",
+          "Arm",
+          "TakeOff",
+          "GoTo",
+          "Orbit",
+          "FourDirectionPhoto",
+          "AutoReturn"
+        ]
+      }
+    },
+    {
+      "test_name": "T011_火灾告警响应流程",
+      "status": "passed",
+      "message": "FIRE告警处理: 任务链提交=true, 任务数=6, 包含录像功能",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:23.5526409+08:00",
+      "data": {
+        "alert_type": "FIRE",
+        "chain_id": "fire_alert_1777368023552640900",
+        "commands": [
+          "TakeOff",
+          "GoTo",
+          "FourDirectionPhoto",
+          "StartRecord",
+          "StopRecord",
+          "AutoReturn"
+        ],
+        "elapsed_ms": 0,
+        "has_video_tasks": true,
+        "task_count": 6
+      }
+    },
+    {
+      "test_name": "T012_巡逻任务流程",
+      "status": "passed",
+      "message": "巡逻任务链: 任务数=7, 包含新命令(FourDirectionRecord/Orbit/SetSpeed)=true",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:23.5526409+08:00",
+      "data": {
+        "assigned_drone": "drone_patrol_01",
+        "chain_id": "patrol_1777368023552640900",
+        "elapsed_ms": 0,
+        "has_new_commands": true,
+        "task_count": 7
+      }
+    },
+    {
+      "test_name": "T013_搜救任务流程",
+      "status": "passed",
+      "message": "搜救任务链: 任务数=7, 包含录像+四向拍照+降落",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:23.5532553+08:00",
+      "data": {
+        "assigned_drone": "drone_rescue_01",
+        "chain_id": "rescue_1777368023553255300",
+        "elapsed_ms": 0,
+        "priority": "HIGH",
+        "task_count": 7
+      }
+    },
+    {
+      "test_name": "T014_消息格式兼容性",
+      "status": "passed",
+      "message": "验证了 7 个新命令类型定义: [AutoReturn, StartRecord, StopRecord, Orbit, FourDirectionPhoto, FourDirectionRecord, SetRPM]",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:23.5532553+08:00",
+      "data": {
+        "all_valid": true,
+        "command_strings": [
+          "AutoReturn",
+          "StartRecord",
+          "StopRecord",
+          "Orbit",
+          "FourDirectionPhoto",
+          "FourDirectionRecord",
+          "SetRPM"
+        ],
+        "elapsed_ms": 0,
+        "new_commands_count": 7,
+        "valid_count": 7
+      }
+    },
+    {
+      "test_name": "T015_所有任务链查询",
+      "status": "passed",
+      "message": "当前活动任务链数量: 0",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:23.5537816+08:00",
+      "data": {
+        "active_chains": 0,
+        "elapsed_ms": 0,
+        "server_running": true
+      }
+    },
+    {
+      "test_name": "T016_HTTP API模式启动",
+      "status": "passed",
+      "message": "HTTP API 模式测试: 端口=18084, 状态码=200",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:24.0553038+08:00",
+      "data": {
+        "api_port": "18084",
+        "elapsed_ms": 501,
+        "error": "\u003cnil\u003e",
+        "http_status": 200
+      }
+    },
+    {
+      "test_name": "T017_拍照上传模拟",
+      "status": "passed",
+      "message": "模拟上传照片: 成功=3/3, 总大小=8294562 bytes",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:27.7656601+08:00",
+      "data": {
+        "elapsed_ms": 3710,
+        "files": [
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_upload_test_0_20260428_172024.jpg",
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_upload_test_1_20260428_172025.jpg",
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_upload_test_2_20260428_172026.jpg"
+        ],
+        "photo_count": 3,
+        "total_size": 8294562
+      }
+    },
+    {
+      "test_name": "T018_多任务链压力测试",
+      "status": "passed",
+      "message": "提交=5/5, 当前活跃=5",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:27.7656601+08:00",
+      "data": {
+        "active_chains": 5,
+        "elapsed_ms": 0,
+        "requested": 5,
+        "submitted": 5
+      }
+    },
+    {
+      "test_name": "T019_配置驱动参数",
+      "status": "passed",
+      "message": "配置加载=true, 端口=, Pixhawk启用=false",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:27.76617+08:00",
+      "data": {
+        "central_address": "",
+        "central_port": "",
+        "max_distance": 0,
+        "max_retries": 0,
+        "min_battery": 0,
+        "pixhawk_enabled": false,
+        "pixhawk_port": "",
+        "timeout": 0
+      }
+    },
+    {
+      "test_name": "T020_摄像头清理维护",
+      "status": "passed",
+      "message": "清理旧文件=0个, 当前文件总数=30, 总大小=81610216 bytes",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:20:27.9846204+08:00",
+      "data": {
+        "elapsed_ms": 218,
+        "files_removed": 0,
+        "last_photo": "drone_photo_upload_test_2_20260428_172026.jpg",
+        "remaining_files": 30,
+        "total_size": 81610216
+      }
+    }
+  ]
+}

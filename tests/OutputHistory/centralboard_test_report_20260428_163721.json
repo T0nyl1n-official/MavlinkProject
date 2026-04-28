@@ -1,0 +1,203 @@
+{
+  "suite_name": "CentralBoard Business Flow Integration",
+  "start_time": "2026-04-28T16:37:21.6518192+08:00",
+  "end_time": "2026-04-28T16:37:21.964361+08:00",
+  "total_tests": 11,
+  "passed_tests": 11,
+  "failed_tests": 0,
+  "skipped_tests": 0,
+  "results": [
+    {
+      "test_name": "T005_CentralServer生命周期",
+      "status": "passed",
+      "message": "启动成功, DroneSearch初始化=true",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:37:21.7612927+08:00",
+      "data": {
+        "drone_search_ok": true,
+        "elapsed_ms": 101,
+        "port": "18081",
+        "server_started": true
+      }
+    },
+    {
+      "test_name": "T006_DroneSearch配置更新",
+      "status": "passed",
+      "message": "状态报告: total=0, available=0",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:37:21.9622659+08:00",
+      "data": {
+        "config_applied": true,
+        "elapsed_ms": 200,
+        "max_distance": 2000,
+        "min_battery": 25,
+        "status_report": {
+          "active_task_details": {},
+          "active_tasks": 0,
+          "available_drones": 0,
+          "drone_details": {},
+          "total_drones": 0
+        }
+      }
+    },
+    {
+      "test_name": "T007_MAVLink命令器初始化",
+      "status": "passed",
+      "message": "命令器创建成功, 已连接=false (预期false因为无真实飞控)",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:37:21.9622659+08:00",
+      "data": {
+        "commander_created": true,
+        "elapsed_ms": 0,
+        "is_connected": false,
+        "target_system": 1
+      }
+    },
+    {
+      "test_name": "T008_任务链创建",
+      "status": "passed",
+      "message": "ChainID=chain_test_1777365441962265900, 任务数=4, 命令列表=[TakeOff, GoTo, AutoReturn, TakePhoto]",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:37:21.9622659+08:00",
+      "data": {
+        "chain_id": "chain_test_1777365441962265900",
+        "elapsed_ms": 0,
+        "status": "pending",
+        "task_count": 4,
+        "tasks": [
+          "TakeOff",
+          "GoTo",
+          "AutoReturn",
+          "TakePhoto"
+        ]
+      }
+    },
+    {
+      "test_name": "T009_新命令类型验证",
+      "status": "passed",
+      "message": "验证了 5 个新命令: [AutoReturn, StartRecord, StopRecord, Orbit, SetRPM], 有效=5/5",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:37:21.9622659+08:00",
+      "data": {
+        "all_valid": true,
+        "command_names": [
+          "AutoReturn",
+          "StartRecord",
+          "StopRecord",
+          "Orbit",
+          "SetRPM"
+        ],
+        "commands_tested": 5,
+        "elapsed_ms": 0,
+        "valid_commands": 5
+      }
+    },
+    {
+      "test_name": "T010_完整任务流程",
+      "status": "passed",
+      "message": "任务链提交=true, ChainID=mission_full_1777365441962265900, 任务数=7, 命令=[SetMode, Arm, TakeOff, GoTo, Orbit, FourDirectionPhoto, AutoReturn]",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:37:21.9627786+08:00",
+      "data": {
+        "assigned_drone": "virtual_drone_for_test",
+        "chain_id": "mission_full_1777365441962265900",
+        "chain_submitted": true,
+        "elapsed_ms": 0,
+        "task_count": 7,
+        "tasks": [
+          "SetMode",
+          "Arm",
+          "TakeOff",
+          "GoTo",
+          "Orbit",
+          "FourDirectionPhoto",
+          "AutoReturn"
+        ]
+      }
+    },
+    {
+      "test_name": "T011_火灾告警响应流程",
+      "status": "passed",
+      "message": "FIRE告警处理: 任务链提交=true, 任务数=6, 包含录像功能",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:37:21.9627786+08:00",
+      "data": {
+        "alert_type": "FIRE",
+        "chain_id": "fire_alert_1777365441962778600",
+        "commands": [
+          "TakeOff",
+          "GoTo",
+          "FourDirectionPhoto",
+          "StartRecord",
+          "StopRecord",
+          "AutoReturn"
+        ],
+        "elapsed_ms": 0,
+        "has_video_tasks": true,
+        "task_count": 6
+      }
+    },
+    {
+      "test_name": "T012_巡逻任务流程",
+      "status": "passed",
+      "message": "巡逻任务链: 任务数=7, 包含新命令(FourDirectionRecord/Orbit/SetSpeed)=true",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:37:21.9632893+08:00",
+      "data": {
+        "assigned_drone": "drone_patrol_01",
+        "chain_id": "patrol_1777365441963289300",
+        "elapsed_ms": 0,
+        "has_new_commands": true,
+        "task_count": 7
+      }
+    },
+    {
+      "test_name": "T013_搜救任务流程",
+      "status": "passed",
+      "message": "搜救任务链: 任务数=7, 包含录像+四向拍照+降落",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:37:21.9638138+08:00",
+      "data": {
+        "assigned_drone": "drone_rescue_01",
+        "chain_id": "rescue_1777365441963813800",
+        "elapsed_ms": 0,
+        "priority": "HIGH",
+        "task_count": 7
+      }
+    },
+    {
+      "test_name": "T014_消息格式兼容性",
+      "status": "passed",
+      "message": "验证了 7 个新命令类型定义: [AutoReturn, StartRecord, StopRecord, Orbit, FourDirectionPhoto, FourDirectionRecord, SetRPM]",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:37:21.9638138+08:00",
+      "data": {
+        "all_valid": true,
+        "command_strings": [
+          "AutoReturn",
+          "StartRecord",
+          "StopRecord",
+          "Orbit",
+          "FourDirectionPhoto",
+          "FourDirectionRecord",
+          "SetRPM"
+        ],
+        "elapsed_ms": 0,
+        "new_commands_count": 7,
+        "valid_count": 7
+      }
+    },
+    {
+      "test_name": "T015_所有任务链查询",
+      "status": "passed",
+      "message": "当前活动任务链数量: 0",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:37:21.9638138+08:00",
+      "data": {
+        "active_chains": 0,
+        "elapsed_ms": 0,
+        "server_running": true
+      }
+    }
+  ]
+}

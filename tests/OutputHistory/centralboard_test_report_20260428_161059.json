@@ -1,0 +1,86 @@
+{
+  "suite_name": "CentralBoard Business Flow Integration",
+  "start_time": "2026-04-28T16:10:53.2113383+08:00",
+  "end_time": "2026-04-28T16:10:59.0090344+08:00",
+  "total_tests": 5,
+  "passed_tests": 2,
+  "failed_tests": 3,
+  "skipped_tests": 0,
+  "results": [
+    {
+      "test_name": "T001_摄像头初始化",
+      "status": "passed",
+      "message": "OS=windows, 设备=Integrated Webcam, 可用=true, 输出目录=..\\..\\tests\\OutputHistory\\photos",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:10:53.4909411+08:00",
+      "data": {
+        "available": true,
+        "device_name": "Integrated Webcam",
+        "duration_ms": 270,
+        "existing_files": 10,
+        "os": "windows",
+        "output_dir": "..\\..\\tests\\OutputHistory\\photos",
+        "resolution": "1280x720"
+      }
+    },
+    {
+      "test_name": "T002_单张拍照",
+      "status": "failed",
+      "message": "文件=..\\..\\tests\\OutputHistory\\photos\\drone_photo_20260428_161053.jpg, 大小=0 bytes, 耗时=676ms",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:10:54.1671423+08:00",
+      "data": {
+        "duration_ms": 676,
+        "elapsed_ms": 676,
+        "error": "no available camera capture tool found (ffmpeg/fswebcam)",
+        "file_path": "..\\..\\tests\\OutputHistory\\photos\\drone_photo_20260428_161053.jpg",
+        "file_size": 0
+      }
+    },
+    {
+      "test_name": "T003_四向拍照",
+      "status": "failed",
+      "message": "成功=0/4, 文件=..\\..\\tests\\OutputHistory\\photos\\drone_photo_front_20260428_161054.jpg, ..\\..\\tests\\OutputHistory\\photos\\drone_photo_right_20260428_161055.jpg, ..\\..\\tests\\OutputHistory\\photos\\drone_photo_back_20260428_161056.jpg, ..\\..\\tests\\OutputHistory\\photos\\drone_photo_left_20260428_161057.jpg, 总耗时=4585ms",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:10:58.7529381+08:00",
+      "data": {
+        "elapsed_ms": 4585,
+        "files": [
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_front_20260428_161054.jpg",
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_right_20260428_161055.jpg",
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_back_20260428_161056.jpg",
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_left_20260428_161057.jpg"
+        ],
+        "success_count": 0,
+        "total": 4,
+        "total_duration_ms": 4585
+      }
+    },
+    {
+      "test_name": "T004_开始录像(2秒)",
+      "status": "failed",
+      "message": "文件=..\\..\\tests\\OutputHistory\\photos\\drone_video_test_record_20260428_161058.mp4, 大小=0 bytes",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:10:58.9070734+08:00",
+      "data": {
+        "duration_ms": 154,
+        "error": "ffmpeg not found for recording",
+        "file_path": "..\\..\\tests\\OutputHistory\\photos\\drone_video_test_record_20260428_161058.mp4",
+        "file_size": 0
+      }
+    },
+    {
+      "test_name": "T005_CentralServer生命周期",
+      "status": "passed",
+      "message": "启动成功, DroneSearch初始化=true",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T16:10:59.0090344+08:00",
+      "data": {
+        "drone_search_ok": true,
+        "elapsed_ms": 101,
+        "port": "18081",
+        "server_started": true
+      }
+    }
+  ]
+}

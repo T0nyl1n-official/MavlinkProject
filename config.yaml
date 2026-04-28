@@ -1,44 +1,46 @@
 server:
-  # HTTPS 服务器监听端口
   port: "8084"
-  # Let's Encrypt 域名 (留空则不使用自动证书)
   domain: "central.deeppluse.dpdns.org"
-  # Let's Encrypt 通知邮箱
   email: "your-email@example.com"
-  # SSL 证书路径 (手动指定证书时使用)
-  cert_file: ""
-  key_file: ""
+  cert_file: "httpsConfig/cert.pem"
+  key_file: "httpsConfig/key.pem"
 
 mavlink:
-  # 串口端口 (连接到 FX4 飞控)
   serial_port: "/dev/ttyUSB0"
-  # 串口波特率
   serial_baud: 115200
-  # 目标飞控 System ID
   target_system: 1
 
 backend:
-  # 后端 API 地址
   address: "https://api.deeppluse.dpdns.org"
-  # 设备认证 Token
   token: "your-device-token"
-  # 设备 ID
   device_id: "central_001"
-  # 设备类型
   device_type: "central"
 
-# 无人机搜索配置
 drone:
   search:
-    # 最小电池电量阈值
     min_battery_level: 20.0
-    # 最大无人机距离阈值
     max_drone_distance: 1000.0
-    # 状态检查超时时间（秒）
     status_check_timeout: 5
-    # 状态更新间隔（秒）
     status_update_interval: 2
-    # 消息通道大小
     message_chan_size: 1000
-    # 评分权重
     score_weight: 10.0
+
+central:
+  address: "0.0.0.0"
+  port: "8081"
+  task:
+    max_retries: 3
+    timeout: 30
+  drone:
+    min_battery_level: 20.0
+    max_drone_distance: 1000.0
+    status_check_timeout: 10
+
+pixhawk:
+  enabled: false
+  serial_port: "/dev/serial0"
+  serial_baud: 57600
+
+backend_server:
+  address: "api.deeppluse.dpdns.org"
+  port: "8080"

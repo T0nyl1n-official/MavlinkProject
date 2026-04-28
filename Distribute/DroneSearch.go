@@ -17,6 +17,24 @@ import (
 
 type MavlinkCommander = MavlinkBoard.MavlinkCommander
 
+type DroneConfig struct {
+	Timeout            time.Duration
+	Retry              int
+	Batch              int
+	MinBatteryLevel    float64
+	MaxDroneDistance   float64
+	StatusCheckTimeout time.Duration
+}
+
+var defaultDroneConfig = DroneConfig{
+	Timeout:            5 * time.Second,
+	Retry:              10,
+	Batch:              10,
+	MinBatteryLevel:    20.0,
+	MaxDroneDistance:   1000.0,
+	StatusCheckTimeout: 2 * time.Second,
+}
+
 type DroneStatus struct {
 	BoardID      string
 	SystemID     uint8
@@ -31,14 +49,38 @@ type DroneStatus struct {
 	Commander    *MavlinkCommander
 }
 
+type ProgressChain struct {
+	ChainID       string
+	Tasks         []Task
+	CurrentTask   int
+	Status        string
+	StartTime     time.Time
+	EndTime       time.Time
+	AssignedDrone string
+}
+
+type Task struct {
+	TaskID     string
+	Command    string
+	Data       map[string]interface{}
+	Status     string
+	RetryCount int
+	MaxRetries int
+	Timeout    time.Duration
+	StartTime  time.Time
+	EndTime    time.Time
+}
+
 type DroneSearch struct {
 	boardManager *boardHandler.BoardConnectionManager
 	drones       map[string]*DroneStatus
-	activeTasks  map[string]string // boardID -> taskChainID
+	activeTasks  map[string]string
+	taskChains   map[string]*ProgressChain
 	mu           sync.RWMutex
 	messageChan  chan *Board.BoardMessage
 	stopChan     chan bool
 	running      bool
+	config       DroneConfig
 }
 
 var (
@@ -46,9 +88,29 @@ var (
 	droneSearchOnce sync.Once
 )
 
+func (ds *DroneSearch) UpdateConfig(cfg DroneConfig) {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+	ds.config = cfg
+	log.Printf("[DroneSearch] 配置已更新: MinBatteryLevel=%.1f, MaxDroneDistance=%.1f, StatusCheckTimeout=%v",
+		cfg.MinBatteryLevel, cfg.MaxDroneDistance, cfg.StatusCheckTimeout)
+}
+
+func (ds *DroneSearch) getConfig() DroneConfig {
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
+	return ds.getConfigUnlocked()
+}
+
+func (ds *DroneSearch) getConfigUnlocked() DroneConfig {
+	if ds.config.MinBatteryLevel <= 0.0 || ds.config.MaxDroneDistance <= 0 || ds.config.StatusCheckTimeout <= 0 {
+		return defaultDroneConfig
+	}
+	return ds.config
+}
+
 func GetDroneSearch() *DroneSearch {
 	droneSearchOnce.Do(func() {
-		// 从配置中获取消息通道大小
 		messageChanSize := 1000
 		if config.AppConfig != nil && config.AppConfig.Drone.Search.MessageChanSize > 0 {
 			messageChanSize = config.AppConfig.Drone.Search.MessageChanSize
@@ -58,6 +120,7 @@ func GetDroneSearch() *DroneSearch {
 			boardManager: boardHandler.GetBoardManager(),
 			drones:       make(map[string]*DroneStatus),
 			activeTasks:  make(map[string]string),
+			taskChains:   make(map[string]*ProgressChain),
 			messageChan:  make(chan *Board.BoardMessage, messageChanSize),
 			stopChan:     make(chan bool),
 		}
@@ -90,15 +153,18 @@ func (ds *DroneSearch) Stop() error {
 		return nil
 	}
 
-	close(ds.stopChan)
 	ds.running = false
+	select {
+	case <-ds.stopChan:
+	default:
+		close(ds.stopChan)
+	}
 
 	log.Printf("[DroneSearch] Stopped")
 	return nil
 }
 
 func (ds *DroneSearch) statusUpdateLoop() {
-	// 从配置中获取状态更新间隔
 	updateInterval := 2
 	if config.AppConfig != nil && config.AppConfig.Drone.Search.StatusUpdateInterval > 0 {
 		updateInterval = config.AppConfig.Drone.Search.StatusUpdateInterval
@@ -175,38 +241,93 @@ func (ds *DroneSearch) handleBoardMessage(msg *Board.BoardMessage) {
 
 func (ds *DroneSearch) checkDroneStatus() {
 	ds.mu.Lock()
-	defer ds.mu.Unlock()
-
-	// 从配置中获取状态检查超时时间
-	timeoutSeconds := 5
-	if config.AppConfig != nil && config.AppConfig.Drone.Search.StatusCheckTimeout > 0 {
-		timeoutSeconds = config.AppConfig.Drone.Search.StatusCheckTimeout
-	}
-
+	cfg := ds.getConfigUnlocked()
 	now := time.Now()
+
+	var droneIDs []string
 	for boardID, drone := range ds.drones {
-		if now.Sub(drone.LastUpdate) > time.Duration(timeoutSeconds)*time.Second {
+		droneIDs = append(droneIDs, boardID)
+		if now.Sub(drone.LastUpdate) > cfg.StatusCheckTimeout {
 			log.Printf("[DroneSearch] Drone %s timeout, marking as unavailable", boardID)
 			drone.IsIdle = false
 		}
 	}
+	ds.mu.Unlock()
+
+	if len(droneIDs) == 0 {
+		return
+	}
+
+	ds.checkDroneConnectionParallel(droneIDs, cfg)
+}
+
+func (ds *DroneSearch) checkDroneConnectionParallel(droneIDs []string, cfg DroneConfig) {
+	if len(droneIDs) == 0 {
+		return
+	}
+
+	batchSize := cfg.Batch
+	if batchSize <= 0 {
+		batchSize = 10
+	}
+
+	retryCount := cfg.Retry
+	if retryCount <= 0 {
+		retryCount = 10
+	}
+
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, batchSize)
+
+	for _, boardID := range droneIDs {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			success := ds.checkAndUpdateDroneWithRetry(id, retryCount, cfg.Timeout)
+			if !success {
+				log.Printf("[DroneSearch] Warning: Drone %s connection failed after %d retries", id, retryCount)
+			}
+		}(boardID)
+	}
+
+	wg.Wait()
+}
+
+func (ds *DroneSearch) checkAndUpdateDroneWithRetry(boardID string, retryCount int, timeout time.Duration) bool {
+	for attempt := 1; attempt <= retryCount; attempt++ {
+		ds.mu.RLock()
+		drone, exists := ds.drones[boardID]
+		ds.mu.RUnlock()
+
+		if !exists {
+			return false
+		}
+
+		conn, _, _, connected := ds.boardManager.GetBoardConnectionInfo(boardID)
+		if connected && conn != "" {
+			ds.mu.Lock()
+			drone.IsIdle = true
+			ds.mu.Unlock()
+			return true
+		}
+
+		if attempt < retryCount {
+			time.Sleep(timeout / time.Duration(retryCount))
+		}
+	}
+
+	return false
 }
 
 func (ds *DroneSearch) FindBestDrone() (*DroneStatus, error) {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 
-	// 从配置中获取参数
-	minBatteryLevel := 20.0
-	scoreWeight := 10.0
-	if config.AppConfig != nil {
-		if config.AppConfig.Drone.Search.MinBatteryLevel > 0 {
-			minBatteryLevel = config.AppConfig.Drone.Search.MinBatteryLevel
-		}
-		if config.AppConfig.Drone.Search.ScoreWeight > 0 {
-			scoreWeight = config.AppConfig.Drone.Search.ScoreWeight
-		}
-	}
+	cfg := ds.getConfigUnlocked()
 
 	var bestDrone *DroneStatus
 	var bestScore float64 = -1
@@ -215,12 +336,10 @@ func (ds *DroneSearch) FindBestDrone() (*DroneStatus, error) {
 		if !drone.IsIdle {
 			continue
 		}
-
-		if drone.BatteryLevel < minBatteryLevel {
+		if drone.BatteryLevel < cfg.MinBatteryLevel {
 			continue
 		}
-
-		score := drone.BatteryLevel * scoreWeight
+		score := drone.BatteryLevel * 10
 
 		if score > bestScore {
 			bestScore = score
@@ -338,15 +457,11 @@ func (ds *DroneSearch) GetAvailableDrones() []*DroneStatus {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 
-	// 从配置中获取最小电池电量阈值
-	minBatteryLevel := 20.0
-	if config.AppConfig != nil && config.AppConfig.Drone.Search.MinBatteryLevel > 0 {
-		minBatteryLevel = config.AppConfig.Drone.Search.MinBatteryLevel
-	}
+	cfg := ds.getConfigUnlocked()
 
 	var drones []*DroneStatus
 	for _, drone := range ds.drones {
-		if drone.IsIdle && drone.BatteryLevel >= minBatteryLevel {
+		if drone.IsIdle && drone.BatteryLevel >= cfg.MinBatteryLevel {
 			drones = append(drones, drone)
 		}
 	}
@@ -381,7 +496,45 @@ func (ds *DroneSearch) SetDroneIdle(boardID string, isIdle bool) error {
 	return nil
 }
 
-// 任务链调度相关方法
+func (ds *DroneSearch) SubmitProgressChain(chain *ProgressChain) error {
+	if chain == nil || chain.ChainID == "" {
+		return fmt.Errorf("invalid progress chain")
+	}
+
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+
+	drone, exists := ds.drones[chain.AssignedDrone]
+	if !exists {
+		return fmt.Errorf("drone %s not found", chain.AssignedDrone)
+	}
+
+	if !drone.IsIdle {
+		return fmt.Errorf("drone %s is not idle", chain.AssignedDrone)
+	}
+
+	ds.taskChains[chain.ChainID] = chain
+	drone.IsIdle = false
+	ds.activeTasks[chain.AssignedDrone] = chain.ChainID
+
+	log.Printf("[DroneSearch] Progress chain %s submitted to drone %s with %d tasks",
+		chain.ChainID, chain.AssignedDrone, len(chain.Tasks))
+
+	return nil
+}
+
+func (ds *DroneSearch) GetProgressChain(chainID string) (*ProgressChain, error) {
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
+
+	chain, exists := ds.taskChains[chainID]
+	if !exists {
+		return nil, fmt.Errorf("chain %s not found", chainID)
+	}
+
+	return chain, nil
+}
+
 func (ds *DroneSearch) AssignTaskToDrone(boardID string, taskChainID string) error {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
@@ -391,22 +544,15 @@ func (ds *DroneSearch) AssignTaskToDrone(boardID string, taskChainID string) err
 		return fmt.Errorf("drone %s not found", boardID)
 	}
 
-	// 检查无人机是否可用
 	if !drone.IsIdle {
 		return fmt.Errorf("drone %s is not idle", boardID)
 	}
 
-	// 从配置中获取最小电池电量阈值
-	minBatteryLevel := 20.0
-	if config.AppConfig != nil && config.AppConfig.Drone.Search.MinBatteryLevel > 0 {
-		minBatteryLevel = config.AppConfig.Drone.Search.MinBatteryLevel
-	}
-
-	if drone.BatteryLevel < minBatteryLevel {
+	cfg := ds.getConfig()
+	if drone.BatteryLevel < cfg.MinBatteryLevel {
 		return fmt.Errorf("drone %s battery level too low: %.1f%%", boardID, drone.BatteryLevel)
 	}
 
-	// 分配任务
 	ds.activeTasks[boardID] = taskChainID
 	drone.IsIdle = false
 
@@ -423,7 +569,6 @@ func (ds *DroneSearch) ReleaseDroneFromTask(boardID string) error {
 		return fmt.Errorf("drone %s not found", boardID)
 	}
 
-	// 释放任务
 	delete(ds.activeTasks, boardID)
 	drone.IsIdle = true
 
@@ -447,34 +592,25 @@ func (ds *DroneSearch) IsDroneAvailable(boardID string) bool {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 
-	// 从配置中获取最小电池电量阈值
-	minBatteryLevel := 20.0
-	if config.AppConfig != nil && config.AppConfig.Drone.Search.MinBatteryLevel > 0 {
-		minBatteryLevel = config.AppConfig.Drone.Search.MinBatteryLevel
-	}
+	cfg := ds.getConfig()
 
 	drone, exists := ds.drones[boardID]
 	if !exists {
 		return false
 	}
 
-	// 检查无人机是否空闲且电量充足
-	return drone.IsIdle && drone.BatteryLevel >= minBatteryLevel
+	return drone.IsIdle && drone.BatteryLevel >= cfg.MinBatteryLevel
 }
 
 func (ds *DroneSearch) GetAvailableDroneCount() int {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 
-	// 从配置中获取最小电池电量阈值
-	minBatteryLevel := 20.0
-	if config.AppConfig != nil && config.AppConfig.Drone.Search.MinBatteryLevel > 0 {
-		minBatteryLevel = config.AppConfig.Drone.Search.MinBatteryLevel
-	}
+	cfg := ds.getConfig()
 
 	count := 0
 	for _, drone := range ds.drones {
-		if drone.IsIdle && drone.BatteryLevel >= minBatteryLevel {
+		if drone.IsIdle && drone.BatteryLevel >= cfg.MinBatteryLevel {
 			count++
 		}
 	}
@@ -493,7 +629,6 @@ func (ds *DroneSearch) GetMessageChan() chan *Board.BoardMessage {
 	return ds.messageChan
 }
 
-// 检查无人机状态并返回详细报告
 func (ds *DroneSearch) GetDroneStatusReport() map[string]interface{} {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
@@ -529,4 +664,8 @@ func (ds *DroneSearch) GetDroneStatusReport() map[string]interface{} {
 	report["active_task_details"] = activeTaskDetails
 
 	return report
+}
+
+func (ds *DroneSearch) InjectDroneStatus(msg *Board.BoardMessage) {
+	ds.handleBoardMessage(msg)
 }

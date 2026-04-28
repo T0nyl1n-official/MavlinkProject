@@ -1,0 +1,73 @@
+{
+  "suite_name": "CentralBoard Business Flow Integration",
+  "start_time": "2026-04-28T17:07:47.8321675+08:00",
+  "end_time": "2026-04-28T17:07:55.9063767+08:00",
+  "total_tests": 4,
+  "passed_tests": 4,
+  "failed_tests": 0,
+  "skipped_tests": 0,
+  "results": [
+    {
+      "test_name": "T001_摄像头初始化",
+      "status": "passed",
+      "message": "OS=windows, 设备=USB2.0 HD UVC WebCam, 可用=true, 输出目录=..\\..\\tests\\OutputHistory\\photos",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:07:48.0547962+08:00",
+      "data": {
+        "available": true,
+        "device_name": "USB2.0 HD UVC WebCam",
+        "duration_ms": 222,
+        "existing_files": 15,
+        "os": "windows",
+        "output_dir": "..\\..\\tests\\OutputHistory\\photos",
+        "resolution": "1280x720"
+      }
+    },
+    {
+      "test_name": "T002_单张拍照",
+      "status": "passed",
+      "message": "文件=..\\..\\tests\\OutputHistory\\photos\\drone_photo_20260428_170748.jpg, 大小=2764854 bytes, 耗时=1222ms",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:07:49.277688+08:00",
+      "data": {
+        "duration_ms": 1222,
+        "elapsed_ms": 1222,
+        "error": "\u003cnil\u003e",
+        "file_path": "..\\..\\tests\\OutputHistory\\photos\\drone_photo_20260428_170748.jpg",
+        "file_size": 2764854
+      }
+    },
+    {
+      "test_name": "T003_四向拍照",
+      "status": "passed",
+      "message": "成功=4/4, 文件=..\\..\\tests\\OutputHistory\\photos\\drone_photo_front_20260428_170749.jpg, ..\\..\\tests\\OutputHistory\\photos\\drone_photo_right_20260428_170750.jpg, ..\\..\\tests\\OutputHistory\\photos\\drone_photo_back_20260428_170752.jpg, ..\\..\\tests\\OutputHistory\\photos\\drone_photo_left_20260428_170753.jpg, 总耗时=5780ms",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:07:55.05793+08:00",
+      "data": {
+        "elapsed_ms": 5780,
+        "files": [
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_front_20260428_170749.jpg",
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_right_20260428_170750.jpg",
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_back_20260428_170752.jpg",
+          "..\\..\\tests\\OutputHistory\\photos\\drone_photo_left_20260428_170753.jpg"
+        ],
+        "success_count": 4,
+        "total": 4,
+        "total_duration_ms": 5780
+      }
+    },
+    {
+      "test_name": "T004_开始录像(2秒)",
+      "status": "passed",
+      "message": "文件=..\\..\\tests\\OutputHistory\\photos\\drone_video_test_record_20260428_170755.mp4, 大小=2097152 bytes",
+      "duration_ms": 0,
+      "timestamp": "2026-04-28T17:07:55.9063767+08:00",
+      "data": {
+        "duration_ms": 848,
+        "error": "\u003cnil\u003e",
+        "file_path": "..\\..\\tests\\OutputHistory\\photos\\drone_video_test_record_20260428_170755.mp4",
+        "file_size": 2097152
+      }
+    }
+  ]
+}

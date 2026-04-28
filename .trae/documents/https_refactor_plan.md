@@ -21,8 +21,11 @@
 ### 1.2 向后端传输消息-规范
 
 * **后端的服务地址**: <https://api.deeppluse.dpdns.org>
+
 * **认证方式**: JWT Token (Bearer Token)
+
 * **核心接口**: POST /api/board/send-message
+
 * **消息格式**: 严格按照 API 文档规范
 
 ## 2. 重构目标

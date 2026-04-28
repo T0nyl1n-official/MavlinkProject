@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/acme/autocert"
@@ -14,10 +15,11 @@ import (
 	config "MavlinkProject_Board/app/config"
 	backend "MavlinkProject_Board/app/services/backend"
 	mavlink "MavlinkProject_Board/app/services/mavlink"
+	Core "MavlinkProject_Board/Core"
+	Distribute "MavlinkProject_Board/Distribute"
 )
 
 func main() {
-	// 加载配置
 	configPath := "config.yaml"
 	if len(os.Args) > 1 {
 		configPath = os.Args[1]
@@ -27,10 +29,31 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// 初始化后端客户端
+	if err := Core.LoadConfig(configPath); err != nil {
+		log.Printf("Warning: Failed to load Core config: %v", err)
+	}
+
+	mode := "api"
+	if m, ok := os.LookupEnv("CENTRAL_MODE"); ok {
+		mode = m
+	}
+	if len(os.Args) > 2 && (os.Args[2] == "--tcp" || os.Args[2] == "--central") {
+		mode = "tcp"
+	}
+
+	switch mode {
+	case "tcp":
+		startTCPMode()
+	default:
+		startAPIMode()
+	}
+}
+
+func startAPIMode() {
+	log.Println("[Central] Starting in HTTP API mode...")
+
 	backend.InitBackendClient()
 
-	// 初始化 MAVLink
 	if err := mavlink.InitMavlinkCommander(
 		config.AppConfig.Mavlink.SerialPort,
 		config.AppConfig.Mavlink.SerialBaud,
@@ -39,27 +62,21 @@ func main() {
 		log.Printf("Warning: Failed to initialize MAVLink: %v", err)
 	}
 
-	// 设置 Gin 模式
 	gin.SetMode(gin.ReleaseMode)
 
-	// 创建路由
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger())
 
-	// 注册路由
 	api.SetupRoutes(router)
 
-	// 配置 HTTP 服务器
 	addr := fmt.Sprintf("0.0.0.0:%s", config.AppConfig.Server.Port)
 	server := &http.Server{
 		Addr:    addr,
 		Handler: router,
 	}
 
-	// 启动服务器
 	if config.AppConfig.Server.Domain != "" {
-		// 使用 Let's Encrypt
 		certManager := autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
 			HostPolicy: autocert.HostWhitelist(config.AppConfig.Server.Domain),
@@ -71,7 +88,6 @@ func main() {
 			GetCertificate: certManager.GetCertificate,
 		}
 
-		// 启动 HTTP 服务器用于 ACME 验证
 		go func() {
 			httpServer := &http.Server{
 				Addr:    ":80",
@@ -83,7 +99,6 @@ func main() {
 			}
 		}()
 
-		// 启动 HTTPS 服务器
 		tlsListener, err := tls.Listen("tcp", addr, tlsConfig)
 		if err != nil {
 			log.Fatalf("Failed to create TLS listener: %v", err)
@@ -94,16 +109,54 @@ func main() {
 			log.Fatalf("Server error: %v", err)
 		}
 	} else if config.AppConfig.Server.CertFile != "" && config.AppConfig.Server.KeyFile != "" {
-		// 使用手动证书
 		log.Printf("[Central] HTTPS Server started on %s with manual certificate", addr)
 		if err := server.ListenAndServeTLS(config.AppConfig.Server.CertFile, config.AppConfig.Server.KeyFile); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
 	} else {
-		// 不使用 TLS
 		log.Printf("[Central] HTTP Server started on %s (no TLS)", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
 	}
+}
+
+func startTCPMode() {
+	log.Println("[Central] Starting in TCP Server mode (Central调度系统)...")
+
+	cfg := Core.GetConfig()
+	port := cfg.Central.Port
+	if port == "" {
+		port = "8081"
+	}
+	address := cfg.Central.Address
+
+	central := Core.NewCentralServer(address, port)
+
+	timeoutSec := cfg.Central.Drone.StatusCheckTimeout
+	if timeoutSec == 0 {
+		timeoutSec = 10
+	}
+	central.DroneSearch().UpdateConfig(Distribute.DroneConfig{
+		MinBatteryLevel:    cfg.Central.Drone.MinBatteryLevel,
+		MaxDroneDistance:   cfg.Central.Drone.MaxDroneDistance,
+		StatusCheckTimeout: time.Duration(timeoutSec) * time.Second,
+	})
+
+	if err := central.Start(); err != nil {
+		log.Fatalf("Failed to start CentralServer: %v", err)
+	}
+
+	if cfg.Pixhawk.Enabled && cfg.Pixhawk.SerialPort != "" {
+		Core.StartLocalPixhawk(central, cfg.Pixhawk.SerialPort, cfg.Pixhawk.SerialBaud)
+	}
+
+	log.Printf("[Central] TCP 调度系统已启动, 监听地址 %s:%s", address, port)
+	log.Printf("[Central] 等待接收ProgressChain任务链...")
+
+	central.WaitForShutdown()
+
+	log.Printf("[Central] TCP 调度系统正在关闭...")
+	central.Stop()
+	log.Printf("[Central] TCP 调度系统已关闭")
 }
