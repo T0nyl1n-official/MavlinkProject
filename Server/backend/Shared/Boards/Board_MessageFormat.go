@@ -33,6 +33,14 @@ const (
 	Command_GetConfig      CommandType = "GetConfig"
 	Command_GetStatus      CommandType = "GetStatus"
 	Command_DetailResponse CommandType = "Status"
+
+	Command_AutoReturn         CommandType = "AutoReturn"
+	Command_StartRecord        CommandType = "StartRecord"
+	Command_StopRecord         CommandType = "StopRecord"
+	Command_Orbit              CommandType = "Orbit"
+	Command_FourDirectionPhoto CommandType = "FourDirectionPhoto"
+	Command_FourDirectionRecord CommandType = "FourDirectionRecord"
+	Command_SetRPM             CommandType = "SetRPM"
 )
 
 const (

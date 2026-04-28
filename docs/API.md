@@ -162,7 +162,57 @@ type MessageData struct {
     Command     string                 `json:"command"`      // 具体命令
     Data        map[string]interface{} `json:"data"`         // 命令数据
 }
-```
+
+#### 2.3.5 MessageAttribute 消息属性枚举
+
+| Attribute 值 | 说明 | 使用场景 |
+|-------------|------|---------|
+| `Default` | 默认 | 通用消息传递 |
+| `Status` | 状态 | 设备状态上报、心跳 |
+| `Mission` | 任务 | 任务链相关消息 |
+| `Control` | 控制 | 飞行控制指令 |
+| `Command` | 命令 | 通用命令下发 |
+| `Warning` | 警告 | 告警信息推送 |
+
+#### 2.3.6 CommandType 命令类型枚举
+
+| Command 值 | 说明 | 典型 Data 参数 |
+|-----------|------|---------------|
+| `TakeOff` | 起飞 | `{ "altitude": float }` |
+| `Land` | 降落 | `{ "latitude": float, "longitude": float }` |
+| `GoTo` | 飞往目标 | `{ "latitude": float, "longitude": float, "altitude": float }` |
+| `SetSpeed` | 设置速度 | `{ "speed": float, "unit": "m/s" }` |
+| `SetPosition` | 设置位置 | `{ "latitude": float, "longitude": float, "altitude": float }` |
+| `TakePhoto` | 拍照 | `{ "latitude": float, "longitude": float }` |
+| `SetConfig` | 设置配置 | `{ "key": "string", "value": any }` |
+| `SetCamera` | 设置相机 | `{ "mode": "photo/video", "params": object }` |
+| `Connect` | 连接 | `{ "target_id": "string" }` |
+| `Disconnect` | 断开 | `{ "target_id": "string" }` |
+| `GetConfig` | 获取配置 | `{ "key": "string" }` |
+| `GetStatus` | 获取状态 | `{}` |
+| `Status` | 状态响应 | 设备返回的状态数据 |
+| `AutoReturn` | 自动返航 | `{ "home_latitude": float, "home_longitude": float }` |
+| `StartRecord` | 开始录制 | `{ "camera_id": "string", "quality": "high/medium/low" }` |
+| `StopRecord` | 停止录制 | `{ "camera_id": "string" }` |
+| `Orbit` | 围绕某点环游 | `{ "center_lat": float, "center_lng": float, "altitude": float, "radius": float, "speed": float }` |
+| `FourDirectionPhoto` | 四方位拍照 | `{ "latitude": float, "longitude": float, "altitude": float }` |
+| `FourDirectionRecord` | 四方位录制 | `{ "latitude": float, "longitude": float, "altitude": float, "duration": int }` |
+| `SetRPM` | 调整转速 | `{ "rpm": int, "motor_id": int (可选，默认所有) }` |
+
+#### 2.3.7 MessageType 消息类型枚举
+
+| MessageType 值 | 说明 |
+|---------------|------|
+| `Request` | 请求消息 |
+| `Response` | 响应消息 |
+
+#### 2.3.8 Connection 连接类型枚举
+
+| Connection 值 | 说明 |
+|---------------|------|
+| `TCP` | TCP 连接 |
+| `UDP` | UDP 连接 |
+| `Serial` | 串口连接 |
 
 ### 2.4 传感器警报类型 (重点)
 
