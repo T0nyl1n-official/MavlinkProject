@@ -164,6 +164,8 @@ func (s *Setting) mergeFromYAML(yamlSetting *Setting) {
 	s.CORS = yamlSetting.CORS
 	s.RateLimit = yamlSetting.RateLimit
 	s.Board = yamlSetting.Board
+	s.AI = yamlSetting.AI
+	s.DroneSearch = yamlSetting.DroneSearch
 
 	log.Printf("[SettingManager] 最终配置: Host=%s, User=%s, Password长度=%d, Database=%s",
 		s.Database.MySQL.Host,
@@ -299,6 +301,24 @@ type Setting struct {
 	ErrorListener ErrorListenerConfig `yaml:"error_listener"`
 	Board         BoardConfig         `yaml:"board"`
 	DroneSearch   DroneSearchConfig   `yaml:"drone_search"`
+	AI            AIConfig            `yaml:"ai"`
+}
+
+type AIConfig struct {
+	LSTM LSTMModelConfig `yaml:"lstm"`
+	YOLO YOLOModelConfig `yaml:"yolo"`
+}
+
+type LSTMModelConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	URL     string `yaml:"url"`
+	Timeout int    `yaml:"timeout"`
+}
+
+type YOLOModelConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	URL     string `yaml:"url"`
+	Timeout int    `yaml:"timeout"`
 }
 
 type DatabaseConfig struct {

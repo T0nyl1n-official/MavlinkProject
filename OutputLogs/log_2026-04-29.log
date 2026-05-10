@@ -1,0 +1,67 @@
+[2026-04-29 17:00:23] INFO GET / 200 2ms
+[2026-04-29 17:00:24] INFO GET /favicon.ico 304 13ms
+[2026-04-29 17:07:14] INFO 监控数据已重置
+[2026-04-29 17:20:00] INFO GET /api/chain/list 401 16ms
+[2026-04-29 17:20:14] INFO POST /users/login 200 43ms
+[2026-04-29 17:20:31] INFO GET /users/profile 404 0ms
+[2026-04-29 17:20:33] INFO POST /users/send-email-verification 401 1ms
+[2026-04-29 17:20:34] INFO POST /api/chain/create 401 0ms
+[2026-04-29 17:20:36] INFO GET /api/chain/list 401 0ms
+[2026-04-29 17:20:37] INFO GET /api/board/list 401 0ms
+[2026-04-29 17:20:38] INFO GET /api/sensor/status 500 43ms
+[2026-04-29 17:20:40] INFO GET /mavlink/v1/drone/status 401 0ms
+[2026-04-29 17:20:41] INFO GET /mavlink/v1/drone/position 401 0ms
+[2026-04-29 17:20:42] INFO POST /mavlink/v1/handler/create 401 0ms
+[2026-04-29 17:20:44] INFO POST /mavlink/v1/connection/start 401 0ms
+[2026-04-29 17:20:45] INFO POST /mavlink/v1/connection/stop 401 0ms
+[2026-04-29 17:20:46] INFO GET /admin/all-profile 401 0ms
+[2026-04-29 17:20:47] INFO POST /terminal/message 401 0ms
+[2026-04-29 17:20:49] INFO POST /terminal/message 401 0ms
+[2026-04-29 17:20:51] INFO POST /terminal/message 401 0ms
+[2026-04-29 17:20:53] INFO GET /api/backend/live/list 401 0ms
+[2026-04-29 17:22:14] INFO 监控数据已重置
+[2026-04-29 17:22:27] INFO GET /users/profile 404 0ms
+[2026-04-29 17:22:29] INFO GET /users/me 404 0ms
+[2026-04-29 17:22:31] INFO GET /users/current 404 0ms
+[2026-04-29 17:22:32] INFO GET /users/whoami 404 0ms
+[2026-04-29 17:22:36] INFO GET /users/info 404 0ms
+[2026-04-29 17:22:37] INFO GET /users/send-email-verification 404 0ms
+[2026-04-29 17:26:32] INFO POST /users/profile 404 0ms
+[2026-04-29 17:26:33] INFO POST /users/me 404 1ms
+[2026-04-29 17:26:33] INFO POST /users/whoami 404 0ms
+[2026-04-29 17:26:35] INFO POST /users/send-email-verification 400 0ms
+[2026-04-29 17:37:14] INFO 监控数据已重置
+[2026-04-29 17:52:00] INFO GET /robots.txt 304 14ms
+[2026-04-29 17:52:14] INFO 监控数据已重置
+[2026-04-29 18:07:14] INFO 监控数据已重置
+[2026-04-29 18:22:14] INFO 监控数据已重置
+[2026-04-29 18:37:14] INFO 监控数据已重置
+[2026-04-29 18:43:04] INFO POST /users/register 400 23ms
+[2026-04-29 18:52:14] INFO 监控数据已重置
+[2026-04-29 18:55:06] INFO GET /api/photo/latest 404 0ms
+[2026-04-29 18:55:15] INFO GET /api/settings 404 0ms
+[2026-04-29 18:55:18] INFO GET /api/settings 404 0ms
+[2026-04-29 19:07:14] INFO 监控数据已重置
+[2026-04-29 19:22:14] INFO 监控数据已重置
+[2026-04-29 19:37:11] INFO 监控数据已重置
+[2026-04-29 19:38:42] INFO GET / 200 2ms
+[2026-04-29 19:38:43] INFO GET /favicon.ico 304 3ms
+[2026-04-29 19:50:54] INFO GET /.git/config 404 0ms
+[2026-04-29 19:50:54] WARN 🚨 可疑访问警告: IP[185.177.72.62] 访问敏感路径[/.git/config]
+[2026-04-29 19:52:11] INFO 监控数据已重置
+[2026-04-29 20:07:11] INFO 监控数据已重置
+[2026-04-29 20:22:11] INFO 监控数据已重置
+[2026-04-29 20:37:11] INFO 监控数据已重置
+[2026-04-29 20:52:11] INFO 监控数据已重置
+[2026-04-29 21:07:11] INFO 监控数据已重置
+[2026-04-29 21:22:11] INFO 监控数据已重置
+[2026-04-29 21:37:11] INFO 监控数据已重置
+[2026-04-29 21:52:11] INFO 监控数据已重置
+[2026-04-29 22:07:11] INFO 监控数据已重置
+[2026-04-29 22:22:11] INFO 监控数据已重置
+[2026-04-29 22:37:11] INFO 监控数据已重置
+[2026-04-29 22:52:11] INFO 监控数据已重置
+[2026-04-29 23:01:53] INFO GET / 200 0ms
+[2026-04-29 23:01:54] INFO GET /favicon.ico 304 0ms
+[2026-04-29 23:05:15] INFO GET /favicon.ico 200 97ms
+[2026-04-29 23:05:15] INFO GET / 200 0ms

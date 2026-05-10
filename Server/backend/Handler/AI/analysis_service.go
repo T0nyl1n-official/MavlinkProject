@@ -1,0 +1,273 @@
+package AI
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"log"
+	"sync"
+	"time"
+
+	Models "MavlinkProject/Models"
+	BoardSensorHandler "MavlinkProject/Server/backend/Handler/Boards/SensorBoard"
+	FRPHelper "MavlinkProject/Server/backend/Utils/FRPHelper"
+	WarningHandler "MavlinkProject/Server/backend/Utils/WarningHandle"
+)
+
+type AnalysisService struct {
+	client *Models.ModelClient
+	hub    *AlertHub
+	mu     sync.RWMutex
+}
+
+var (
+	globalService *AnalysisService
+	serviceOnce   sync.Once
+)
+
+func GetAnalysisService() *AnalysisService {
+	serviceOnce.Do(func() {
+		globalService = &AnalysisService{
+			client: Models.GetModelClient(),
+			hub:    GetAlertHub(),
+		}
+	})
+	return globalService
+}
+
+func (s *AnalysisService) ProcessSensorData(sensorID string, sensorType string, values []Models.TimeSeriesPoint, lat, lon float64) (*Models.AlertJSON, error) {
+	startTime := time.Now()
+
+	lstmReq := Models.LSTMRequest{
+		SensorID:     sensorID,
+		DataType:     sensorType,
+		TimeSeries:   values,
+		PredictSteps: 10,
+	}
+
+	lstmResp, err := s.client.AnalyzeSensorData(lstmReq)
+	if err != nil {
+		log.Printf("[AI] LSTM 分析失败: sensor=%s, err=%v", sensorID, err)
+		WarningHandler.HandleAgentError("LSTM analysis failed", "analysis-service", sensorID, err.Error())
+		return nil, err
+	}
+
+	log.Printf("[AI] LSTM 分析完成: sensor=%s, anomaly=%v, score=%.4f, type=%s, 耗时=%v",
+		sensorID, lstmResp.IsAnomaly, lstmResp.AnomalyScore, lstmResp.AnomalyType, time.Since(startTime))
+
+	if !lstmResp.IsAnomaly {
+		statusAlert := &Models.AlertJSON{
+			AlertID:     generateAlertID(),
+			AlertType:   "normal",
+			Severity:    Models.SeverityInfo,
+			Latitude:    lat,
+			Longitude:   lon,
+			AnomalyType: "none",
+			Source:      Models.SourceSensor,
+			SensorID:    sensorID,
+			Timestamp:   time.Now().Unix(),
+			Confidence:  1.0 - lstmResp.AnomalyScore,
+			Details: map[string]interface{}{
+				"anomaly_score": lstmResp.AnomalyScore,
+				"predict_steps": lstmReq.PredictSteps,
+			},
+		}
+		s.hub.Broadcast(statusAlert)
+		return statusAlert, nil
+	}
+
+	severity := scoreToSeverity(lstmResp.AnomalyScore)
+	anomalyType := mapLSTMAnomalyType(lstmResp.AnomalyType, sensorType)
+
+	alert := &Models.AlertJSON{
+		AlertID:     generateAlertID(),
+		AlertType:   "anomaly",
+		Severity:    severity,
+		Latitude:    lat,
+		Longitude:   lon,
+		AnomalyType: anomalyType,
+		Source:      Models.SourceSensor,
+		SensorID:    sensorID,
+		Timestamp:   time.Now().Unix(),
+		Confidence:  lstmResp.Confidence,
+		Details: map[string]interface{}{
+			"anomaly_score": lstmResp.AnomalyScore,
+			"prediction":    lstmResp.Prediction,
+			"model_version": lstmResp.ModelVersion,
+		},
+	}
+
+	s.hub.Broadcast(alert)
+
+	log.Printf("[AI] 🚨 传感器异常告警: alert_id=%s, sensor=%s, type=%s, severity=%s, score=%.4f",
+		alert.AlertID, sensorID, anomalyType, severity, lstmResp.AnomalyScore)
+
+	if severity == Models.SeverityCritical || severity == Models.SeverityHigh {
+		go s.triggerDroneDispatch(sensorID, lat, lon, anomalyType, severity)
+	}
+
+	return alert, nil
+}
+
+func (s *AnalysisService) ProcessDroneImage(droneID string, imageBase64 string, imageURL string, lat, lon float64) (*Models.AlertJSON, error) {
+	startTime := time.Now()
+
+	yoloReq := Models.YOLORequest{
+		ImageBase64: imageBase64,
+		ImageURL:    imageURL,
+		Confidence:  0.5,
+		Source:      Models.SourceDrone,
+		Metadata: map[string]string{
+			"drone_id":  droneID,
+			"latitude":  fmt.Sprintf("%.6f", lat),
+			"longitude": fmt.Sprintf("%.6f", lon),
+		},
+	}
+
+	yoloResp, err := s.client.AnalyzeImage(yoloReq)
+	if err != nil {
+		log.Printf("[AI] YOLO 分析失败: drone=%s, err=%v", droneID, err)
+		WarningHandler.HandleAgentError("YOLO analysis failed", "analysis-service", droneID, err.Error())
+		return nil, err
+	}
+
+	log.Printf("[AI] YOLO 分析完成: drone=%s, anomaly=%v, type=%s, severity=%s, detections=%d, 耗时=%v",
+		droneID, yoloResp.HasAnomaly, yoloResp.AnomalyType, yoloResp.Severity, len(yoloResp.Detections), time.Since(startTime))
+
+	if !yoloResp.HasAnomaly {
+		statusAlert := &Models.AlertJSON{
+			AlertID:     generateAlertID(),
+			AlertType:   "normal",
+			Severity:    Models.SeverityInfo,
+			Latitude:    lat,
+			Longitude:   lon,
+			AnomalyType: "none",
+			Source:      Models.SourceDrone,
+			DroneID:     droneID,
+			Timestamp:   time.Now().Unix(),
+			Confidence:  1.0,
+			Details: map[string]interface{}{
+				"detections": len(yoloResp.Detections),
+			},
+		}
+		s.hub.Broadcast(statusAlert)
+		return statusAlert, nil
+	}
+
+	alert := &Models.AlertJSON{
+		AlertID:     generateAlertID(),
+		AlertType:   "anomaly",
+		Severity:    yoloResp.Severity,
+		Latitude:    lat,
+		Longitude:   lon,
+		AnomalyType: yoloResp.AnomalyType,
+		Source:      Models.SourceDrone,
+		DroneID:     droneID,
+		Timestamp:   time.Now().Unix(),
+		Confidence:  yoloResp.Detections[0].Confidence,
+		Details: map[string]interface{}{
+			"detections":    yoloResp.Detections,
+			"model_version": yoloResp.ModelVersion,
+		},
+	}
+
+	s.hub.Broadcast(alert)
+
+	log.Printf("[AI] 🚨 无人机图像告警: alert_id=%s, drone=%s, type=%s, severity=%s",
+		alert.AlertID, droneID, yoloResp.AnomalyType, yoloResp.Severity)
+
+	return alert, nil
+}
+
+func (s *AnalysisService) triggerDroneDispatch(sensorID string, lat, lon float64, anomalyType, severity string) {
+	log.Printf("[AI] 触发无人机调度: sensor=%s, type=%s, severity=%s", sensorID, anomalyType, severity)
+
+	client := FRPHelper.GetCentralClient()
+	if client != nil {
+		drones, err := client.GetAvailableDrones()
+		if err != nil || len(drones) == 0 {
+			log.Printf("[AI] 无可用无人机: %v", err)
+			return
+		}
+
+		altitude := 30.0
+		radius := 50.0
+		switch anomalyType {
+		case Models.AnomalyFire, Models.AnomalySmoke:
+			altitude = 25.0
+			radius = 50.0
+		case Models.AnomalyPerson:
+			altitude = 40.0
+			radius = 100.0
+		case Models.AnomalyGas:
+			altitude = 20.0
+			radius = 30.0
+		}
+
+		frpReq := BoardSensorHandler.SensorAlertReq{
+			SensorID:   sensorID,
+			Latitude:   lat,
+			Longitude:  lon,
+			Radius:     radius,
+			PhotoCount: 4,
+			Altitude:   altitude,
+		}
+
+		if err := BoardSensorHandler.GenerateChainAndSendToCentral(frpReq); err != nil {
+			log.Printf("[AI] 无人机调度失败: %v", err)
+			WarningHandler.HandleDroneError("drone dispatch failed", drones[0].BoardID, "", err.Error())
+		} else {
+			log.Printf("[AI] ✅ 无人机调度成功: drone=%s", drones[0].BoardID)
+		}
+	}
+}
+
+func scoreToSeverity(score float64) string {
+	switch {
+	case score >= 0.9:
+		return Models.SeverityCritical
+	case score >= 0.7:
+		return Models.SeverityHigh
+	case score >= 0.4:
+		return Models.SeverityMedium
+	case score >= 0.2:
+		return Models.SeverityLow
+	default:
+		return Models.SeverityInfo
+	}
+}
+
+func mapLSTMAnomalyType(modelType string, sensorType string) string {
+	if modelType != "" && modelType != "unknown" {
+		return modelType
+	}
+
+	switch sensorType {
+	case "temperature", "temp":
+		return Models.AnomalyTemp
+	case "humidity":
+		return Models.AnomalyHumidity
+	case "pressure":
+		return Models.AnomalyPressure
+	case "gas", "co", "ch4", "co2":
+		return Models.AnomalyGas
+	default:
+		return Models.AnomalyUnknown
+	}
+}
+
+func generateAlertID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return fmt.Sprintf("alert_%s_%d", hex.EncodeToString(b), time.Now().UnixMilli())
+}
+
+func AlertToJSON(alert *Models.AlertJSON) string {
+	data, err := json.Marshal(alert)
+	if err != nil {
+		log.Printf("[AI] AlertJSON 序列化失败: %v", err)
+		return "{}"
+	}
+	return string(data)
+}

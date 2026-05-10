@@ -17,6 +17,7 @@ import (
 	Conf "MavlinkProject/Server/backend/Config"
 	DBService "MavlinkProject/Server/backend/Database"
 	DBConfig "MavlinkProject/Server/backend/Database/Config"
+	Models "MavlinkProject/Models"
 	UsersHandler "MavlinkProject/Server/backend/Handler/Users"
 	Middleware "MavlinkProject/Server/backend/Middles"
 	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
@@ -225,6 +226,19 @@ func (bs *BackendServer) Start(addr, port string, httpsConfig HTTPSConfig) *Back
 	// 初始化 CentralBoard HTTP 客户端
 	FRPHelper.InitCentralClient()
 	log.Printf("[Backend] CentralBoard HTTP client initialized")
+
+	var lstmURL, yoloURL string
+	setting := bs.SettingManager.GetSetting()
+	if setting.AI.LSTM.Enabled && setting.AI.LSTM.URL != "" {
+		lstmURL = setting.AI.LSTM.URL
+		log.Printf("[Backend] AI LSTM model enabled: %s", lstmURL)
+	}
+	if setting.AI.YOLO.Enabled && setting.AI.YOLO.URL != "" {
+		yoloURL = setting.AI.YOLO.URL
+		log.Printf("[Backend] AI YOLO model enabled: %s", yoloURL)
+	}
+	Models.InitModelClient(lstmURL, yoloURL)
+	log.Printf("[Backend] AI ModelClient initialized")
 
 	bs.Run(port, httpsConfig)
 	log.Printf("Backend server starting...")

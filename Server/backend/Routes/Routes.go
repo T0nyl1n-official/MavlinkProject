@@ -5,6 +5,7 @@ import (
 	gorm "gorm.io/gorm"
 
 	Conf "MavlinkProject/Server/backend/Config"
+	AIRoutes "MavlinkProject/Server/backend/Routes/AI"
 	BoardsRoutes "MavlinkProject/Server/backend/Routes/Boards"
 	DeviceRoutes "MavlinkProject/Server/backend/Routes/Device"
 	MavlinkRoutes "MavlinkProject/Server/backend/Routes/Mavlink"
@@ -40,6 +41,8 @@ func InitAllRoutes(r *gin.Engine, jwtManager *jwtUtils.JWTManager, tokenManager 
 	TerminalRoutes.SetTerminalRoutes(r, jwtManager, tokenManager, mysqlDB, settingManager, terminalConfig)
 
 	SensorRoutes.SetupSensorRoutes(r)
+
+	AIRoutes.SetupAIRoutes(r)
 }
 
 func Test_Routes(r *gin.Engine) {
