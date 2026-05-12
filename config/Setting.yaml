@@ -1,141 +1,26 @@
-# =====================================================
-# MavlinkProject 配置文件 For All Components
-# =====================================================
-
-# 数据库配置
 database:
   mysql:
     host: "localhost"
     port: "3306"
     user: "root"
-    password: "lyx@0051229L"
+    password: ""
     database: "mavlinkproject"
     charset: "utf8mb4"
-    max_idle_conns: 10
-    max_open_conns: 100
-    conn_max_lifetime: 3600
 
-# Redis 配置
 redis:
   host: "localhost"
   port: "6379"
   password: ""
-  db_allocation:
-    general_warning: 0
-    backend: 1
-    frontend: 2
-    agent: 3
-    drone: 4
-    sensor: 5
-    token: 14
-    verification: 15
+  database: "0"
 
-# JWT 认证配置
-jwt:
-  secret_key: ""
-  expire_time: 3600          # 秒 (1小时)
-  refresh_time: 86400        # 秒 (24小时)
-  identity_key: "user_id"
-
-# CORS 跨域配置
-cors:
-  allow_origins:
-    - "http://localhost:3000"
-    - "http://localhost:5673"
-  allow_methods:
-    - "GET"
-    - "POST"
-    - "PUT"
-    - "DELETE"
-    - "OPTIONS"
-  allow_headers:
-    - "Origin"
-    - "Content-Type"
-    - "Accept"
-    - "Authorization"
-    - "X-Requested-With"
-  expose_headers:
-    - "Content-Length"
-  allow_credentials: true
-  max_age: 43200             # 秒 (12小时)
-
-# 速率限制配置
-rate_limit:
-  enabled: true
-  redis_prefix: "rate_limit:"
-  enable_global_limit: true
-  default_rule:
-    limit_type: "ip"
-    capacity: 10000
-    fill_rate: 400.0
-    window_seconds: 60
-
-# 日志配置
-logger:
-  level: "INFO"              # DEBUG, INFO, WARN, ERROR
-  log_dir: "./OutputLogs"
-  max_file_size: 104857600   # 100MB
-  access_threshold: 1000
-  url_error_threshold: 50
-  slow_request_threshold: 1.0 # 秒
-  monitor_window: 15          # 分钟
-
-# 静态资源配置
-resources:
-  static_dir: "./Resources"
-
-# 验证配置
-verification:
-  code_length: 6
-  code_expire_time: 300       # 秒 (5分钟)
-  max_request_per_minute: 5
-
-# 错误监听配置
-error_listener:
-  enable_panic_recovery: true
-  enable_error_logging: true
-  enable_warning_push: true
-  sources:
-    - "handler"
-    - "middleware"
-    - "route"
-    - "database"
-    - "chain"
-
-# 主板通信配置
-board:
-  tcp:
-    enabled: true
-    address: "0.0.0.0"
-    port: "8081"
-    max_buffer_size: 4096
-  udp:
+ai:
+  lstm:
     enabled: false
-    address: "0.0.0.0"
-    port: "8082"
-    max_buffer_size: 4096
-  connection:
-    timeout: 180             # 秒 (连接超时时间)
-    max_retry_attempts: 3    # 最大重试次数
-    retry_delay: 5           # 秒 (重试延迟时间)
-    keepalive_interval: 10   # 秒 (心跳包间隔)
-  frp:
-    timeout: 5
-    read_timeout: 10
-    max_retry_attempts: 3
-    central_servers:
-      - name: "central_1"
-        address: "frp-put.com"
-        port: 14465
-      - name: "central_2"
-        address: "frp-put.com"
-        port: 14465
-
-# 无人机搜索配置
-drone_search:
-  timeout: 5                 # 秒 (无人机状态查询超时)
-  retry: 10                  # 重试次数
-  batch: 10                  # 并行查询批次大小
-  min_battery: 20.0          # 最低电量要求 (%)
-  max_distance: 1000.0       # 最大距离 (米)
-  status_check_interval: 2   # 秒 (状态检查间隔)
+    url: ""
+  yolo:
+    enabled: true
+    url: "http://1a866d66.r21.cpolar.top"
+    timeout: 30
+    conf: 0.10
+    iou: 0.60
+    imgsz: 1024

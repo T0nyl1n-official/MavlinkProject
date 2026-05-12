@@ -79,5 +79,42 @@ const (
 	AnomalyTemp      = "temperature_anomaly"
 	AnomalyHumidity  = "humidity_anomaly"
 	AnomalyPressure  = "pressure_anomaly"
+	AnomalyThermal   = "thermal_anomaly"
 	AnomalyUnknown   = "unknown"
+)
+
+type ThermalDetectResponse struct {
+	Success    bool                `json:"success"`
+	Image      ThermalImageInfo    `json:"image"`
+	Detections []ThermalDetection  `json:"detections"`
+	ElapsedMs  float64             `json:"elapsed_ms"`
+}
+
+type ThermalImageInfo struct {
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+type ThermalDetection struct {
+	Box         ThermalBox  `json:"box"`
+	Confidence  float64     `json:"confidence"`
+	Temperature ThermalInfo `json:"temperature"`
+}
+
+type ThermalBox struct {
+	Xyxy [4]float64 `json:"xyxy"`
+	Xywh [4]float64 `json:"xywh"`
+}
+
+type ThermalInfo struct {
+	MeanGray float64 `json:"mean_gray"`
+	Level    string  `json:"level"`
+}
+
+const (
+	TempLevelLow1   = "LOW Lv1"
+	TempLevelLow2   = "LOW Lv2"
+	TempLevelNormal = "NORMAL"
+	TempLevelHigh2  = "HIGH Lv2"
+	TempLevelHigh1  = "HIGH Lv1"
 )

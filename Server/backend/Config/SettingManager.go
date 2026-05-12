@@ -316,9 +316,12 @@ type LSTMModelConfig struct {
 }
 
 type YOLOModelConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	URL     string `yaml:"url"`
-	Timeout int    `yaml:"timeout"`
+	Enabled bool    `yaml:"enabled"`
+	URL     string  `yaml:"url"`
+	Timeout int     `yaml:"timeout"`
+	Conf    float64 `yaml:"conf"`
+	IOU     float64 `yaml:"iou"`
+	ImgSz   int     `yaml:"imgsz"`
 }
 
 type DatabaseConfig struct {

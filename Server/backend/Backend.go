@@ -14,10 +14,10 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
+	Models "MavlinkProject/Models"
 	Conf "MavlinkProject/Server/backend/Config"
 	DBService "MavlinkProject/Server/backend/Database"
 	DBConfig "MavlinkProject/Server/backend/Database/Config"
-	Models "MavlinkProject/Models"
 	UsersHandler "MavlinkProject/Server/backend/Handler/Users"
 	Middleware "MavlinkProject/Server/backend/Middles"
 	Jwt "MavlinkProject/Server/backend/Middles/Jwt"
@@ -238,6 +238,12 @@ func (bs *BackendServer) Start(addr, port string, httpsConfig HTTPSConfig) *Back
 		log.Printf("[Backend] AI YOLO model enabled: %s", yoloURL)
 	}
 	Models.InitModelClient(lstmURL, yoloURL)
+
+	if setting.AI.YOLO.Enabled {
+		client := Models.GetModelClient()
+		client.SetYOLOParams(setting.AI.YOLO.Conf, setting.AI.YOLO.IOU, setting.AI.YOLO.ImgSz)
+	}
+
 	log.Printf("[Backend] AI ModelClient initialized")
 
 	bs.Run(port, httpsConfig)

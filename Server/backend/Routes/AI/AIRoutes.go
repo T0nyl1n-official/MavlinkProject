@@ -12,6 +12,7 @@ func SetupAIRoutes(r *gin.Engine) {
 	{
 		aiGroup.POST("/analyze/sensor", AIHandler.HandleSensorAnalysis)
 		aiGroup.POST("/analyze/drone", AIHandler.HandleDroneImageAnalysis)
+		aiGroup.POST("/drone/photo", AIHandler.HandleDronePhotoUpload)
 		aiGroup.GET("/alerts/ws", AIHandler.HandleAlertWebSocket)
 		aiGroup.GET("/alerts/sse", AIHandler.HandleAlertSSE)
 		aiGroup.GET("/alerts/history", AIHandler.HandleAlertHistory)

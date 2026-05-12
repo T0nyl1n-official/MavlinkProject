@@ -271,3 +271,122 @@ func AlertToJSON(alert *Models.AlertJSON) string {
 	}
 	return string(data)
 }
+
+func (s *AnalysisService) ProcessDronePhoto(droneID string, imagePath string, lat, lon float64) (*Models.AlertJSON, *Models.ThermalDetectResponse, error) {
+	startTime := time.Now()
+
+	thermalResp, err := s.client.ThermalDetect(imagePath)
+	if err != nil {
+		log.Printf("[AI] YOLOv8 热源检测失败: drone=%s, err=%v", droneID, err)
+		WarningHandler.HandleAgentError("YOLOv8 thermal detect failed", "analysis-service", droneID, err.Error())
+		return nil, nil, err
+	}
+
+	log.Printf("[AI] YOLOv8 热源检测完成: drone=%s, success=%v, detections=%d, elapsed=%.2fms, 耗时=%v",
+		droneID, thermalResp.Success, len(thermalResp.Detections), thermalResp.ElapsedMs, time.Since(startTime))
+
+	hasAnomaly := false
+	maxSeverity := Models.SeverityInfo
+	highestConfidence := 0.0
+	var topDetection *Models.ThermalDetection
+
+	for i := range thermalResp.Detections {
+		det := &thermalResp.Detections[i]
+		detSeverity := thermalLevelToSeverity(det.Temperature.Level)
+		if detSeverity != Models.SeverityInfo {
+			hasAnomaly = true
+		}
+		if severityRank(detSeverity) > severityRank(maxSeverity) ||
+			(detSeverity == maxSeverity && det.Confidence > highestConfidence) {
+			maxSeverity = detSeverity
+			highestConfidence = det.Confidence
+			topDetection = det
+		}
+	}
+
+	if !hasAnomaly || thermalResp.Detections == nil || len(thermalResp.Detections) == 0 {
+		statusAlert := &Models.AlertJSON{
+			AlertID:    generateAlertID(),
+			AlertType:  "normal",
+			Severity:   Models.SeverityInfo,
+			Latitude:   lat,
+			Longitude:  lon,
+			AnomalyType: "none",
+			Source:     Models.SourceDrone,
+			DroneID:    droneID,
+			Timestamp:  time.Now().Unix(),
+			Confidence: 1.0,
+			Details: map[string]interface{}{
+				"detection_count": len(thermalResp.Detections),
+				"elapsed_ms":     thermalResp.ElapsedMs,
+				"image_size":      fmt.Sprintf("%dx%d", thermalResp.Image.Width, thermalResp.Image.Height),
+			},
+		}
+		s.hub.Broadcast(statusAlert)
+		return statusAlert, thermalResp, nil
+	}
+
+	alert := &Models.AlertJSON{
+		AlertID:    generateAlertID(),
+		AlertType:  "anomaly",
+		Severity:   maxSeverity,
+		Latitude:   lat,
+		Longitude:  lon,
+		AnomalyType: Models.AnomalyThermal,
+		Source:     Models.SourceDrone,
+		DroneID:    droneID,
+		Timestamp:  time.Now().Unix(),
+		Confidence: highestConfidence,
+		Details: map[string]interface{}{
+			"thermal_detections": thermalResp.Detections,
+			"top_detection":      topDetection,
+			"elapsed_ms":         thermalResp.ElapsedMs,
+			"image_size":          fmt.Sprintf("%dx%d", thermalResp.Image.Width, thermalResp.Image.Height),
+		},
+	}
+
+	s.hub.Broadcast(alert)
+
+	log.Printf("[AI] 🌡️ 无人机热源异常告警: alert_id=%s, drone=%s, severity=%s, detections=%d, top_level=%s",
+		alert.AlertID, droneID, maxSeverity, len(thermalResp.Detections), topDetection.Temperature.Level)
+
+	if maxSeverity == Models.SeverityCritical || maxSeverity == Models.SeverityHigh {
+		log.Printf("[AI] 热源异常严重等级 %s，建议关注区域坐标 (%.6f, %.6f)", maxSeverity, lat, lon)
+	}
+
+	return alert, thermalResp, nil
+}
+
+func thermalLevelToSeverity(level string) string {
+	switch level {
+	case Models.TempLevelHigh1:
+		return Models.SeverityCritical
+	case Models.TempLevelHigh2:
+		return Models.SeverityHigh
+	case Models.TempLevelNormal:
+		return Models.SeverityInfo
+	case Models.TempLevelLow2:
+		return Models.SeverityInfo
+	case Models.TempLevelLow1:
+		return Models.SeverityInfo
+	default:
+		return Models.SeverityInfo
+	}
+}
+
+func severityRank(severity string) int {
+	switch severity {
+	case Models.SeverityCritical:
+		return 5
+	case Models.SeverityHigh:
+		return 4
+	case Models.SeverityMedium:
+		return 3
+	case Models.SeverityLow:
+		return 2
+	case Models.SeverityInfo:
+		return 1
+	default:
+		return 0
+	}
+}

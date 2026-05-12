@@ -23,6 +23,9 @@ type ModelClient struct {
 	mu           sync.RWMutex
 	lstmEnabled  bool
 	yoloEnabled  bool
+	yoloConf     float64
+	yoloIOU      float64
+	yoloImgSz    int
 }
 
 var (
@@ -42,6 +45,9 @@ func InitModelClient(lstmURL, yoloURL string) {
 			retryDelay:  500 * time.Millisecond,
 			lstmEnabled: lstmURL != "",
 			yoloEnabled: yoloURL != "",
+			yoloConf:    0.10,
+			yoloIOU:     0.60,
+			yoloImgSz:   1024,
 		}
 		log.Printf("[ModelClient] 初始化完成: LSTM=%s (enabled=%v), YOLO=%s (enabled=%v)",
 			lstmURL, globalClient.lstmEnabled, yoloURL, globalClient.yoloEnabled)
@@ -304,4 +310,96 @@ func (mc *ModelClient) HealthCheck() map[string]interface{} {
 	}
 
 	return status
+}
+
+func (mc *ModelClient) SetYOLOParams(conf, iou float64, imgsz int) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	if conf > 0 {
+		mc.yoloConf = conf
+	}
+	if iou > 0 {
+		mc.yoloIOU = iou
+	}
+	if imgsz > 0 {
+		mc.yoloImgSz = imgsz
+	}
+	log.Printf("[ModelClient] YOLO 参数更新: conf=%.2f, iou=%.2f, imgsz=%d", mc.yoloConf, mc.yoloIOU, mc.yoloImgSz)
+}
+
+func (mc *ModelClient) GetYOLOParams() (conf, iou float64, imgsz int) {
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+	return mc.yoloConf, mc.yoloIOU, mc.yoloImgSz
+}
+
+func (mc *ModelClient) ThermalDetect(imagePath string) (*ThermalDetectResponse, error) {
+	if !mc.IsYOLOEnabled() {
+		return &ThermalDetectResponse{
+			Success:    false,
+			Detections: []ThermalDetection{},
+			ElapsedMs:  0,
+		}, nil
+	}
+
+	file, err := os.Open(imagePath)
+	if err != nil {
+		return nil, fmt.Errorf("open image file failed: %w", err)
+	}
+	defer file.Close()
+
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	part, err := writer.CreateFormFile("image", filepath.Base(imagePath))
+	if err != nil {
+		return nil, fmt.Errorf("create form file failed: %w", err)
+	}
+
+	if _, err := io.Copy(part, file); err != nil {
+		return nil, fmt.Errorf("copy image data failed: %w", err)
+	}
+
+	writer.Close()
+
+	conf, iou, imgsz := mc.GetYOLOParams()
+	url := fmt.Sprintf("%s/api/v1/detect?conf=%f&iou=%f&imgsz=%d",
+		mc.yoloBaseURL, conf, iou, imgsz)
+
+	var resp *http.Response
+	for attempt := 0; attempt < mc.maxRetry; attempt++ {
+		httpReq, _ := http.NewRequest("POST", url, &buf)
+		httpReq.Header.Set("Content-Type", writer.FormDataContentType())
+
+		resp, err = mc.httpClient.Do(httpReq)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			break
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		if attempt < mc.maxRetry-1 {
+			time.Sleep(mc.retryDelay)
+		}
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("YOLOv8 thermal detect API call failed after %d retries: %v", mc.maxRetry, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("YOLOv8 API returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var thermalResp ThermalDetectResponse
+	if err := json.NewDecoder(resp.Body).Decode(&thermalResp); err != nil {
+		return nil, fmt.Errorf("YOLOv8 response decode failed: %w", err)
+	}
+
+	log.Printf("[ModelClient] YOLOv8 热源检测完成: file=%s, success=%v, detections=%d, elapsed=%.2fms",
+		filepath.Base(imagePath), thermalResp.Success, len(thermalResp.Detections), thermalResp.ElapsedMs)
+
+	return &thermalResp, nil
 }

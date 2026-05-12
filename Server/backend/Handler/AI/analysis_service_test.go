@@ -2,6 +2,9 @@ package AI
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -354,5 +357,555 @@ func TestProcessDroneImageConfidence(t *testing.T) {
 	// 模型禁用时，Confidence 应该为 1.0
 	if alert.Confidence != 1.0 {
 		t.Errorf("模型禁用时 Confidence 应该为 1.0, 实际: %f", alert.Confidence)
+	}
+}
+
+// ==================== thermalLevelToSeverity 测试 ====================
+
+func TestThermalLevelToSeverity(t *testing.T) {
+	tests := []struct {
+		name     string
+		level    string
+		expected string
+	}{
+		{"HIGH Lv1 -> critical", Models.TempLevelHigh1, Models.SeverityCritical},
+		{"HIGH Lv2 -> high", Models.TempLevelHigh2, Models.SeverityHigh},
+		{"NORMAL -> info", Models.TempLevelNormal, Models.SeverityInfo},
+		{"LOW Lv2 -> info", Models.TempLevelLow2, Models.SeverityInfo},
+		{"LOW Lv1 -> info", Models.TempLevelLow1, Models.SeverityInfo},
+		{"未知等级 -> info (默认)", "UNKNOWN_LEVEL", Models.SeverityInfo},
+		{"空字符串 -> info (默认)", "", Models.SeverityInfo},
+		{"小写等级 -> info (默认)", "high lv2", Models.SeverityInfo},
+		{"类似但不同的字符串 -> info (默认)", "HIGH Lv3", Models.SeverityInfo},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := thermalLevelToSeverity(tt.level)
+			if result != tt.expected {
+				t.Errorf("thermalLevelToSeverity(%q) = %s, 期望 %s", tt.level, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestThermalLevelToSeverityMappingRules(t *testing.T) {
+	// 验证温度等级映射规则（根据用户需求文档）
+	rules := []struct {
+		level       string
+		expectedSev string
+		isAnomaly   bool
+	}{
+		{Models.TempLevelHigh1, Models.SeverityCritical, true},
+		{Models.TempLevelHigh2, Models.SeverityHigh, true},
+		{Models.TempLevelNormal, Models.SeverityInfo, false},
+		{Models.TempLevelLow2, Models.SeverityInfo, false},
+		{Models.TempLevelLow1, Models.SeverityInfo, false},
+	}
+
+	for _, rule := range rules {
+		sev := thermalLevelToSeverity(rule.level)
+		if sev != rule.expectedSev {
+			t.Errorf("规则验证失败: level=%s 期望 severity=%s, 实际 %s",
+				rule.level, rule.expectedSev, sev)
+		}
+
+		isAnomaly := (sev != Models.SeverityInfo)
+		if isAnomaly != rule.isAnomaly {
+			t.Errorf("异常判定失败: level=%s 期望 isAnomaly=%v, 实际 %v",
+				rule.level, rule.isAnomaly, isAnomaly)
+		}
+	}
+}
+
+// ==================== severityRank 测试 ====================
+
+func TestSeverityRank(t *testing.T) {
+	tests := []struct {
+		name     string
+		severity string
+		expected int
+	}{
+		{"critical rank 5", Models.SeverityCritical, 5},
+		{"high rank 4", Models.SeverityHigh, 4},
+		{"medium rank 3", Models.SeverityMedium, 3},
+		{"low rank 2", Models.SeverityLow, 2},
+		{"info rank 1", Models.SeverityInfo, 1},
+		{"unknown rank 0", "nonexistent_severity", 0},
+		{"空字符串 rank 0", "", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := severityRank(tt.severity)
+			if result != tt.expected {
+				t.Errorf("severityRank(%q) = %d, 期望 %d", tt.severity, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSeverityRankOrdering(t *testing.T) {
+	// 验证排序正确性: critical > high > medium > low > info > unknown(0)
+	ranks := map[string]int{
+		Models.SeverityCritical: severityRank(Models.SeverityCritical),
+		Models.SeverityHigh:     severityRank(Models.SeverityHigh),
+		Models.SeverityMedium:   severityRank(Models.SeverityMedium),
+		Models.SeverityLow:      severityRank(Models.SeverityLow),
+		Models.SeverityInfo:     severityRank(Models.SeverityInfo),
+	}
+
+	if ranks[Models.SeverityCritical] != 5 {
+		t.Errorf("critical rank 应该为 5, 实际 %d", ranks[Models.SeverityCritical])
+	}
+	if ranks[Models.SeverityHigh] != 4 {
+		t.Errorf("high rank 应该为 4, 实际 %d", ranks[Models.SeverityHigh])
+	}
+	if ranks[Models.SeverityMedium] != 3 {
+		t.Errorf("medium rank 应该为 3, 实际 %d", ranks[Models.SeverityMedium])
+	}
+	if ranks[Models.SeverityLow] != 2 {
+		t.Errorf("low rank 应该为 2, 实际 %d", ranks[Models.SeverityLow])
+	}
+	if ranks[Models.SeverityInfo] != 1 {
+		t.Errorf("info rank 应该为 1, 实际 %d", ranks[Models.SeverityInfo])
+	}
+
+	// 验证递减关系
+	if !(ranks[Models.SeverityCritical] > ranks[Models.SeverityHigh] &&
+		ranks[Models.SeverityHigh] > ranks[Models.SeverityMedium] &&
+		ranks[Models.SeverityMedium] > ranks[Models.SeverityLow] &&
+		ranks[Models.SeverityLow] > ranks[Models.SeverityInfo]) {
+		t.Error("severity 排序不满足 critical > high > medium > low > info")
+	}
+}
+
+// ==================== Mock Server 辅助函数 ====================
+// setupMockThermalClient 配置全局 ModelClient 使用 mock YOLOv8 server
+// 通过公开 API (SetYOLOURL, SetYOLOParams) 配置，测试结束后恢复原始状态
+func setupMockThermalClient(mockServerURL string) func() {
+	client := Models.GetModelClient()
+	client.SetYOLOURL(mockServerURL)
+	client.SetYOLOParams(0.10, 0.60, 1024)
+
+	return func() {
+		client.SetYOLOURL("")
+		client.SetYOLOParams(0.10, 0.60, 1024)
+	}
+}
+
+// ==================== ProcessDronePhoto 测试 ====================
+
+func TestProcessDronePhotoDisabled(t *testing.T) {
+	service := GetAnalysisService()
+
+	alert, rawResult, err := service.ProcessDronePhoto("drone_001", "/fake/path.jpg", 39.9, 116.4)
+	if err != nil {
+		t.Fatalf("模型禁用时 ProcessDronePhoto 不应该返回错误: %v", err)
+	}
+	if alert == nil {
+		t.Fatal("alert 不应该为 nil")
+	}
+	if rawResult == nil {
+		t.Fatal("rawResult 不应该为 nil")
+	}
+
+	// 模型禁用时应该是 normal 状态
+	if alert.AlertType != "normal" {
+		t.Errorf("AlertType 应该为 'normal', 实际: %s", alert.AlertType)
+	}
+	if alert.Severity != Models.SeverityInfo {
+		t.Errorf("Severity 应该为 'info', 实际: %s", alert.Severity)
+	}
+	if alert.AnomalyType != "none" {
+		t.Errorf("AnomalyType 应该为 'none', 实际: %s", alert.AnomalyType)
+	}
+	if alert.Source != Models.SourceDrone {
+		t.Errorf("Source 应该为 '%s', 实际: %s", Models.SourceDrone, alert.Source)
+	}
+	if alert.DroneID != "drone_001" {
+		t.Errorf("DroneID 不匹配: 期望 drone_001, 实际: %s", alert.DroneID)
+	}
+	if alert.Confidence != 1.0 {
+		t.Errorf("Confidence 应该为 1.0, 实际: %f", alert.Confidence)
+	}
+}
+
+func TestProcessDronePhotoWithMockServer_HighLv1Anomaly(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := Models.ThermalDetectResponse{
+			Success: true,
+			Image:   Models.ThermalImageInfo{Width: 640, Height: 512},
+			Detections: []Models.ThermalDetection{
+				{
+					Box:        Models.ThermalBox{Xyxy: [4]float64{100, 200, 300, 400}, Xywh: [4]float64{150, 250, 200, 200}},
+					Confidence: 0.95,
+					Temperature: Models.ThermalInfo{
+						MeanGray: 220.0,
+						Level:     Models.TempLevelHigh1,
+					},
+				},
+			},
+			ElapsedMs: 95.5,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+	cleanup := setupMockThermalClient(mockServer.URL)
+	defer cleanup()
+
+	tmpFile, _ := os.CreateTemp("", "thermal_h1_*.jpg")
+	tmpFile.Write([]byte("high lv1 test"))
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+
+	service := GetAnalysisService()
+
+	alert, rawResult, err := service.ProcessDronePhoto("drone_h1", tmpFile.Name(), 31.2304, 121.4737)
+	if err != nil {
+		t.Fatalf("ProcessDronePhoto 失败: %v", err)
+	}
+	if alert == nil || rawResult == nil {
+		t.Fatal("alert 和 rawResult 不应该为 nil")
+	}
+
+	if alert.AlertType != "anomaly" {
+		t.Errorf("有异常时 AlertType 应该为 'anomaly', 实际: %s", alert.AlertType)
+	}
+	if alert.Severity != Models.SeverityCritical {
+		t.Errorf("HIGH Lv1 对应 Severity 应该为 'critical', 实际: %s", alert.Severity)
+	}
+	if alert.AnomalyType != Models.AnomalyThermal {
+		t.Errorf("AnomalyType 应该为 '%s', 实际: %s", Models.AnomalyThermal, alert.AnomalyType)
+	}
+	if alert.Confidence != 0.95 {
+		t.Errorf("Confidence 应该为检测框的 confidence 0.95, 实际: %f", alert.Confidence)
+	}
+	if alert.Latitude != 31.2304 {
+		t.Errorf("Latitude 不匹配: 期望 31.2304, 实际: %f", alert.Latitude)
+	}
+	if alert.Longitude != 121.4737 {
+		t.Errorf("Longitude 不匹配: 期望 121.4737, 实际: %f", alert.Longitude)
+	}
+	if !rawResult.Success {
+		t.Error("rawResult.Success 应该为 true")
+	}
+	if len(rawResult.Detections) != 1 {
+		t.Errorf("rawResult.Detections 数量不匹配: 期望 1, 实际 %d", len(rawResult.Detections))
+	}
+}
+
+func TestProcessDronePhotoWithMockServer_HighLv2Anomaly(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := Models.ThermalDetectResponse{
+			Success: true,
+			Image:   Models.ThermalImageInfo{Width: 1280, Height: 720},
+			Detections: []Models.ThermalDetection{
+				{
+					Box:        Models.ThermalBox{Xyxy: [4]float64{50, 100, 200, 300}, Xywh: [4]float64{125, 175, 150, 200}},
+					Confidence: 0.78,
+					Temperature: Models.ThermalInfo{
+						MeanGray: 150.0,
+						Level:     Models.TempLevelHigh2,
+					},
+				},
+			},
+			ElapsedMs: 72.3,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+	cleanup := setupMockThermalClient(mockServer.URL)
+	defer cleanup()
+
+	tmpFile, _ := os.CreateTemp("", "thermal_h2_*.jpg")
+	tmpFile.Write([]byte("high lv2 test"))
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+
+	service := GetAnalysisService()
+
+	alert, _, err := service.ProcessDronePhoto("drone_h2", tmpFile.Name(), 30.0, 110.0)
+	if err != nil {
+		t.Fatalf("ProcessDronePhoto 失败: %v", err)
+	}
+
+	if alert.Severity != Models.SeverityHigh {
+		t.Errorf("HIGH Lv2 对应 Severity 应该为 'high', 实际: %s", alert.Severity)
+	}
+	if alert.Confidence != 0.78 {
+		t.Errorf("Confidence 不匹配: 期望 0.78, 实际: %f", alert.Confidence)
+	}
+}
+
+func TestProcessDronePhotoWithMockServer_NoAnomaly(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := Models.ThermalDetectResponse{
+			Success: true,
+			Image:   Models.ThermalImageInfo{Width: 800, Height: 600},
+			Detections: []Models.ThermalDetection{
+				{
+					Box:        Models.ThermalBox{Xyxy: [4]float64{10, 20, 50, 80}, Xywh: [4]float64{30, 50, 40, 60}},
+					Confidence: 0.45,
+					Temperature: Models.ThermalInfo{
+						MeanGray: 100.0,
+						Level:     Models.TempLevelNormal,
+					},
+				},
+				{
+					Box:        Models.ThermalBox{Xyxy: [4]float64{200, 300, 250, 350}, Xywh: [4]float64{225, 325, 50, 50}},
+					Confidence: 0.22,
+					Temperature: Models.ThermalInfo{
+						MeanGray: 55.0,
+						Level:     Models.TempLevelLow1,
+					},
+				},
+			},
+			ElapsedMs: 55.0,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+	cleanup := setupMockThermalClient(mockServer.URL)
+	defer cleanup()
+
+	tmpFile, _ := os.CreateTemp("", "thermal_normal_*.jpg")
+	tmpFile.Write([]byte("normal test"))
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+
+	service := GetAnalysisService()
+
+	alert, _, err := service.ProcessDronePhoto("drone_normal", tmpFile.Name(), 35.0, 115.0)
+	if err != nil {
+		t.Fatalf("ProcessDronePhoto 失败: %v", err)
+	}
+
+	if alert.AlertType != "normal" {
+		t.Errorf("无异常时 AlertType 应该为 'normal', 实际: %s", alert.AlertType)
+	}
+	if alert.Severity != Models.SeverityInfo {
+		t.Errorf("无异常时 Severity 应该为 'info', 实际: %s", alert.Severity)
+	}
+	if alert.AnomalyType != "none" {
+		t.Errorf("无异常时 AnomalyType 应该为 'none', 实际: %s", alert.AnomalyType)
+	}
+}
+
+func TestProcessDronePhotoWithMockServer_EmptyDetections(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := Models.ThermalDetectResponse{
+			Success:    true,
+			Image:      Models.ThermalImageInfo{Width: 640, Height: 480},
+			Detections: []Models.ThermalDetection{},
+			ElapsedMs:  33.3,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+	cleanup := setupMockThermalClient(mockServer.URL)
+	defer cleanup()
+
+	tmpFile, _ := os.CreateTemp("", "thermal_empty_*.jpg")
+	tmpFile.Write([]byte("empty det test"))
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+
+	service := GetAnalysisService()
+
+	alert, rawResult, err := service.ProcessDronePhoto("drone_empty", tmpFile.Name(), 40.0, 116.0)
+	if err != nil {
+		t.Fatalf("ProcessDronePhoto 失败: %v", err)
+	}
+
+	if alert.AlertType != "normal" {
+		t.Errorf("空 Detections 时 AlertType 应该为 'normal', 实际: %s", alert.AlertType)
+	}
+	if len(rawResult.Detections) != 0 {
+		t.Errorf("rawResult.Detections 应该为空, 实际长度: %d", len(rawResult.Detections))
+	}
+}
+
+func TestProcessDronePhotoWithMockServer_MultiDetectionsPickHighest(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := Models.ThermalDetectResponse{
+			Success: true,
+			Image:   Models.ThermalImageInfo{Width: 1920, Height: 1080},
+			Detections: []Models.ThermalDetection{
+				{
+					Box:        Models.ThermalBox{Xyxy: [4]float64{100, 100, 200, 200}, Xywh: [4]float64{150, 150, 100, 100}},
+					Confidence: 0.65,
+					Temperature: Models.ThermalInfo{MeanGray: 150.0, Level: Models.TempLevelHigh2},
+				},
+				{
+					Box:        Models.ThermalBox{Xyxy: [4]float64{300, 300, 500, 500}, Xywh: [4]float64{400, 400, 200, 200}},
+					Confidence: 0.92,
+					Temperature: Models.ThermalInfo{MeanGray: 210.0, Level: Models.TempLevelHigh1},
+				},
+				{
+					Box:        Models.ThermalBox{Xyxy: [4]float64{600, 50, 700, 150}, Xywh: [4]float64{650, 100, 100, 100}},
+					Confidence: 0.35,
+					Temperature: Models.ThermalInfo{MeanGray: 105.0, Level: Models.TempLevelNormal},
+				},
+				{
+					Box:        Models.ThermalBox{Xyxy: [4]float64{10, 10, 50, 50}, Xywh: [4]float64{30, 30, 40, 40}},
+					Confidence: 0.15,
+					Temperature: Models.ThermalInfo{MeanGray: 45.0, Level: Models.TempLevelLow1},
+				},
+			},
+			ElapsedMs: 150.8,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+	cleanup := setupMockThermalClient(mockServer.URL)
+	defer cleanup()
+
+	tmpFile, _ := os.CreateTemp("", "thermal_multi_*.jpg")
+	tmpFile.Write([]byte("multi pick highest"))
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+
+	service := GetAnalysisService()
+
+	alert, rawResult, err := service.ProcessDronePhoto("drone_multi", tmpFile.Name(), 22.5, 114.0)
+	if err != nil {
+		t.Fatalf("ProcessDronePhoto 失败: %v", err)
+	}
+
+	if alert.Severity != Models.SeverityCritical {
+		t.Errorf("多检测框应取最高 severity=critical, 实际: %s", alert.Severity)
+	}
+	if alert.Confidence != 0.92 {
+		t.Errorf("Confidence 应该取最高 severity 的 confidence=0.92, 实际: %f", alert.Confidence)
+	}
+	if alert.AnomalyType != Models.AnomalyThermal {
+		t.Errorf("AnomalyType 应该为 thermal_anomaly, 实际: %s", alert.AnomalyType)
+	}
+	if len(rawResult.Detections) != 4 {
+		t.Errorf("rawResult 应保留全部 4 个检测框, 实际: %d", len(rawResult.Detections))
+	}
+}
+
+func TestProcessDronePhotoWithMockServer_SameSeverityPickHigherConfidence(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := Models.ThermalDetectResponse{
+			Success: true,
+			Image:   Models.ThermalImageInfo{Width: 1024, Height: 768},
+			Detections: []Models.ThermalDetection{
+				{
+					Box:        Models.ThermalBox{Xyxy: [4]float64{50, 50, 150, 250}, Xywh: [4]float64{100, 150, 100, 200}},
+					Confidence: 0.55,
+					Temperature: Models.ThermalInfo{MeanGray: 140.0, Level: Models.TempLevelHigh2},
+				},
+				{
+					Box:        Models.ThermalBox{Xyxy: [4]float64{300, 100, 450, 300}, Xywh: [4]float64{375, 200, 150, 200}},
+					Confidence: 0.82,
+					Temperature: Models.ThermalInfo{MeanGray: 180.0, Level: Models.TempLevelHigh2},
+				},
+			},
+			ElapsedMs: 88.8,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+	cleanup := setupMockThermalClient(mockServer.URL)
+	defer cleanup()
+
+	tmpFile, _ := os.CreateTemp("", "thermal_same_sev_*.jpg")
+	tmpFile.Write([]byte("same severity test"))
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+
+	service := GetAnalysisService()
+
+	alert, _, err := service.ProcessDronePhoto("drone_same_sev", tmpFile.Name(), 23.0, 113.0)
+	if err != nil {
+		t.Fatalf("ProcessDronePhoto 失败: %v", err)
+	}
+
+	if alert.Severity != Models.SeverityHigh {
+		t.Errorf("Severity 应该为 'high', 实际: %s", alert.Severity)
+	}
+	if alert.Confidence != 0.82 {
+		t.Errorf("同 severity 应选更高 confidence=0.82, 实际: %f", alert.Confidence)
+	}
+}
+
+func TestProcessDronePhotoWithMockServer_AlertDetails(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := Models.ThermalDetectResponse{
+			Success: true,
+			Image:   Models.ThermalImageInfo{Width: 640, Height: 512},
+			Detections: []Models.ThermalDetection{
+				{
+					Box:        Models.ThermalBox{Xyxy: [4]float64{164.33, 259.13, 207.07, 279.85}, Xywh: [4]float64{185.7, 269.49, 42.74, 20.72}},
+					Confidence: 0.182988,
+					Temperature: Models.ThermalInfo{MeanGray: 158.8, Level: Models.TempLevelHigh2},
+				},
+			},
+			ElapsedMs: 86.35,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+	cleanup := setupMockThermalClient(mockServer.URL)
+	defer cleanup()
+
+	tmpFile, _ := os.CreateTemp("", "thermal_details_*.jpg")
+	tmpFile.Write([]byte("details test"))
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+
+	service := GetAnalysisService()
+
+	alert, _, err := service.ProcessDronePhoto("drone_details", tmpFile.Name(), 39.9042, 116.4074)
+	if err != nil {
+		t.Fatalf("ProcessDronePhoto 失败: %v", err)
+	}
+
+	if alert.Details == nil {
+		t.Fatal("Details 不应该为 nil")
+	}
+	if alert.Details["thermal_detections"] == nil {
+		t.Error("Details 应该包含 thermal_detections")
+	}
+	if alert.Details["top_detection"] == nil {
+		t.Error("Details 应该包含 top_detection")
+	}
+	if alert.Details["elapsed_ms"] == nil {
+		t.Error("Details 应该包含 elapsed_ms")
+	}
+	if alert.Details["image_size"] == nil {
+		t.Error("Details 应该包含 image_size")
+	}
+}
+
+func TestProcessDronePhotoModelAPIError(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte("bad gateway error"))
+	}))
+	defer mockServer.Close()
+	cleanup := setupMockThermalClient(mockServer.URL)
+	defer cleanup()
+
+	tmpFile, _ := os.CreateTemp("", "thermal_api_err_*.jpg")
+	tmpFile.Write([]byte("api error test"))
+	tmpFile.Close()
+	defer os.Remove(tmpFile.Name())
+
+	service := GetAnalysisService()
+
+	_, _, err := service.ProcessDronePhoto("drone_err", tmpFile.Name(), 0, 0)
+	if err == nil {
+		t.Error("YOLO API 错误时 ProcessDronePhoto 应该返回错误")
 	}
 }

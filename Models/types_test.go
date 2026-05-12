@@ -553,3 +553,212 @@ func TestAnomalyConstantsDistinct(t *testing.T) {
 		seen[a] = true
 	}
 }
+
+// ==================== ThermalDetectResponse JSON 序列化测试 ====================
+
+func TestThermalDetectResponseJSON(t *testing.T) {
+	resp := ThermalDetectResponse{
+		Success: true,
+		Image: ThermalImageInfo{
+			Width:  640,
+			Height: 512,
+		},
+		Detections: []ThermalDetection{
+			{
+				Box: ThermalBox{
+					Xyxy: [4]float64{164.33, 259.13, 207.07, 279.85},
+					Xywh: [4]float64{185.7, 269.49, 42.74, 20.72},
+				},
+				Confidence: 0.182988,
+				Temperature: ThermalInfo{
+					MeanGray: 158.8,
+					Level:     TempLevelHigh2,
+				},
+			},
+		},
+		ElapsedMs: 86.35,
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("ThermalDetectResponse 序列化失败: %v", err)
+	}
+
+	var parsed ThermalDetectResponse
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("ThermalDetectResponse 反序列化失败: %v", err)
+	}
+
+	if !parsed.Success {
+		t.Error("Success 应该为 true")
+	}
+	if parsed.Image.Width != 640 {
+		t.Errorf("Image.Width 不匹配: 期望 640, 实际 %d", parsed.Image.Width)
+	}
+	if parsed.Image.Height != 512 {
+		t.Errorf("Image.Height 不匹配: 期望 512, 实际 %d", parsed.Image.Height)
+	}
+	if len(parsed.Detections) != 1 {
+		t.Fatalf("Detections 长度不匹配: 期望 1, 实际 %d", len(parsed.Detections))
+	}
+	det := parsed.Detections[0]
+	if det.Confidence != 0.182988 {
+		t.Errorf("Confidence 不匹配: 期望 0.182988, 实际 %f", det.Confidence)
+	}
+	if det.Temperature.MeanGray != 158.8 {
+		t.Errorf("MeanGray 不匹配: 期望 158.8, 实际 %f", det.Temperature.MeanGray)
+	}
+	if det.Temperature.Level != TempLevelHigh2 {
+		t.Errorf("Level 不匹配: 期望 %s, 实际 %s", TempLevelHigh2, det.Temperature.Level)
+	}
+	if det.Box.Xyxy[0] != 164.33 || det.Box.Xyxy[3] != 279.85 {
+		t.Errorf("Xyxy 不匹配: 期望 [164.33,...,279.85], 实际 %v", det.Box.Xyxy)
+	}
+	if det.Box.Xywh[0] != 185.7 || det.Box.Xywh[3] != 20.72 {
+		t.Errorf("Xywh 不匹配: 期望 [185.7,...,20.72], 实际 %v", det.Box.Xywh)
+	}
+	if parsed.ElapsedMs != 86.35 {
+		t.Errorf("ElapsedMs 不匹配: 期望 86.35, 实际 %f", parsed.ElapsedMs)
+	}
+}
+
+func TestThermalDetectResponseEmptyDetections(t *testing.T) {
+	resp := ThermalDetectResponse{
+		Success:    false,
+		Image:      ThermalImageInfo{Width: 800, Height: 600},
+		Detections: []ThermalDetection{},
+		ElapsedMs:  0,
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("空 Detections 序列化失败: %v", err)
+	}
+
+	var parsed ThermalDetectResponse
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("反序列化失败: %v", err)
+	}
+
+	if parsed.Success {
+		t.Error("Success 应该为 false")
+	}
+	if len(parsed.Detections) != 0 {
+		t.Errorf("Detections 应该为空, 实际长度 %d", len(parsed.Detections))
+	}
+}
+
+func TestThermalDetectResponseMultipleDetectionsJSON(t *testing.T) {
+	resp := ThermalDetectResponse{
+		Success: true,
+		Image:   ThermalImageInfo{Width: 1280, Height: 720},
+		Detections: []ThermalDetection{
+			{
+				Box:        ThermalBox{Xyxy: [4]float64{100, 200, 300, 400}, Xywh: [4]float64{150, 250, 200, 200}},
+				Confidence: 0.95,
+				Temperature: ThermalInfo{MeanGray: 220.0, Level: TempLevelHigh1},
+			},
+			{
+				Box:        ThermalBox{Xyxy: [4]float64{400, 100, 600, 300}, Xywh: [4]float64{500, 150, 200, 200}},
+				Confidence: 0.75,
+				Temperature: ThermalInfo{MeanGray: 150.0, Level: TempLevelHigh2},
+			},
+			{
+				Box:        ThermalBox{Xyxy: [4]float64{50, 50, 100, 100}, Xywh: [4]float64{62.5, 62.5, 50, 50}},
+				Confidence: 0.30,
+				Temperature: ThermalInfo{MeanGray: 80.0, Level: TempLevelLow2},
+			},
+		},
+		ElapsedMs: 125.6,
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("多检测框序列化失败: %v", err)
+	}
+
+	var parsed ThermalDetectResponse
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("反序列化失败: %v", err)
+	}
+
+	if len(parsed.Detections) != 3 {
+		t.Fatalf("Detections 数量不匹配: 期望 3, 实际 %d", len(parsed.Detections))
+	}
+	if parsed.Detections[0].Temperature.Level != TempLevelHigh1 {
+		t.Errorf("Detection[0].Level 不匹配: 期望 %s, 实际 %s", TempLevelHigh1, parsed.Detections[0].Temperature.Level)
+	}
+	if parsed.Detections[1].Temperature.Level != TempLevelHigh2 {
+		t.Errorf("Detection[1].Level 不匹配: 期望 %s, 实际 %s", TempLevelHigh2, parsed.Detections[1].Temperature.Level)
+	}
+	if parsed.Detections[2].Temperature.Level != TempLevelLow2 {
+		t.Errorf("Detection[2].Level 不匹配: 期望 %s, 实际 %s", TempLevelLow2, parsed.Detections[2].Temperature.Level)
+	}
+}
+
+func TestThermalDetectResponseRealFormat(t *testing.T) {
+	// 使用真实 API 文档中的格式进行往返测试
+	jsonStr := `{"success":true,"image":{"width":640,"height":512},"detections":[{"box":{"xyxy":[164.33,259.13,207.07,279.85],"xywh":[185.7,269.49,42.74,20.72]},"confidence":0.182988,"temperature":{"mean_gray":158.8,"level":"HIGH Lv2"}}],"elapsed_ms":86.35}`
+
+	var resp ThermalDetectResponse
+	if err := json.Unmarshal([]byte(jsonStr), &resp); err != nil {
+		t.Fatalf("真实格式反序列化失败: %v", err)
+	}
+
+	if !resp.Success {
+		t.Error("Success 应该为 true")
+	}
+	if resp.Image.Width != 640 || resp.Image.Height != 512 {
+		t.Errorf("Image 尺寸不匹配: 期望 640x512, 实际 %dx%d", resp.Image.Width, resp.Image.Height)
+	}
+	if len(resp.Detections) != 1 {
+		t.Fatalf("Detections 数量不匹配: 期望 1, 实际 %d", len(resp.Detections))
+	}
+	det := resp.Detections[0]
+	if det.Confidence != 0.182988 {
+		t.Errorf("Confidence 不匹配: 期望 0.182988, 实际 %v", det.Confidence)
+	}
+	if det.Temperature.MeanGray != 158.8 {
+		t.Errorf("MeanGray 不匹配: 期望 158.8, 实际 %v", det.Temperature.MeanGray)
+	}
+	if det.Temperature.Level != "HIGH Lv2" {
+		t.Errorf("Level 不匹配: 期望 'HIGH Lv2', 实际 '%s'", det.Temperature.Level)
+	}
+	if det.Box.Xyxy[0] != 164.33 {
+		t.Errorf("Xyxy[0] 不匹配: 期望 164.33, 实际 %v", det.Box.Xyxy[0])
+	}
+	if resp.ElapsedMs != 86.35 {
+		t.Errorf("ElapsedMs 不匹配: 期望 86.35, 实际 %v", resp.ElapsedMs)
+	}
+}
+
+// ==================== 温度等级常量测试 ====================
+
+func TestTempLevelConstants(t *testing.T) {
+	if TempLevelLow1 != "LOW Lv1" {
+		t.Errorf("TempLevelLow1 应该为 'LOW Lv1', 实际 '%s'", TempLevelLow1)
+	}
+	if TempLevelLow2 != "LOW Lv2" {
+		t.Errorf("TempLevelLow2 应该为 'LOW Lv2', 实际 '%s'", TempLevelLow2)
+	}
+	if TempLevelNormal != "NORMAL" {
+		t.Errorf("TempLevelNormal 应该为 'NORMAL', 实际 '%s'", TempLevelNormal)
+	}
+	if TempLevelHigh2 != "HIGH Lv2" {
+		t.Errorf("TempLevelHigh2 应该为 'HIGH Lv2', 实际 '%s'", TempLevelHigh2)
+	}
+	if TempLevelHigh1 != "HIGH Lv1" {
+		t.Errorf("TempLevelHigh1 应该为 'HIGH Lv1', 实际 '%s'", TempLevelHigh1)
+	}
+}
+
+func TestTempLevelConstantsDistinct(t *testing.T) {
+	levels := []string{TempLevelLow1, TempLevelLow2, TempLevelNormal, TempLevelHigh2, TempLevelHigh1}
+	seen := make(map[string]bool)
+	for _, l := range levels {
+		if seen[l] {
+			t.Errorf("温度等级常量有重复值: %s", l)
+		}
+		seen[l] = true
+	}
+}
