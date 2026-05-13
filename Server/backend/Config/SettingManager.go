@@ -177,7 +177,13 @@ func (s *Setting) mergeFromYAML(yamlSetting *Setting) {
 // 提高鲁棒性, 这些if值会导致系统错误
 func (s *Setting) setDefaults() {
 	if s.Logger.MonitorWindow <= 0 {
-		s.Logger.MonitorWindow = 15
+		s.Logger.MonitorWindow = 60
+	}
+	if s.Logger.AccessThreshold <= 0 {
+		s.Logger.AccessThreshold = 100
+	}
+	if s.Logger.URLErrorThreshold <= 0 {
+		s.Logger.URLErrorThreshold = 50
 	}
 	if s.Board.Connection.Timeout <= 0 {
 		s.Board.Connection.Timeout = 180

@@ -195,7 +195,8 @@ func (am *AccessMonitor) checkIPAccess(ip string) {
 	am.ipAccessCount[ip]++
 
 	if am.ipAccessCount[ip] >= IPAccessThresholdFunc() {
-		warningMsg := fmt.Sprintf("🚨 IP频率警告: %s 在5分钟内访问了%d次", ip, am.ipAccessCount[ip])
+		windowSec := MonitorWindowFunc() / time.Second
+		warningMsg := fmt.Sprintf("🚨 IP频率警告: %s 在%d分钟内访问了%d次", ip, windowSec/60+1, am.ipAccessCount[ip])
 		log.Printf("%s", warningMsg)
 		am.logToFile("WARN", warningMsg)
 	}
@@ -268,8 +269,9 @@ func (am *AccessMonitor) checkURLError(url string, statusCode int) {
 	am.urlErrorCount[url]++
 
 	if am.urlErrorCount[url] >= URLErrorThresholdFunc() {
-		warningMsg := fmt.Sprintf("🚨 URL错误警告: %s 在5分钟内出现%d次错误(状态码: %d)",
-			url, am.urlErrorCount[url], statusCode)
+		windowSec := MonitorWindowFunc() / time.Second
+		warningMsg := fmt.Sprintf("🚨 URL错误警告: %s 在%d分钟内出现%d次错误(状态码: %d)",
+			url, windowSec/60+1, am.urlErrorCount[url], statusCode)
 		log.Printf("%s", warningMsg)
 		am.logToFile("WARN", warningMsg)
 	}
