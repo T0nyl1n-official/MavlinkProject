@@ -3,3 +3,4 @@
 [2026-05-14 21:29:49] INFO GET /api/ai/model/status 200 166ms
 [2026-05-14 21:29:50] INFO POST /api/ai/drone/photo 200 970ms
 [2026-05-14 21:45:24] INFO GET /robots.txt 200 83ms
+[2026-05-14 21:50:20] INFO GET /sitemap.xml 404 0ms
