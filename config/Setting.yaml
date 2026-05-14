@@ -19,7 +19,7 @@ ai:
     url: ""
   yolo:
     enabled: true
-    url: "http://1a866d66.r21.cpolar.top"
+    url: "http://154265c9.r6.cpolar.cn"
     timeout: 30
     conf: 0.10
     iou: 0.60

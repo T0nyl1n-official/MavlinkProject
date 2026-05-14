@@ -1,0 +1,10 @@
+[2026-05-13 21:57:02] INFO GET /api/ai/model/status 200 175ms
+[2026-05-13 21:57:05] INFO POST /api/ai/drone/photo 200 2989ms
+[2026-05-13 21:57:05] WARN 🚨 慢请求警告: POST /api/ai/drone/photo 耗时 2.9896033s
+[2026-05-13 21:57:05] INFO GET /api/ai/alerts/history 200 0ms
+[2026-05-13 22:02:21] INFO POST /api/ai/drone/photo 200 925ms
+[2026-05-13 22:04:42] INFO POST /api/ai/drone/photo 400 0ms
+[2026-05-13 22:05:12] INFO POST /api/ai/drone/photo 200 894ms
+[2026-05-13 22:05:32] INFO POST /api/ai/drone/photo 200 644ms
+[2026-05-13 22:06:56] INFO POST /api/ai/drone/photo 200 888ms
+[2026-05-13 22:56:41] INFO 监控数据已重置

@@ -2383,6 +2383,1314 @@ type BoardMessage struct {
 
 ---
 
+## 十五、AI 模型集成接口
+
+> ⚠️ 以下接口用于 AI 模型集成（LSTM 时序异常检测 + YOLOv8s 热源图像检测）
+> ⚠️ 支持实时告警推送（WebSocket + SSE 双通道）
+
+基础路径: `/api/ai`
+
+### 15.1 概述
+
+AI 模块提供两大核心能力：
+
+| 模型 | 用途 | 输入 | 输出 |
+|------|------|------|------|
+| **LSTM** | 井下传感器时序数据异常检测 | 传感器时序数据 (JSON) | 异常检测结果 (AlertJSON) |
+| **YOLOv8s** | 无人机拍摄图片热源异常识别 | 图片文件 (multipart) | 热源检测结果 + 温度等级 |
+
+**数据流架构**：
+
+```
+Central/无人机 (回传照片)
+    │
+    ▼ POST /api/ai/drone/photo (multipart: photo + drone_id + lat + lon)
+Backend (Go/Gin)
+    │
+    ├── 1. 保存原图到 output/thermal_photos/
+    ├── 2. 调用 ModelClient.ThermalDetect()
+    │       │
+    │       ▼ POST {yolo_url}/api/v1/detect?conf=&iou=&imgsz= (multipart)
+    │   YOLOv8 服务 (FastAPI, CUDA推理)
+    │       │
+    │       ▼ 返回 ThermalDetectResponse (detections + temperature.level)
+    │
+    ├── 3. 解析 temperature.level → Severity (HIGH Lv1→critical, HIGH Lv2→high)
+    ├── 4. 生成 AlertJSON → Broadcast (WebSocket + SSE)
+    ├── 5. 下载 image_annotated 到 output/yolo_Generated/
+    └── 6. 返回 JSON (code=0, alert, raw_result, annotated_image_url)
+            │
+            ▼
+Frontend (www.deeppluse.dpdns.org)
+    │
+    ├── WebSocket /api/ai/alerts/ws ← 实时接收 AlertJSON
+    ├── SSE /api/ai/alerts/sse     ← 实时接收 AlertJSON
+    └── 解析坐标+severity → 3D地图红色高亮警报
+```
+
+### 15.2 类型定义
+
+#### 15.2.1 AlertJSON 告警数据结构
+
+```go
+type AlertJSON struct {
+    AlertID     string                 `json:"alert_id"`      // 告警唯一ID
+    AlertType   string                 `json:"alert_type"`    // 告警类型: normal/anomaly
+    Severity    string                 `json:"severity"`      // 严重程度: critical/high/medium/low/info
+    Latitude    float64                `json:"latitude"`      // GPS纬度
+    Longitude   float64                `json:"longitude"`     // GPS经度
+    AnomalyType string                 `json:"anomaly_type"`  // 异常类型: thermal_anomaly/sensor_anomaly等
+    Source      string                 `json:"source"`        // 数据来源: sensor/drone/model
+    Timestamp   int64                  `json:"timestamp"`     // 时间戳 (Unix)
+    Confidence  float64                `json:"confidence"`    // 置信度 (0~1)
+    Details     map[string]interface{} `json:"details"`       // 详细信息
+}
+```
+
+**字段说明**:
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| alert_id | string | 是 | 告警唯一标识符 (UUID格式) |
+| alert_type | string | 是 | 告警类型: `normal`(正常), `anomaly`(异常) |
+| severity | string | 是 | 严重程度: `critical`(致命), `high`(高), `medium`(中), `low`(低), `info`(信息) |
+| latitude | float64 | 是 | GPS纬度 (-90 ~ 90) |
+| longitude | float64 | 是 | GPS经度 (-180 ~ 180) |
+| anomaly_type | string | 否 | 异常类型: `thermal_anomaly`(热源异常), `sensor_anomaly`(传感器异常) 等 |
+| source | string | 是 | 数据来源: `sensor`(传感器), `drone`(无人机), `model`(模型推理) |
+| timestamp | int64 | 是 | 时间戳 (Unix秒级) |
+| confidence | float64 | 否 | 模型置信度 (0.0 ~ 1.0) |
+| details | object | 否 | 扩展详细信息 (如温度值、检测框等) |
+
+#### 15.2.2 ThermalDetectResponse YOLO热源检测响应
+
+```go
+type ThermalDetectResponse struct {
+    Success    bool             `json:"success"`     // 是否成功
+    ImagePath  string           `json:"image_path"`  // 处理后的图片路径
+    Detections []ThermalDetection `json:"detections"` // 检测结果列表
+    Temperature ThermalInfo     `json:"temperature"` // 温度统计信息
+}
+```
+
+#### 15.2.3 ThermalDetection 单个检测结果
+
+```go
+type ThermalDetection struct {
+    Class       string       `json:"class"`        // 检测类别: thermal_hotspot
+    Confidence  float64      `json:"confidence"`   // 置信度
+    Box         ThermalBox   `json:"box"`          // 边界框坐标
+}
+```
+
+#### 15.2.4 ThermalBox 边界框
+
+```go
+type ThermalBox struct {
+    X1      float64 `json:"x1"`       // 左上角X坐标
+    Y1      float64 `json:"y1"`       // 左上角Y坐标
+    X2      float64 `json:"x2"`       // 右下角X坐标
+    Y2      float64 `json:"y2"`       // 右下角Y坐标
+    Width   float64 `json:"width"`    // 宽度
+    Height  float64 `json:"height"`   // 高度
+}
+```
+
+#### 15.2.5 ThermalInfo 温度信息
+
+```go
+type ThermalInfo struct {
+    MeanGray    float64 `json:"mean_gray"`    // 平均灰度值
+    Level       string  `json:"level"`        // 温度等级: "HIGH Lv1", "HIGH Lv2", "NORMAL Lv*", "LOW Lv*"
+    IsAnomalous bool    `json:"is_anomalous"` // 是否异常
+}
+```
+
+### 15.3 温度等级映射表
+
+YOLO 返回的温度等级与系统 Severity 的映射关系：
+
+| mean_gray | Level | Severity | 说明 | 前端显示 |
+|------------|-------|----------|------|---------|
+| >= 200 | `HIGH Lv1` | **critical** | 高温异常（可能火灾） | 🔴 红色警报 |
+| 120 ~ 200 | `HIGH Lv2` | **high** | 中高温预警 | 🟠 橙色警告 |
+| < 120 | `NORMAL/LOW Lv*` | **info** | 正常/低温 | 🟢 绿色正常 |
+
+**映射逻辑**:
+```go
+func mapTemperatureToSeverity(level string) string {
+    switch level {
+    case "HIGH Lv1":
+        return "critical"
+    case "HIGH Lv2":
+        return "high"
+    default:
+        return "info"
+    }
+}
+```
+
+### 15.4 异常类型常量列表
+
+| AnomalyType | 说明 | 触发来源 |
+|-------------|------|---------|
+| `thermal_anomaly` | 热源异常（YOLO检测） | YOLOv8s 图像分析 |
+| `sensor_anomaly` | 传感器数据异常 | LSTM 时序分析 |
+| `temperature_high` | 温度过高 | YOLO 温度等级判断 |
+| `fire_risk` | 火灾风险 | 综合判断 |
+
+### 15.5 接口列表表格
+
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| POST | `/api/ai/analyze/sensor` | LSTM 传感器分析 | 无 |
+| POST | `/api/ai/analyze/drone` | YOLO 图像分析(Base64) | 无 |
+| POST | `/api/ai/drone/photo` | 无人机照片+热源检测 | 设备JWT |
+| GET | `/api/ai/alerts/ws` | WebSocket 实时告警 | 用户JWT |
+| GET | `/api/ai/alerts/sse` | SSE 实时告警 | 用户JWT |
+| GET | `/api/ai/alerts/history` | 告警历史查询 | 用户JWT |
+| GET | `/api/ai/model/status` | 模型状态检查 | 无 |
+| GET | `/api/ai/drone/photo/generated/:filename` | 标注图下载 | 无 |
+
+### 15.6 接口详细说明
+
+#### 15.6.1 POST /api/ai/analyze/sensor - LSTM 传感器分析
+
+使用 LSTM 时序模型对传感器数据进行异常检测。
+
+**请求地址**:
+```
+POST https://api.deeppluse.dpdns.org/api/ai/analyze/sensor
+```
+
+**请求体** (JSON):
+```json
+{
+  "sensor_id": "temp_sensor_001",
+  "data": [
+    {"timestamp": 1714234567, "value": 25.5},
+    {"timestamp": 1714234568, "value": 26.1},
+    {"timestamp": 1714234569, "value": 27.3},
+    {"timestamp": 1714234570, "value": 35.8}
+  ],
+  "metadata": {
+    "sensor_type": "temperature",
+    "unit": "celsius",
+    "location": "井下-200m"
+  }
+}
+```
+
+**参数说明**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| sensor_id | string | 是 | 传感器唯一ID |
+| data | array | 是 | 时序数据数组 (最近N个时间点) |
+| data[].timestamp | int64 | 是 | 时间戳 (Unix) |
+| data[].value | float64 | 是 | 传感器数值 |
+| metadata | object | 否 | 元数据信息 |
+| metadata.sensor_type | string | 否 | 传感器类型 (temperature/humidity/gas等) |
+| metadata.unit | string | 否 | 数值单位 |
+| metadata.location | string | 否 | 传感器位置描述 |
+
+**成功响应 (200)**:
+```json
+{
+  "code": 0,
+  "message": "Sensor analysis completed",
+  "data": {
+    "is_anomaly": true,
+    "anomaly_score": 0.85,
+    "anomaly_type": "sensor_anomaly",
+    "predicted_next": 38.2,
+    "threshold": 30.0,
+    "alert": {
+      "alert_id": "alert_uuid_xxx",
+      "alert_type": "anomaly",
+      "severity": "high",
+      "latitude": 22.543123,
+      "longitude": 114.052345,
+      "anomaly_type": "sensor_anomaly",
+      "source": "sensor",
+      "timestamp": 1714234570,
+      "confidence": 0.85,
+      "details": {
+        "sensor_id": "temp_sensor_001",
+        "current_value": 35.8,
+        "predicted_value": 38.2,
+        "threshold": 30.0
+      }
+    }
+  }
+}
+```
+
+**错误响应 (500)** - LSTM服务不可用:
+```json
+{
+  "code": 1,
+  "message": "LSTM model service unavailable",
+  "error": "Connection refused to LSTM service"
+}
+```
+
+---
+
+#### 15.6.2 POST /api/ai/analyze/drone - YOLO 图像分析(Base64)
+
+使用 YOLOv8s 对 Base64 编码的图像进行热源检测（适用于已编码的图像数据）。
+
+**请求地址**:
+```
+POST https://api.deeppluse.dpdns.org/api/ai/analyze/drone
+```
+
+**请求体** (JSON):
+```json
+{
+  "image_base64": "/9j/4AAQSkZJRgABAQAAAQABAAD...",
+  "drone_id": "drone_001",
+  "latitude": 22.543123,
+  "longitude": 114.052345,
+  "conf": 0.10,
+  "iou": 0.60,
+  "imgsz": 1024
+}
+```
+
+**参数说明**:
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| image_base64 | string | 是 | - | Base64编码的图像数据 |
+| drone_id | string | 否 | - | 无人机ID |
+| latitude | float64 | 否 | 0.0 | GPS纬度 |
+| longitude | float64 | 否 | 0.0 | GPS经度 |
+| conf | float64 | 否 | 0.10 | 置信度阈值 (0~1) |
+| iou | float64 | 否 | 0.60 | NMS IoU阈值 (0~1) |
+| imgsz | int | 否 | 1024 | 推理图像尺寸 |
+
+**成功响应 (200)**:
+```json
+{
+  "code": 0,
+  "message": "Thermal detection completed",
+  "data": {
+    "raw_result": {
+      "success": true,
+      "image_path": "/tmp/processed_image.jpg",
+      "detections": [
+        {
+          "class": "thermal_hotspot",
+          "confidence": 0.92,
+          "box": {
+            "x1": 100,
+            "y1": 150,
+            "x2": 300,
+            "y2": 350,
+            "width": 200,
+            "height": 200
+          }
+        }
+      ],
+      "temperature": {
+        "mean_gray": 215.5,
+        "level": "HIGH Lv1",
+        "is_anomalous": true
+      }
+    },
+    "alert": {
+      "alert_id": "alert_uuid_yyy",
+      "alert_type": "anomaly",
+      "severity": "critical",
+      "latitude": 22.543123,
+      "longitude": 114.052345,
+      "anomaly_type": "thermal_anomaly",
+      "source": "drone",
+      "timestamp": 1714234567,
+      "confidence": 0.92,
+      "details": {
+        "mean_gray": 215.5,
+        "temperature_level": "HIGH Lv1",
+        "detection_count": 1
+      }
+    },
+    "annotated_image_url": null
+  }
+}
+```
+
+---
+
+#### 15.6.3 POST /api/ai/drone/photo - 无人机照片上传+热源检测 ⭐重点接口
+
+无人机照片上传并自动执行 YOLOv8s 热源检测，返回检测结果、告警信息和标注图URL。
+
+**请求地址**:
+```
+POST https://api.deeppluse.dpdns.org/api/ai/drone/photo
+```
+
+**请求头**:
+```
+Authorization: Bearer <device_token>
+X-Device-ID: <device_id>
+X-Device-Type: <device_type>
+Content-Type: multipart/form-data
+```
+
+**请求体** (multipart/form-data):
+
+| Part | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| photo | file (image/jpeg, image/png) | **是** | 无人机拍摄的照片 |
+| drone_id | string (form-field) | 是 | 无人机ID |
+| lat | string (form-field) | 是 | GPS纬度 (如 "22.543123") |
+| lon | string (form-field) | 是 | GPS经度 (如 "114.052345") |
+
+**完整 cURL 示例**:
+
+```bash
+curl -X POST "https://api.deeppluse.dpdns.org/api/ai/drone/photo" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -H "X-Device-ID: central_001" \
+  -H "X-Device-Type: Central" \
+  -F "photo=@/path/to/drone_photo.jpg" \
+  -F "drone_id=drone_001" \
+  -F "lat=22.543123" \
+  -F "lon=114.052345"
+```
+
+**成功响应 (200)** - 检测到热源异常:
+```json
+{
+  "code": 0,
+  "message": "Photo uploaded and analyzed successfully",
+  "data": {
+    "photo_path": "output/thermal_photos/20260514_224312_drone_001.jpg",
+    "alert": {
+      "alert_id": "alert_550e8400-e29b-41d4-a716-446655440000",
+      "alert_type": "anomaly",
+      "severity": "critical",
+      "latitude": 22.543123,
+      "longitude": 114.052345,
+      "anomaly_type": "thermal_anomaly",
+      "source": "drone",
+      "timestamp": 1715713392,
+      "confidence": 0.92,
+      "details": {
+        "mean_gray": 215.5,
+        "temperature_level": "HIGH Lv1",
+        "detection_count": 1,
+        "drone_id": "drone_001"
+      }
+    },
+    "raw_result": {
+      "success": true,
+      "image_path": "/tmp/yolo_input_xxx.jpg",
+      "detections": [
+        {
+          "class": "thermal_hotspot",
+          "confidence": 0.92,
+          "box": {
+            "x1": 100,
+            "y1": 150,
+            "x2": 300,
+            "y2": 350,
+            "width": 200,
+            "height": 200
+          }
+        }
+      ],
+      "temperature": {
+        "mean_gray": 215.5,
+        "level": "HIGH Lv1",
+        "is_anomalous": true
+      }
+    },
+    "annotated_image_url": "https://api.deeppluse.dpdns.org/api/ai/drone/photo/generated/annotated_20260514_224312_drone_001.jpg"
+  }
+}
+```
+
+**成功响应 (200)** - 未检测到异常:
+```json
+{
+  "code": 0,
+  "message": "Photo uploaded and analyzed successfully",
+  "data": {
+    "photo_path": "output/thermal_photos/20260514_224400_drone_002.jpg",
+    "alert": {
+      "alert_id": "alert_6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      "alert_type": "normal",
+      "severity": "info",
+      "latitude": 22.544000,
+      "longitude": 114.053000,
+      "anomaly_type": "",
+      "source": "drone",
+      "timestamp": 1715713440,
+      "confidence": 0.98,
+      "details": {
+        "mean_gray": 95.3,
+        "temperature_level": "NORMAL Lv1",
+        "detection_count": 0
+      }
+    },
+    "raw_result": {
+      "success": true,
+      "detections": [],
+      "temperature": {
+        "mean_gray": 95.3,
+        "level": "NORMAL Lv1",
+        "is_anomalous": false
+      }
+    },
+    "annotated_image_url": "https://api.deeppluse.dpdns.org/api/ai/drone/photo/generated/annotated_20260514_224400_drone_002.jpg"
+  }
+}
+```
+
+**处理流程说明**:
+
+1. **保存原图**: 接收的照片自动保存到 `output/thermal_photos/{timestamp}_{drone_id}.jpg`
+2. **调用YOLO**: 通过 `ModelClient.ThermalDetect()` 将图片发送至 YOLOv8s 服务
+3. **解析结果**: 提取 `temperature.level` 并映射为 `Severity`
+4. **生成告警**: 构造 `AlertJSON` 并通过 WebSocket/SSE 广播
+5. **下载标注图**: 从 YOLO 服务下载标注后的图片到 `output/yolo_Generated/`
+6. **返回响应**: 包含 alert、raw_result、annotated_image_url 三部分
+
+**错误响应 (400)** - 缺少必要字段:
+```json
+{
+  "code": 5001,
+  "message": "Parameter validation failed",
+  "error": "Missing required field: photo or drone_id or lat or lon"
+}
+```
+
+**错误响应 (503)** - YOLO服务不可用:
+```json
+{
+  "code": 1,
+  "message": "YOLO service unavailable",
+  "error": "Connection timeout to YOLO API at http://192.168.1.100:8000"
+}
+```
+
+---
+
+#### 15.6.4 GET /api/ai/alerts/ws - WebSocket 实时告警推送
+
+通过 WebSocket 接收实时告警推送（推荐用于需要双向通信的场景）。
+
+**请求地址**:
+```
+wss://api.deeppluse.dpdns.org/api/ai/alerts/ws
+```
+
+**请求头**:
+```
+Authorization: Bearer <user_token>
+```
+
+**连接示例** (JavaScript):
+```javascript
+const ws = new WebSocket('wss://api.deeppluse.dpdns.org/api/ai/alerts/ws', [], {
+  headers: {
+    'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIs...'
+  }
+});
+
+ws.onopen = () => {
+  console.log('WebSocket connected');
+};
+
+ws.onmessage = (event) => {
+  const alert = JSON.parse(event.data);
+  console.log('收到告警:', alert);
+  
+  if (alert.severity === 'critical') {
+    showCriticalAlert(alert);  // 显示红色弹窗
+  } else if (alert.severity === 'high') {
+    showHighAlert(alert);       // 显示橙色警告
+  }
+  
+  updateMapMarker(alert.latitude, alert.longitude, alert.severity);
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error);
+};
+
+ws.onclose = () => {
+  console.log('WebSocket disconnected');
+};
+```
+
+**消息格式**: 收到的每条消息都是完整的 `AlertJSON` 对象（见 [15.2.1](#1521-alertjson-告警数据结构)）
+
+**心跳机制**: 服务端会定期发送 ping 帧，客户端需响应 pong 以保持连接
+
+---
+
+#### 15.6.5 GET /api/ai/alerts/sse - SSE 实时告警推送
+
+通过 Server-Sent Events 接收实时告警推送（适合单向数据流场景）。
+
+**请求地址**:
+```
+GET https://api.deeppluse.dpdns.org/api/ai/alerts/sse
+```
+
+**请求头**:
+```
+Authorization: Bearer <user_token>
+Accept: text/event-stream
+Cache-Control: no-cache
+```
+
+**成功响应 (200)**:
+```
+Content-Type: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
+
+data: {"alert_id":"alert_xxx","alert_type":"anomaly","severity":"critical","latitude":22.543123,"longitude":114.052345,...}
+
+data: {"alert_id":"alert_yyy","alert_type":"normal","severity":"info","latitude":22.544000,"longitude":114.053000,...}
+
+...
+```
+
+**连接示例** (JavaScript):
+```javascript
+const eventSource = new EventSourceWithAuth(
+  'https://api.deeppluse.dpdns.org/api/ai/alerts/sse',
+  { Authorization: 'Bearer eyJhbGciOiJIUzI1NiIs...' }
+);
+
+eventSource.onmessage = (event) => {
+  const alert = JSON.parse(event.data);
+  console.log('SSE告警:', alert);
+  
+  handleAlert(alert);
+};
+
+eventSource.onerror = (error) => {
+  console.error('SSE error:', error);
+  eventSource.close();
+};
+```
+
+> ⚠️ 注意: 标准 `EventSource` 不支持自定义 Header，需使用 polyfill 或 fetch 方式实现带认证的 SSE 连接。推荐使用 [eventsource-polyfill](https://github.com/Yaffle/EventSource) 或基于 fetch 的自定义实现。
+
+**fetch 方式实现**:
+```javascript
+async function connectSSE(token) {
+  const response = await fetch('https://api.deeppluse.dpdns.org/api/ai/alerts/sse', {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'text/event-stream'
+    }
+  });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    
+    const text = decoder.decode(value);
+    const lines = text.split('\n');
+    
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const data = line.slice(6);
+        if (data.trim()) {
+          const alert = JSON.parse(data);
+          handleAlert(alert);
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+#### 15.6.6 GET /api/ai/alerts/history - 告警历史查询
+
+查询历史告警记录，支持按严重程度筛选和分页。
+
+**请求地址**:
+```
+GET https://api.deeppluse.dpdns.org/api/ai/alerts/history?severity=critical&limit=20&offset=0
+```
+
+**Query参数**:
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| severity | string | 否 | 全部 | 筛选严重程度: critical/high/medium/low/info |
+| limit | int | 否 | 20 | 返回数量上限 (最大100) |
+| offset | int | 否 | 0 | 分页偏移量 |
+
+**成功响应 (200)**:
+```json
+{
+  "code": 0,
+  "message": "Success",
+  "data": {
+    "total": 150,
+    "limit": 20,
+    "offset": 0,
+    "alerts": [
+      {
+        "alert_id": "alert_xxx",
+        "alert_type": "anomaly",
+        "severity": "critical",
+        "latitude": 22.543123,
+        "longitude": 114.052345,
+        "anomaly_type": "thermal_anomaly",
+        "source": "drone",
+        "timestamp": 1715713392,
+        "confidence": 0.92,
+        "details": {
+          "mean_gray": 215.5,
+          "temperature_level": "HIGH Lv1",
+          "detection_count": 1
+        }
+      },
+      {
+        "alert_id": "alert_yyy",
+        "alert_type": "anomaly",
+        "severity": "high",
+        "latitude": 22.544500,
+        "longitude": 114.053500,
+        "anomaly_type": "thermal_anomaly",
+        "source": "drone",
+        "timestamp": 1715713200,
+        "confidence": 0.78,
+        "details": {
+          "mean_gray": 165.3,
+          "temperature_level": "HIGH Lv2",
+          "detection_count": 2
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### 15.6.7 GET /api/ai/model/status - 模型健康状态检查
+
+检查 LSTM 和 YOLO 模型服务的健康状态和可用性。
+
+**请求地址**:
+```
+GET https://api.deeppluse.dpdns.org/api/ai/model/status
+```
+
+**成功响应 (200)**:
+```json
+{
+  "code": 0,
+  "message": "Model status retrieved",
+  "data": {
+    "lstm": {
+      "enabled": true,
+      "healthy": true,
+      "url": "http://192.168.1.100:8001/predict",
+      "last_check": "2026-05-14T22:43:00Z",
+      "response_time_ms": 45,
+      "error": ""
+    },
+    "yolo": {
+      "enabled": true,
+      "healthy": true,
+      "url": "http://192.168.1.100:8000/api/v1/detect",
+      "last_check": "2026-05-14T22:43:00Z",
+      "response_time_ms": 120,
+      "error": ""
+    },
+    "overall_status": "operational"
+  }
+}
+```
+
+**部分服务异常响应 (200)**:
+```json
+{
+  "code": 0,
+  "data": {
+    "lstm": {
+      "enabled": true,
+      "healthy": false,
+      "url": "http://192.168.1.100:8001/predict",
+      "last_check": "2026-05-14T22:42:00Z",
+      "response_time_ms": 0,
+      "error": "Connection refused"
+    },
+    "yolo": {
+      "enabled": true,
+      "healthy": true,
+      "url": "http://192.168.1.100:8000/api/v1/detect",
+      "last_check": "2026-05-14T22:43:00Z",
+      "response_time_ms": 115,
+      "error": ""
+    },
+    "overall_status": "degraded"
+  }
+}
+```
+
+**字段说明**:
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| enabled | bool | 是否在配置中启用 |
+| healthy | bool | 当前是否健康可用 |
+| url | string | 模型服务API地址 |
+| last_check | string | 最后一次健康检查时间 (ISO8601) |
+| response_time_ms | int | 最后一次响应耗时 (毫秒) |
+| error | string | 错误信息 (空字符串表示无错误) |
+| overall_status | string | 整体状态: `operational`(正常), `degraded`(降级), `down`(宕机) |
+
+---
+
+#### 15.6.8 GET /api/ai/drone/photo/generated/:filename - 标注图下载
+
+下载 YOLO 生成的标注图片（包含检测框和温度信息）。
+
+**请求地址**:
+```
+GET https://api.deeppluse.dpdns.org/api/ai/drone/photo/generated/annotated_20260514_224312_drone_001.jpg
+```
+
+**路径参数**:
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| filename | string | 标注图文件名 (由 photo 接口返回的 annotated_image_url 中获取) |
+
+**成功响应 (200)**:
+```
+Content-Type: image/jpeg
+Content-Disposition: attachment; filename="annotated_20260514_224312_drone_001.jpg"
+
+[JPEG二进制图像数据]
+```
+
+**错误响应 (404)** - 文件不存在:
+```json
+{
+  "code": 1,
+  "message": "Generated image not found",
+  "error": "File does not exist: output/yolo_Generated/annotated_20260514_224312_drone_001.jpg"
+}
+```
+
+### 15.7 完整数据流图
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           AI 模型集成数据流                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────┐    HTTPS/Multipart    ┌─────────────┐                         │
+│  │ Central/  │ ──────────────────→  │   Backend    │                         │
+│  │  Drone    │   (photo+metadata)   │   (Go/Gin)   │                         │
+│  └──────────┘                      └──────┬──────┘                         │
+│                                           │                                  │
+│                    ┌──────────────────────┼──────────────────────┐          │
+│                    │                      │                      │          │
+│                    ▼                      ▼                      ▼          │
+│           ┌──────────────┐      ┌─────────────┐      ┌─────────────────┐   │
+│           │ 保存原图到    │      │ 调用YOLO API│      │ 生成 AlertJSON  │   │
+│           │thermal_photos│      │(ModelClient)│      │                 │   │
+│           └──────────────┘      └──────┬──────┘      └────────┬────────┘   │
+│                                          │                       │           │
+│                                          ▼                       │           │
+│                               ┌──────────────────┐               │           │
+│                               │  YOLOv8s Service  │               │           │
+│                               │  (FastAPI+CUDA)   │               │           │
+│                               └────────┬─────────┘               │           │
+│                                        │                          │           │
+│                                        ▼                          │           │
+│                              ┌────────────────────┐              │           │
+│                              │ThermalDetectResponse│              │           │
+│                              │(detections+temp)    │              │           │
+│                              └────────┬───────────┘              │           │
+│                                       │                          │           │
+│                                       ▼                          ▼           │
+│                        ┌─────────────────────────────────────────────────┐  │
+│                        │              AlertHub (告警中心)                  │  │
+│                        │  ┌─────────────────────────────────────────┐    │  │
+│                        │  │  1. 解析 temperature.level → Severity    │    │  │
+│                        │  │  2. 构造 AlertJSON                       │    │  │
+│                        │  │  3. 存储到内存历史缓冲区                   │    │  │
+│                        │  └─────────────────────────────────────────┘    │  │
+│                        │                     │                           │  │
+│                        │    ┌────────────────┼────────────────┐         │  │
+│                        │    │                │                │         │  │
+│                        │    ▼                ▼                ▼         │  │
+│                        │ ┌────────┐   ┌──────────┐   ┌──────────┐    │  │
+│                        │ │History │   │WebSocket │   │   SSE    │    │  │
+│                        │ │ Buffer │   │ Broadcaster│  │Broadcaster│   │  │
+│                        │ └────────┘   └─────┬────┘   └─────┬────┘    │  │
+│                        └────────────────────┼───────────────┼─────────┘  │
+│                                             │               │             │
+└─────────────────────────────────────────────┼───────────────┼─────────────┘
+                                              │               │
+                                              ▼               ▼
+                                    ┌─────────────────────────────────┐
+                                    │        Frontend                 │
+                                    │  www.deeppluse.dpdns.org        │
+                                    │                                 │
+                                    │  ┌─────────────────────────┐   │
+                                    │  │  WebSocket Client        │   │
+                                    │  │  /api/ai/alerts/ws      │   │
+                                    │  └─────────────────────────┘   │
+                                    │  ┌─────────────────────────┐   │
+                                    │  │  SSE Client              │   │
+                                    │  │  /api/ai/alerts/sse     │   │
+                                    │  └─────────────────────────┘   │
+                                    │  ┌─────────────────────────┐   │
+                                    │  │  History Query           │   │
+                                    │  │  /api/ai/alerts/history │   │
+                                    │  └─────────────────────────┘   │
+                                    │  ┌─────────────────────────┐   │
+                                    │  │  3D Map Visualization    │   │
+                                    │  │  (红色高亮+警报弹窗)     │   │
+                                    │  └─────────────────────────┘   │
+                                    └─────────────────────────────────┘
+```
+
+### 15.8 配置说明
+
+AI 模块配置位于 `config/Setting.yaml` 的 `ai` 配置段：
+
+```yaml
+ai:
+  lstm:
+    enabled: true                    # 是否启用LSTM模型
+    url: "http://192.168.1.100:8001/predict"  # LSTM服务地址
+    timeout: 10s                     # 请求超时时间
+    retry_count: 3                   # 重试次数
+    
+  yolo:
+    enabled: true                    # 是否启用YOLO模型
+    url: "http://192.168.1.100:8000" # YOLO服务地址 (FastAPI)
+    conf: 0.10                       # 置信度阈值 (默认0.10)
+    iou: 0.60                        # NMS IoU阈值 (默认0.60)
+    imgsz: 1024                      # 推理图像尺寸 (默认1024)
+    timeout: 30s                     # 请求超时时间 (含图片传输)
+    retry_count: 3                   # 重试次数
+    
+  alert_hub:
+    max_history: 1000                # 最大历史告警缓存数量
+    broadcast_channels: ["websocket", "sse"]  # 广播渠道
+```
+
+**配置项说明**:
+
+| 配置路径 | 类型 | 默认值 | 说明 |
+|----------|------|--------|------|
+| ai.lstm.enabled | bool | true | 启用/禁用LSTM时序检测 |
+| ai.lstm.url | string | - | LSTM预测服务完整URL |
+| ai.lstm.timeout | duration | 10s | HTTP请求超时 |
+| ai.lstm.retry_count | int | 3 | 失败重试次数 |
+| ai.yolo.enabled | bool | true | 启用/禁用YOLO热源检测 |
+| ai.yolo.url | string | - | YOLO检测服务基础URL |
+| ai.yolo.conf | float | 0.10 | 目标检测置信度阈值 |
+| ai.yolo.iou | float | 0.60 | NMS非极大值抑制IoU阈值 |
+| ai.yolo.imgsz | int | 1024 | 模型输入图像尺寸 (像素) |
+| ai.yolo.timeout | duration | 30s | HTTP请求超时 (含大文件传输) |
+| ai.yolo.retry_count | int | 3 | 失败重试次数 |
+| ai.alert_hub.max_history | int | 1000 | 内存中保留的最大告警条数 |
+| ai.alert_hub.broadcast_channels | []string | ["websocket","sse"] | 启用的广播渠道 |
+
+**环境变量覆盖**: 所有配置项均可通过环境变量覆盖，格式为 `AI_LSTM_URL`, `AI_YOLO_URL` 等（大写+下划线）。
+
+### 15.9 前端集成示例
+
+#### 15.9.1 WebSocket 完整监听代码
+
+```javascript
+/**
+ * AI告警WebSocket监听器
+ * 用于实时接收热源检测和传感器异常告警
+ */
+class AIAlertWebSocket {
+  constructor(token, onAlert, onError) {
+    this.token = token;
+    this.onAlert = onAlert;  // 回调: (alert: AlertJSON) => void
+    this.onError = onError;  // 回调: (error: Error) => void
+    this.ws = null;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 10;
+    this.reconnectDelay = 1000; // 初始延迟1秒
+  }
+
+  connect() {
+    const wsUrl = `wss://api.deeppluse.dpdns.org/api/ai/alerts/ws`;
+    
+    this.ws = new WebSocket(wsUrl);
+    
+    // 设置认证Header (注意: 部分浏览器不支持WebSocket Headers)
+    // 替代方案: URL参数传递token (需后端支持)
+    // const wsUrl = `wss://api.deeppluse.dpdns.org/api/ai/alerts/ws?token=${this.token}`;
+    
+    this.ws.onopen = () => {
+      console.log('[AI Alert] WebSocket connected');
+      this.reconnectAttempts = 0;
+      this.reconnectDelay = 1000;
+      
+      // 发送认证消息 (如果后端要求)
+      this.ws.send(JSON.stringify({
+        type: 'auth',
+        token: this.token
+      }));
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const alert = JSON.parse(event.data);
+        console.log('[AI Alert] Received:', alert.alert_id, alert.severity);
+        
+        // 根据严重程度分发处理
+        switch (alert.severity) {
+          case 'critical':
+            this.handleCriticalAlert(alert);
+            break;
+          case 'high':
+            this.handleHighAlert(alert);
+            break;
+          default:
+            this.handleNormalAlert(alert);
+        }
+        
+        // 调用外部回调
+        if (this.onAlert) {
+          this.onAlert(alert);
+        }
+      } catch (err) {
+        console.error('[AI Alert] Parse error:', err);
+      }
+    };
+
+    this.ws.onerror = (error) => {
+      console.error('[AI Alert] WebSocket error:', error);
+      if (this.onError) {
+        this.onError(new Error('WebSocket connection error'));
+      }
+    };
+
+    this.ws.onclose = () => {
+      console.log('[AI Alert] WebSocket disconnected');
+      this.scheduleReconnect();
+    };
+  }
+
+  handleCriticalAlert(alert) {
+    // 致命告警：立即显示红色全屏警报
+    showAlertModal({
+      title: '🔴 致命告警',
+      message: `检测到${alert.anomaly_type === 'thermal_anomaly' ? '热源异常' : '异常'}`,
+      severity: 'critical',
+      location: { lat: alert.latitude, lng: alert.longitude },
+      details: alert.details
+    });
+    
+    // 在3D地图上添加红色闪烁标记
+    addMapMarker({
+      position: [alert.latitude, alert.longitude],
+      color: '#ff0000',
+      pulsing: true,
+      label: 'CRITICAL'
+    });
+  }
+
+  handleHighAlert(alert) {
+    // 高级告警：显示橙色警告通知
+    showNotification({
+      title: '⚠️ 高级警告',
+      message: `${alert.source} 检测到异常`,
+      severity: 'high'
+    });
+    
+    addMapMarker({
+      position: [alert.latitude, alert.longitude],
+      color: '#ff9800',
+      pulsing: false,
+      label: 'WARNING'
+    });
+  }
+
+  handleNormalAlert(alert) {
+    // 信息级别：静默更新地图标记
+    updateMapMarker({
+      position: [alert.latitude, alert.longitude],
+      color: '#4caf50',
+      label: 'INFO'
+    });
+  }
+
+  scheduleReconnect() {
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.reconnectAttempts++;
+      console.log(`[AI Alert] Reconnecting in ${this.reconnectDelay}ms... (attempt ${this.reconnectAttempts})`);
+      
+      setTimeout(() => {
+        this.connect();
+        this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000); // 指数退避，最大30秒
+      }, this.reconnectDelay);
+    } else {
+      console.error('[AI Alert] Max reconnect attempts reached');
+      if (this.onError) {
+        this.onError(new Error('Failed to reconnect after maximum attempts'));
+      }
+    }
+  }
+
+  disconnect() {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+}
+
+// 使用示例
+// const alertWS = new AIAlertWebSocket(
+//   'your_jwt_token_here',
+//   (alert) => { console.log('处理告警:', alert); },
+//   (err) => { console.error('连接错误:', err); }
+// );
+// alertWS.connect();
+```
+
+#### 15.9.2 SSE 完整监听代码
+
+```javascript
+/**
+ * AI告警SSE监听器 (基于fetch实现，支持自定义Headers)
+ */
+async function connectAIAlertSSE(token, onMessage, onError) {
+  const url = 'https://api.deeppluse.dpdns.org/api/ai/alerts/sse';
+  
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'text/event-stream',
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) {
+        console.log('[AI Alert SSE] Stream completed');
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // 保留未完成的行
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+          
+          if (data && data !== '[DONE]') {
+            try {
+              const alert = JSON.parse(data);
+              console.log('[AI Alert SSE] Received:', alert.alert_id);
+              
+              if (onMessage) {
+                onMessage(alert);
+              }
+            } catch (parseErr) {
+              console.error('[AI Alert SSE] Parse error:', parseErr);
+            }
+          }
+        } else if (line.startsWith('event: ')) {
+          const eventType = line.slice(7).trim();
+          console.log('[AI Alert SSE] Event type:', eventType);
+        } else if (line.startsWith(':')) {
+          // 注释行，保持连接活跃
+          console.debug('[AI Alert SSE] Keep-alive comment');
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[AI Alert SSE] Connection error:', err);
+    if (onError) {
+      onError(err);
+    }
+    
+    // 自动重连 (延迟5秒)
+    setTimeout(() => {
+      console.log('[AI Alert SSE] Reconnecting...');
+      connectAIAlertSSE(token, onMessage, onError);
+    }, 5000);
+  }
+}
+
+// 使用示例
+// connectAIAlertSSE(
+//   'your_jwt_token_here',
+//   (alert) => {
+//     console.log('SSE告警:', alert);
+//     // 更新UI或地图
+//   },
+//   (err) => {
+//     console.error('SSE错误:', err);
+//   }
+// );
+```
+
+#### 15.9.3 React Hooks 封装示例
+
+```jsx
+import { useEffect, useRef, useCallback, useState } from 'react';
+
+/**
+ * AI告警监听React Hook
+ * 支持WebSocket/SSE双模式切换
+ */
+function useAIAlertListener(token, mode = 'websocket') {
+  const [alerts, setAlerts] = useState([]);
+  const [connected, setConnected] = useState(false);
+  const wsRef = useRef(null);
+  const abortRef = useRef(null);
+
+  const addAlert = useCallback((alert) => {
+    setAlerts(prev => [alert, ...prev].slice(0, 100)); // 保留最近100条
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
+
+    if (mode === 'websocket') {
+      // WebSocket模式
+      const ws = new WebSocket(`wss://api.deeppluse.dpdns.org/api/ai/alerts/ws`);
+      wsRef.current = ws;
+
+      ws.onopen = () => setConnected(true);
+      ws.onmessage = (event) => {
+        try {
+          const alert = JSON.parse(event.data);
+          addAlert(alert);
+        } catch (e) {
+          console.error('Parse alert error:', e);
+        }
+      };
+      ws.onclose = () => setConnected(false);
+      ws.onerror = () => setConnected(false);
+
+      return () => {
+        ws.close();
+        wsRef.current = null;
+      };
+    } else {
+      // SSE模式
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      (async () => {
+        try {
+          const res = await fetch('https://api.deeppluse.dpdns.org/api/ai/alerts/sse', {
+            headers: { 'Authorization': `Bearer ${token}` },
+            signal: controller.signal
+          });
+
+          setConnected(true);
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const text = decoder.decode(value);
+            for (const line of text.split('\n')) {
+              if (line.startsWith('data: ')) {
+                try {
+                  addAlert(JSON.parse(line.slice(6)));
+                } catch (e) {}
+              }
+            }
+          }
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            console.error('SSE error:', err);
+            setConnected(false);
+          }
+        }
+      })();
+
+      return () => controller.abort();
+    }
+  }, [token, mode, addAlert]);
+
+  return { alerts, connected, clearAlerts: () => setAlerts([]) };
+}
+
+// 使用示例组件
+function AIAlertDashboard({ token }) {
+  const { alerts, connected } = useAIAlertListener(token, 'websocket');
+
+  return (
+    <div className="ai-alert-dashboard">
+      <div className="status-bar">
+        <span className={`indicator ${connected ? 'online' : 'offline'}`}>
+          {connected ? '🟢 已连接' : '🔴 断开'}
+        </span>
+        <span className="alert-count">告警数: {alerts.length}</span>
+      </div>
+      
+      <div className="alert-list">
+        {alerts.slice(0, 20).map(alert => (
+          <div key={alert.alert_id} className={`alert-item ${alert.severity}`}>
+            <span className="severity-badge">
+              {alert.severity === 'critical' ? '🔴' : 
+               alert.severity === 'high' ? '🟠' : '🟢'}
+            </span>
+            <span className="alert-type">{alert.anomaly_type || 'normal'}</span>
+            <span className="alert-time">
+              {new Date(alert.timestamp * 1000).toLocaleTimeString()}
+            </span>
+            <span className="alert-confidence">
+              置信度: {(alert.confidence * 100).toFixed(1)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default AIAlertDashboard;
+```
+
+---
+
 ## 十四、注意事项
 
 1. 所有受保护接口都需要在 Header 中携带 JWT Token
@@ -2400,5 +3708,5 @@ type BoardMessage struct {
 
 ---
 
-*文档版本: 3.1*
-*最后更新: 2026-04-15*
+*文档版本: 4.0*
+*最后更新: 2026-05-14*

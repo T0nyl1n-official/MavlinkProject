@@ -1,0 +1,5 @@
+[2026-05-14 21:15:45] INFO POST /api/ai/drone/photo 500 1424ms
+[2026-05-14 21:15:45] WARN 🚨 慢请求警告: POST /api/ai/drone/photo 耗时 1.4241638s
+[2026-05-14 21:29:49] INFO GET /api/ai/model/status 200 166ms
+[2026-05-14 21:29:50] INFO POST /api/ai/drone/photo 200 970ms
+[2026-05-14 21:45:24] INFO GET /robots.txt 200 83ms

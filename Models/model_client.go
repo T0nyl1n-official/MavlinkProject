@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -401,5 +402,61 @@ func (mc *ModelClient) ThermalDetect(imagePath string) (*ThermalDetectResponse, 
 	log.Printf("[ModelClient] YOLOv8 热源检测完成: file=%s, success=%v, detections=%d, elapsed=%.2fms",
 		filepath.Base(imagePath), thermalResp.Success, len(thermalResp.Detections), thermalResp.ElapsedMs)
 
+	if thermalResp.ImageAnnotated != "" {
+		localPath := mc.downloadAnnotatedImage(thermalResp.ImageAnnotated)
+		if localPath != "" {
+			thermalResp.ImageAnnotated = localPath
+			log.Printf("[ModelClient] 标注图已保存: %s", localPath)
+		}
+	}
+
 	return &thermalResp, nil
+}
+
+func (mc *ModelClient) downloadAnnotatedImage(annotatedURL string) string {
+	generatedDir := "./output/yolo_Generated"
+	os.MkdirAll(generatedDir, 0755)
+
+	downloadURL := annotatedURL
+	if !strings.HasPrefix(downloadURL, "http://") && !strings.HasPrefix(downloadURL, "https://") && mc.yoloBaseURL != "" {
+		base := strings.TrimRight(mc.yoloBaseURL, "/")
+		downloadURL = base + "/" + strings.TrimLeft(downloadURL, "/\\")
+	}
+
+	resp, err := mc.httpClient.Get(downloadURL)
+	if err != nil {
+		log.Printf("[ModelClient] 下载标注图失败: url=%s, err=%v", downloadURL, err)
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("[ModelClient] 下载标注图 HTTP错误: status=%d", resp.StatusCode)
+		return ""
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[ModelClient] 读取标注图数据失败: %v", err)
+		return ""
+	}
+
+	ext := ".jpg"
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(contentType, "png") {
+		ext = ".png"
+	} else if strings.Contains(contentType, "bmp") {
+		ext = ".bmp"
+	}
+
+	timestamp := time.Now().Format("20060102_150405")
+	filename := fmt.Sprintf("annotated_%s%s", timestamp, ext)
+	localPath := filepath.Join(generatedDir, filename)
+
+	if err := os.WriteFile(localPath, data, 0644); err != nil {
+		log.Printf("[ModelClient] 保存标注图失败: path=%s, err=%v", localPath, err)
+		return ""
+	}
+
+	return filename
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,20 +15,23 @@ import (
 	Models "MavlinkProject/Models"
 )
 
-var thermalUploadDir = "./output/thermal_photos"
+var (
+	thermalUploadDir  = "./output/thermal_photos"
+	generatedImageDir = "./output/yolo_Generated"
+)
 
 func init() {
-	if _, err := os.Stat(thermalUploadDir); os.IsNotExist(err) {
-		os.MkdirAll(thermalUploadDir, 0755)
-	}
+	os.MkdirAll(thermalUploadDir, 0755)
+	os.MkdirAll(generatedImageDir, 0755)
 }
 
 type DronePhotoResponse struct {
-	Code       int                `json:"code"`
-	Message    string             `json:"message"`
-	Alert      *Models.AlertJSON  `json:"alert,omitempty"`
-	RawResult  *Models.ThermalDetectResponse `json:"raw_result,omitempty"`
-	PhotoPath  string             `json:"photo_path,omitempty"`
+	Code              int                           `json:"code"`
+	Message           string                        `json:"message"`
+	Alert             *Models.AlertJSON             `json:"alert,omitempty"`
+	RawResult         *Models.ThermalDetectResponse `json:"raw_result,omitempty"`
+	PhotoPath         string                        `json:"photo_path,omitempty"`
+	AnnotatedImageURL string                        `json:"annotated_image_url,omitempty"`
 }
 
 func HandleDronePhotoUpload(c *gin.Context) {
@@ -80,11 +84,33 @@ func HandleDronePhotoUpload(c *gin.Context) {
 
 	alertHistory.Add(*alert)
 
+	var annotatedURL string
+	if rawResult != nil && rawResult.ImageAnnotated != "" {
+		annotatedURL = fmt.Sprintf("/api/ai/drone/photo/generated/%s", rawResult.ImageAnnotated)
+	}
+
 	c.JSON(http.StatusOK, DronePhotoResponse{
-		Code:      0,
-		Message:   "照片接收并检测完成",
-		Alert:     alert,
-		RawResult: rawResult,
-		PhotoPath: savePath,
+		Code:              0,
+		Message:           "照片接收并检测完成",
+		Alert:             alert,
+		RawResult:         rawResult,
+		PhotoPath:         savePath,
+		AnnotatedImageURL: annotatedURL,
 	})
+}
+
+func HandleDownloadGeneratedImage(c *gin.Context) {
+	filename := c.Param("filename")
+	if filename == "" || strings.Contains(filename, "..") || strings.Contains(filename, "\\") {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "message": "invalid filename"})
+		return
+	}
+
+	filePath := filepath.Join(generatedImageDir, filename)
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"code": 2, "message": "file not found"})
+		return
+	}
+
+	c.File(filePath)
 }

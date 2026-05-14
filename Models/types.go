@@ -84,10 +84,11 @@ const (
 )
 
 type ThermalDetectResponse struct {
-	Success    bool                `json:"success"`
-	Image      ThermalImageInfo    `json:"image"`
-	Detections []ThermalDetection  `json:"detections"`
-	ElapsedMs  float64             `json:"elapsed_ms"`
+	Success         bool                `json:"success"`
+	Image           ThermalImageInfo    `json:"image"`
+	Detections      []ThermalDetection  `json:"detections"`
+	ImageAnnotated  string              `json:"image_annotated,omitempty"`
+	ElapsedMs       float64             `json:"elapsed_ms"`
 }
 
 type ThermalImageInfo struct {
