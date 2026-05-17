@@ -4,3 +4,14 @@
 [2026-05-14 21:29:50] INFO POST /api/ai/drone/photo 200 970ms
 [2026-05-14 21:45:24] INFO GET /robots.txt 200 83ms
 [2026-05-14 21:50:20] INFO GET /sitemap.xml 404 0ms
+[2026-05-14 21:59:13] INFO GET /api/ai/model/status 200 705ms
+[2026-05-14 21:59:13] INFO POST /api/ai/gas-kick/predict 400 0ms
+[2026-05-14 21:59:13] INFO GET /api/ai/gas-kick/history 200 0ms
+[2026-05-14 21:59:58] INFO POST /api/ai/gas-kick/predict 400 0ms
+[2026-05-14 22:00:18] INFO POST /api/ai/gas-kick/predict 400 0ms
+[2026-05-14 22:00:18] INFO GET /api/ai/gas-kick/history 200 0ms
+[2026-05-14 22:00:47] INFO POST /api/ai/gas-kick/predict 200 0ms
+[2026-05-14 22:00:47] INFO GET /api/ai/gas-kick/history 200 0ms
+[2026-05-14 22:58:43] INFO 监控数据已重置
+[2026-05-14 23:48:49] INFO GET /sitemap.xml 404 0ms
+[2026-05-14 23:58:43] INFO 监控数据已重置

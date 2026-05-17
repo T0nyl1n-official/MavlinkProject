@@ -119,3 +119,40 @@ const (
 	TempLevelHigh2  = "HIGH Lv2"
 	TempLevelHigh1  = "HIGH Lv1"
 )
+
+type GasKickRequest struct {
+	WellName    string             `json:"well_name"`
+	SensorID    string             `json:"sensor_id,omitempty"`
+	TimeSeries  []TimeSeriesPoint  `json:"time_series"`
+	Latitude    float64            `json:"latitude,omitempty"`
+	Longitude   float64            `json:"longitude,omitempty"`
+}
+
+type GasKickResponse struct {
+	Success      bool                   `json:"success"`
+	Summary      GasKickSummary         `json:"summary"`
+	Predictions  []GasKickPrediction    `json:"predictions"`
+	ModelVersion string                 `json:"model_version,omitempty"`
+	ElapsedMs    float64                `json:"elapsed_ms"`
+}
+
+type GasKickSummary struct {
+	TotalPoints     int     `json:"total_points"`
+	GasKickCount    int     `json:"gas_kick_count"`
+	GasKickRatio    float64 `json:"gas_kick_ratio"`
+	FirstKickIndex  int     `json:"first_kick_index,omitempty"`
+	LastKickIndex   int     `json:"last_kick_index,omitempty"`
+	ConsecutiveMax   int     `json:"consecutive_max"`
+}
+
+type GasKickPrediction struct {
+	Index      int     `json:"index"`
+	Timestamp  int64   `json:"timestamp"`
+	Value      float64 `json:"value"`
+	Predicted  int     `json:"predicted"` // 0=normal, 1=gas_kick
+	Probability float64 `json:"probability,omitempty"`
+}
+
+const (
+	AnomalyGasKick = "gas_kick"
+)

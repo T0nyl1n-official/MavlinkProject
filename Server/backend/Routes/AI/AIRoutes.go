@@ -18,6 +18,8 @@ func SetupAIRoutes(r *gin.Engine) {
 		aiGroup.GET("/alerts/sse", AIHandler.HandleAlertSSE)
 		aiGroup.GET("/alerts/history", AIHandler.HandleAlertHistory)
 		aiGroup.GET("/model/status", HandleModelStatus)
+		aiGroup.POST("/gas-kick/predict", AIHandler.HandleSensorGasKick)
+		aiGroup.GET("/gas-kick/history", AIHandler.HandleGasKickHistory)
 	}
 }
 

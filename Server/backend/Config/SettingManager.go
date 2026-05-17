@@ -316,9 +316,11 @@ type AIConfig struct {
 }
 
 type LSTMModelConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	URL     string `yaml:"url"`
-	Timeout int    `yaml:"timeout"`
+	Enabled       bool    `yaml:"enabled"`
+	URL           string  `yaml:"url"`
+	Timeout        int     `yaml:"timeout"`
+	AlertWindow    int     `yaml:"alert_window"`
+	AlertThreshold int     `yaml:"alert_threshold"`
 }
 
 type YOLOModelConfig struct {

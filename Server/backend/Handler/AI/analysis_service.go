@@ -390,3 +390,134 @@ func severityRank(severity string) int {
 		return 0
 	}
 }
+
+func (s *AnalysisService) ProcessGasKick(wellName string, sensorID string, values []Models.TimeSeriesPoint, lat, lon float64, alertWindow int, alertThreshold int) (*Models.AlertJSON, *Models.GasKickResponse, error) {
+	gasReq := Models.GasKickRequest{
+		WellName:   wellName,
+		SensorID:   sensorID,
+		TimeSeries: values,
+		Latitude:   lat,
+		Longitude:  lon,
+	}
+
+	gasResp, err := s.client.PredictGasKick(gasReq)
+	if err != nil {
+		log.Printf("[AI] Gas Kick 预测失败: well=%s, err=%v", wellName, err)
+		WarningHandler.HandleAgentError("Gas kick prediction failed", "analysis-service", wellName, err.Error())
+		return nil, nil, err
+	}
+
+	log.Printf("[AI] Gas Kick 预测完成: well=%s, total=%d, kicks=%d, ratio=%.2f%%, elapsed=%.2fms",
+		wellName, gasResp.Summary.TotalPoints, gasResp.Summary.GasKickCount,
+		gasResp.Summary.GasKickRatio*100, gasResp.ElapsedMs)
+
+	if gasResp.Summary.GasKickCount == 0 || gasResp.Summary.GasKickRatio == 0 {
+		swTriggered, swKicks, swWindow := checkSlidingWindowAlert(gasResp.Predictions, alertWindow, alertThreshold)
+
+		statusAlert := &Models.AlertJSON{
+			AlertID:    generateAlertID(),
+			AlertType:  "normal",
+			Severity:   Models.SeverityInfo,
+			Latitude:   lat,
+			Longitude:  lon,
+			AnomalyType: "none",
+			Source:     Models.SourceSensor,
+			SensorID:   sensorID,
+			Timestamp:  time.Now().Unix(),
+			Confidence: 1.0 - gasResp.Summary.GasKickRatio,
+			Details: map[string]interface{}{
+				"well_name":          wellName,
+				"total_points":       gasResp.Summary.TotalPoints,
+				"gas_kick_count":     gasResp.Summary.GasKickCount,
+				"gas_kick_ratio":     gasResp.Summary.GasKickRatio,
+				"elapsed_ms":         gasResp.ElapsedMs,
+				"sliding_window":     map[string]interface{}{"window": swWindow, "threshold": alertThreshold, "kicks_in_window": swKicks, "triggered": swTriggered},
+				"predictions":        gasResp.Predictions,
+			},
+		}
+		s.hub.Broadcast(statusAlert)
+		return statusAlert, gasResp, nil
+	}
+
+	alertSeverity := gasKickSeverity(gasResp)
+
+	swTriggered, swKicks, swWindow := checkSlidingWindowAlert(gasResp.Predictions, alertWindow, alertThreshold)
+	if swTriggered && alertSeverity == Models.SeverityInfo {
+		alertSeverity = Models.SeverityLow
+	}
+	if swKicks >= alertThreshold + 1 {
+		alertSeverity = Models.SeverityMedium
+	}
+	if swKicks >= swWindow {
+		alertSeverity = Models.SeverityHigh
+	}
+
+	alert := &Models.AlertJSON{
+		AlertID:    generateAlertID(),
+		AlertType:  "anomaly",
+		Severity:   alertSeverity,
+		Latitude:   lat,
+		Longitude:  lon,
+		AnomalyType: Models.AnomalyGasKick,
+		Source:     Models.SourceSensor,
+		SensorID:   sensorID,
+		Timestamp:  time.Now().Unix(),
+		Confidence: gasResp.Summary.GasKickRatio,
+		Details: map[string]interface{}{
+			"well_name":           wellName,
+			"summary":             gasResp.Summary,
+			"predictions_count":   len(gasResp.Predictions),
+			"predictions":         gasResp.Predictions,
+			"elapsed_ms":          gasResp.ElapsedMs,
+			"sliding_window":      map[string]interface{}{"window": swWindow, "threshold": alertThreshold, "kicks_in_window": swKicks, "triggered": swTriggered},
+		},
+	}
+
+	s.hub.Broadcast(alert)
+
+	log.Printf("[AI] ⚠️ 气侵告警: alert_id=%s, well=%s, severity=%s, kicks=%d/%d (%.1f%%), consecutive_max=%d",
+		alert.AlertID, wellName, alertSeverity,
+		gasResp.Summary.GasKickCount, gasResp.Summary.TotalPoints,
+		gasResp.Summary.GasKickRatio*100, gasResp.Summary.ConsecutiveMax)
+
+	return alert, gasResp, nil
+}
+
+func gasKickSeverity(resp *Models.GasKickResponse) string {
+	ratio := resp.Summary.GasKickRatio
+	switch {
+	case ratio >= 0.5:
+		return Models.SeverityCritical
+	case ratio >= 0.3:
+		return Models.SeverityHigh
+	case ratio >= 0.15:
+		return Models.SeverityMedium
+	case ratio >= 0.05:
+		return Models.SeverityLow
+	default:
+		return Models.SeverityInfo
+	}
+}
+
+func checkSlidingWindowAlert(predictions []Models.GasKickPrediction, windowSize, threshold int) (triggered bool, kickCount int, actualWindow int) {
+	if len(predictions) == 0 || windowSize <= 0 || threshold <= 0 {
+		return false, 0, windowSize
+	}
+
+	actualWindow = windowSize
+	if len(predictions) < windowSize {
+		actualWindow = len(predictions)
+	}
+
+	startIdx := len(predictions) - actualWindow
+	kickCount = 0
+
+	for i := startIdx; i < len(predictions); i++ {
+		if predictions[i].Predicted == 1 {
+			kickCount++
+		}
+	}
+
+	triggered = kickCount >= threshold
+	return triggered, kickCount, actualWindow
+}

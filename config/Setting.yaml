@@ -15,8 +15,11 @@ redis:
 
 ai:
   lstm:
-    enabled: false
-    url: ""
+    enabled: true              # 启用后端调用 Gas Kick API
+    url: ""                    # 填入后即可真实调用
+    timeout: 30
+    alert_window: 5            # 滑动窗口大小（最近几个时间点）
+    alert_threshold: 3         # 报警阈值（窗口内有几个1就触发）
   yolo:
     enabled: true
     url: "http://154265c9.r6.cpolar.cn"

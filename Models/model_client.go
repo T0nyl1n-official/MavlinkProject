@@ -460,3 +460,59 @@ func (mc *ModelClient) downloadAnnotatedImage(annotatedURL string) string {
 
 	return filename
 }
+
+func (mc *ModelClient) PredictGasKick(req GasKickRequest) (*GasKickResponse, error) {
+	if !mc.IsLSTMEnabled() {
+		return &GasKickResponse{
+			Success:     true,
+			Summary:     GasKickSummary{TotalPoints: len(req.TimeSeries)},
+			Predictions: []GasKickPrediction{},
+			ModelVersion: "disabled",
+		}, nil
+	}
+
+	url := mc.lstmBaseURL + "/predict"
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("gas kick request marshal failed: %w", err)
+	}
+
+	var resp *http.Response
+	for attempt := 0; attempt < mc.maxRetry; attempt++ {
+		httpReq, _ := http.NewRequest("POST", url, bytes.NewReader(body))
+		httpReq.Header.Set("Content-Type", "application/json")
+
+		resp, err = mc.httpClient.Do(httpReq)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			break
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		if attempt < mc.maxRetry-1 {
+			time.Sleep(mc.retryDelay)
+		}
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("gas kick API call failed after %d retries: %v", mc.maxRetry, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("gas kick API returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var gasResp GasKickResponse
+	if err := json.NewDecoder(resp.Body).Decode(&gasResp); err != nil {
+		return nil, fmt.Errorf("gas kick response decode failed: %w", err)
+	}
+
+	log.Printf("[ModelClient] Gas Kick 预测完成: well=%s, total=%d, kicks=%d, ratio=%.2f%%, elapsed=%.2fms",
+		req.WellName, gasResp.Summary.TotalPoints, gasResp.Summary.GasKickCount,
+		gasResp.Summary.GasKickRatio*100, gasResp.ElapsedMs)
+
+	return &gasResp, nil
+}
